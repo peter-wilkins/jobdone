@@ -23,13 +23,15 @@ Early MVP. Core frontend done (recording + local storage). Backend (transcriptio
 - IndexedDB (local persistence)
 - Web Audio API (recording)
 
-**Backend** (TBD)
-- Fastify
-- Whisper (transcription)
+**Backend**
+- Fastify (server)
+- OpenAI Whisper (transcription)
 - Claude (summarization + extraction)
-- Supabase (auth + Postgres)
+- Multipart form handling for audio uploads
 
 ## Getting started
+
+### Frontend (React app)
 
 ```bash
 cd frontend
@@ -37,7 +39,22 @@ npm install
 npm run dev
 ```
 
-Server runs at http://localhost:5173
+UI runs at http://localhost:5173
+
+### Backend (Audio processing)
+
+```bash
+cd backend
+npm install
+cp .env.example .env  # Add your API keys
+npm run dev
+```
+
+Server runs at http://localhost:3000
+
+**Required API keys:**
+- `OPENAI_API_KEY` — Whisper transcription
+- `ANTHROPIC_API_KEY` — Claude summarization
 
 ## Development
 
