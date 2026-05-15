@@ -1,16 +1,97 @@
-# React + Vite
+# JobDone Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React PWA for voice job logging.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### 1. Install dependencies
 
-## React Compiler
+```bash
+npm install
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 2. Configure backend URL (optional)
 
-## Expanding the ESLint configuration
+The frontend defaults to `http://localhost:3000` for the backend. If you're running it elsewhere, create `.env.local`:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cp .env.example .env.local
+# Edit .env.local to set VITE_API_URL
+```
+
+### 3. Run development server
+
+```bash
+npm run dev
+```
+
+UI runs at http://localhost:5173
+
+## Features
+
+### Recording
+- Click giant button to record
+- Displays elapsed time during recording
+- Audio stored locally in IndexedDB
+
+### Processing
+- Auto-transcribes with backend (if available)
+- Shows "Processing..." while waiting
+- Claude extracts materials, labour time, follow-ups
+
+### Reviewing
+- See transcript and extracted data
+- Confirm to save (deletes audio blob)
+- Reject to discard
+
+### Persistence
+- All data stored locally in IndexedDB
+- Survives page reload
+- Ready for backend sync (future)
+
+## Architecture
+
+```
+src/
+├─ HomeScreen.jsx           Main UI component
+├─ services/
+│  ├─ audioService.js       Web Audio API wrapper
+│  ├─ dbService.js          IndexedDB persistence
+│  └─ apiService.js         Backend communication
+├─ mockData.js              Test data & utilities
+└─ App.jsx, main.jsx        Entry points
+```
+
+## Backend Integration
+
+### For transcription to work:
+
+1. **Start the backend:**
+   ```bash
+   cd ../backend
+   npm install
+   cp .env.example .env
+   # Add OPENAI_API_KEY and ANTHROPIC_API_KEY
+   npm run dev
+   ```
+
+2. **Frontend will auto-detect** and transcribe recordings
+
+3. **If backend is down**, you can still record. Transcription is optional.
+
+## Build for production
+
+```bash
+npm run build
+```
+
+Output in `dist/` directory.
+
+## Testing
+
+1. Click record button
+2. Say something about a job ("Fixed a tap, took 30 minutes")
+3. Stop recording
+4. Watch it auto-transcribe (if backend running)
+5. Confirm entry → moves to Saved section
+6. Reload page → data persists

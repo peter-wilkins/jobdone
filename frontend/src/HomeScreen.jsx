@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
+import { apiService } from './services/apiService';
 import { formatTime } from './mockData';
 
 export function HomeScreen() {
@@ -8,8 +9,10 @@ export function HomeScreen() {
   const [recordingTime, setRecordingTime] = useState(0);
   const [inProgress, setInProgress] = useState([]);
   const [saved, setSaved] = useState([]);
+  const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [backendAvailable, setBackendAvailable] = useState(true);
 
   // Load jobs from database on mount
   useEffect(() => {
@@ -21,6 +24,10 @@ export function HomeScreen() {
 
         setInProgress([...inProgressJobs, ...readyForReviewJobs]);
         setSaved(confirmedJobs);
+
+        // Check backend availability
+        const isAvailable = await apiService.checkHealth();
+        setBackendAvailable(isAvailable);
       } catch (err) {
         console.error('Failed to load jobs:', err);
         setError('Failed to load jobs');
@@ -43,6 +50,53 @@ export function HomeScreen() {
 
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  /**
+   * Process a recording: transcribe and extract
+   */
+  const processRecording = async (jobId) => {
+    try {
+      setProcessingIds(prev => new Set([...prev, jobId]));
+
+      // Get the job with audio blob
+      const job = await dbService.getJob(jobId);
+      if (!job || !job.audioBlob) {
+        throw new Error('Recording not found');
+      }
+
+      // Transcribe
+      const result = await apiService.transcribeAudio(job.audioBlob);
+
+      // Update job with transcription data
+      const updated = await dbService.updateJobWithTranscription(jobId, {
+        transcript: result.transcript,
+        summary: result.summary,
+        materials: result.materials,
+        labour_minutes: result.labour_minutes,
+        follow_ups: result.follow_ups,
+        possible_future_work: result.possible_future_work,
+      });
+
+      // Update UI
+      setInProgress(prev =>
+        prev.map(j => (j.id === jobId ? updated : j))
+      );
+
+      setProcessingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    } catch (err) {
+      console.error('Recording processing error:', err);
+      setError(err.message || 'Failed to process recording');
+      setProcessingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
 
   const handleRecord = async () => {
     try {
@@ -69,6 +123,11 @@ export function HomeScreen() {
           // Add to in-progress list
           const newJob = await dbService.getJob(jobId);
           setInProgress([newJob, ...inProgress]);
+
+          // Auto-trigger transcription if backend is available
+          if (backendAvailable) {
+            processRecording(jobId);
+          }
         }
       }
     } catch (err) {
@@ -120,6 +179,15 @@ export function HomeScreen() {
         <h1 className="text-2xl font-light text-gray-900">JobDone</h1>
       </div>
 
+      {/* Backend Status */}
+      {!backendAvailable && (
+        <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200">
+          <p className="text-sm text-yellow-700">
+            ⚠ Backend not available. Transcription disabled. Start backend with: <code className="bg-yellow-100 px-2 py-1 rounded text-xs">cd backend && npm run dev</code>
+          </p>
+        </div>
+      )}
+
       {/* Error message */}
       {error && (
         <div className="px-6 py-3 bg-red-50 border-b border-red-200">
@@ -167,50 +235,55 @@ export function HomeScreen() {
             <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-6">
               In Progress
             </h2>
-            {inProgress.map(entry => (
-              <div key={entry.id} className="mb-8 pb-8 border-b border-gray-200 last:border-b-0">
-                {entry.status === 'recording' && (
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600 mb-4">
-                      {entry.audioDuration}s recording saved
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Waiting for transcription...
-                    </p>
-                  </div>
-                )}
+            {inProgress.map(entry => {
+              const isProcessing = processingIds.has(entry.id);
 
-                {entry.status === 'ready_for_review' && (
-                  <>
-                    <div className="mb-4">
-                      <p className="text-gray-900 mb-3">{entry.summary}</p>
-                      <p className="text-sm text-gray-600 mb-4">{entry.transcript}</p>
-                      <div className="text-xs text-gray-500 space-y-1 mb-4">
-                        <p>• Materials: {entry.materials?.join(', ') || 'None'}</p>
-                        <p>• Labour: {entry.labour_minutes || '—'} mins</p>
-                        {entry.follow_ups?.length > 0 && (
-                          <p>• Follow-ups: {entry.follow_ups.join(', ')}</p>
-                        )}
+              return (
+                <div key={entry.id} className="mb-8 pb-8 border-b border-gray-200 last:border-b-0">
+                  {entry.status === 'recording' && (
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-2 mb-4">
+                        <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+                        <p className="text-sm text-gray-600">Processing...</p>
                       </div>
+                      <p className="text-xs text-gray-500">
+                        {entry.audioDuration}s recording
+                      </p>
                     </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleConfirm(entry.id)}
-                        className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => handleReject(entry.id)}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+                  )}
+
+                  {entry.status === 'ready_for_review' && (
+                    <>
+                      <div className="mb-4">
+                        <p className="text-gray-900 mb-3">{entry.summary}</p>
+                        <p className="text-sm text-gray-600 mb-4">{entry.transcript}</p>
+                        <div className="text-xs text-gray-500 space-y-1 mb-4">
+                          <p>• Materials: {entry.materials?.join(', ') || 'None'}</p>
+                          <p>• Labour: {entry.labour_minutes || '—'} mins</p>
+                          {entry.follow_ups?.length > 0 && (
+                            <p>• Follow-ups: {entry.follow_ups.join(', ')}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleConfirm(entry.id)}
+                          className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => handleReject(entry.id)}
+                          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
