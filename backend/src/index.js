@@ -1,15 +1,20 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
-import { registerAudioRoutes } from './routes/audio.js';
-import { registerSyncRoutes } from './routes/sync.js';
 
-// Load environment variables
+// Load environment variables FIRST
 dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Now import other modules after dotenv has loaded
+const { default: Fastify } = await import('fastify');
+const corsModule = await import('@fastify/cors');
+const multipartModule = await import('@fastify/multipart');
+const { registerAudioRoutes } = await import('./routes/audio.js');
+const { registerSyncRoutes } = await import('./routes/sync.js');
+
+const cors = corsModule.default;
+const multipart = multipartModule.default;
 
 /**
  * Initialize Fastify server
