@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
+import { syncService } from './services/syncService';
 import { formatTime } from './mockData';
 
 export function HomeScreen() {
@@ -141,10 +142,23 @@ export function HomeScreen() {
   const handleConfirm = async (id) => {
     try {
       setError(null);
+      const job = inProgress.find(j => j.id === id);
+      
+      // Delete audio and move to confirmed locally
       await dbService.confirmJob(id);
 
-      // Move from in-progress to saved
-      const job = inProgress.find(j => j.id === id);
+      // Try to sync to cloud (optional - don't block if it fails)
+      if (job && job.transcript && job.summary) {
+        try {
+          await syncService.syncJob(job);
+          console.log('[UI] Job synced to cloud');
+        } catch (syncErr) {
+          console.warn('[UI] Cloud sync failed, job saved locally:', syncErr);
+          // Don't fail the UI - job is safe locally
+        }
+      }
+
+      // Update UI
       setInProgress(inProgress.filter(j => j.id !== id));
       setSaved([job, ...saved]);
     } catch (err) {

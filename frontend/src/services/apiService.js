@@ -86,6 +86,37 @@ export class APIService {
       throw error;
     }
   }
+
+  /**
+   * Save a confirmed job to cloud
+   * @param {Object} payload - {userId, jobData}
+   * @returns {Promise<{success: boolean, job: Object}>}
+   */
+  async syncSave(payload) {
+    try {
+      console.log('[API] Syncing job to cloud');
+
+      const response = await fetch(`${API_BASE_URL}/api/sync/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Sync failed');
+      }
+
+      const result = await response.json();
+      console.log('[API] Sync successful');
+      return result;
+    } catch (error) {
+      console.error('Sync error:', error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance

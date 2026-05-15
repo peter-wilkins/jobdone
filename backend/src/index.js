@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
 import { registerAudioRoutes } from './routes/audio.js';
+import { registerSyncRoutes } from './routes/sync.js';}
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ await fastify.register(multipart, {
  * Register routes
  */
 await registerAudioRoutes(fastify);
+await registerSyncRoutes(fastify);
 
 /**
  * Root endpoint
