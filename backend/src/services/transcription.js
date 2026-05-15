@@ -1,6 +1,9 @@
 import axios from 'axios';
 import fs from 'fs';
 import FormData from 'form-data';
+import { mockTranscribeAudio } from './mocks.js';
+
+const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
  * Transcribe audio blob using Whisper API
@@ -11,6 +14,11 @@ export async function transcribeAudio(audioBuffer) {
   try {
     if (!audioBuffer || audioBuffer.length === 0) {
       throw new Error('Audio buffer is empty');
+    }
+
+    // Use mock if enabled
+    if (USE_MOCK) {
+      return await mockTranscribeAudio();
     }
 
     console.log('[Whisper] Buffer size:', audioBuffer.length, 'bytes');

@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { mockSummarizeAndExtract } from './mocks.js';
+
+const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
  * Summarize transcript and extract fields using Claude API
@@ -7,6 +10,11 @@ import axios from 'axios';
  */
 export async function summarizeAndExtract(transcript) {
   try {
+    // Use mock if enabled
+    if (USE_MOCK) {
+      return await mockSummarizeAndExtract(transcript);
+    }
+
     const systemPrompt = `You are a helpful assistant for plumbers. Your job is to:
 1. Create a clean, natural narrative summary of what the plumber did
 2. Extract key information in a structured format

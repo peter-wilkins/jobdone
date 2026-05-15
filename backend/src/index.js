@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
 import { registerAudioRoutes } from './routes/audio.js';
-import { registerSyncRoutes } from './routes/sync.js';}
+import { registerSyncRoutes } from './routes/sync.js';
 
 // Load environment variables
 dotenv.config();
@@ -68,17 +68,26 @@ fastify.setErrorHandler((error, request, reply) => {
  */
 const start = async () => {
   try {
-    // Validate environment variables
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
-    }
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY environment variable is required');
+    const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
+
+    // Validate environment variables (skip if using mocks)
+    if (!USE_MOCK) {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY environment variable is required');
+      }
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+      }
     }
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
     console.log(`\n🚀 JobDone server running at http://localhost:${PORT}`);
-    console.log(`📝 Health check: http://localhost:${PORT}/health\n`);
+    console.log(`📝 Health check: http://localhost:${PORT}/health`);
+    if (USE_MOCK) {
+      console.log(`🎭 MOCK MODE ENABLED - using hardcoded API responses\n`);
+    } else {
+      console.log(`📡 Using real OpenAI/Anthropic APIs\n`);
+    }
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
