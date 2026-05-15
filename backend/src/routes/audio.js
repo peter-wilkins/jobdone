@@ -31,27 +31,42 @@ export async function registerAudioRoutes(fastify) {
    */
   fastify.post('/api/transcribe', async (request, reply) => {
     try {
-      const data = await request.file();
+      const parts = request.parts();
+      let audioBuffer = null;
+      let fileName = 'audio.webm';
 
-      if (!data) {
-        return reply.status(400).send({ error: 'No audio file provided' });
+      // Iterate through form parts
+      for await (const part of parts) {
+        if (part.type === 'file' && part.fieldname === 'audio') {
+          fileName = part.filename;
+          const chunks = [];
+          
+          for await (const chunk of part.file) {
+            chunks.push(chunk);
+          }
+          
+          audioBuffer = Buffer.concat(chunks);
+          console.log(`[Transcribe] Received audio file: ${fileName}, size: ${audioBuffer.length} bytes`);
+        }
       }
 
-      // Read file buffer
-      const chunks = [];
-      for await (const chunk of data.file) {
-        chunks.push(chunk);
+      if (!audioBuffer || audioBuffer.length === 0) {
+        console.error('[Transcribe] No audio buffer or empty buffer');
+        return reply.status(400).send({ error: 'No audio file provided or file is empty' });
       }
-      const audioBuffer = Buffer.concat(chunks);
 
       // Validate
       validateAudioBuffer(audioBuffer);
 
       // Transcribe
-      const { transcript } = await transcribeAudio(audioBuffer, data.mimetype);
+      console.log('[Transcribe] Starting Whisper transcription...');
+      const { transcript } = await transcribeAudio(audioBuffer);
+      console.log('[Transcribe] Transcription complete');
 
       // Summarize and extract
+      console.log('[Transcribe] Starting Claude summarization...');
       const result = await summarizeAndExtract(transcript);
+      console.log('[Transcribe] Summarization complete');
 
       return {
         transcript,

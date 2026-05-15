@@ -25,20 +25,35 @@ export class APIService {
    */
   async transcribeAudio(audioBlob) {
     try {
+      console.log('[API] Transcribing audio:', {
+        size: audioBlob.size,
+        type: audioBlob.type,
+      });
+
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new Error('Audio blob is empty');
+      }
+
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
+
+      console.log('[API] Sending to backend:', `${API_BASE_URL}/api/transcribe`);
 
       const response = await fetch(`${API_BASE_URL}/api/transcribe`, {
         method: 'POST',
         body: formData,
       });
 
+      console.log('[API] Response status:', response.status);
+
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Transcription failed');
+        throw new Error(error.error || `HTTP ${response.status}: Transcription failed`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log('[API] Transcription successful');
+      return result;
     } catch (error) {
       console.error('Transcription error:', error);
       throw error;
