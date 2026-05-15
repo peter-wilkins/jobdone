@@ -1,11 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { formatTime } from './mockData';
 
-export function HomeScreen() {
+export function HomeScreen({ onNavigate }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [inProgress, setInProgress] = useState([]);
@@ -21,14 +32,43 @@ export function HomeScreen() {
       try {
         const inProgressJobs = await dbService.getJobs('recording');
         const readyForReviewJobs = await dbService.getJobs('ready_for_review');
+        const failedJobs = await dbService.getJobs('failed');
         const confirmedJobs = await dbService.getJobs('confirmed');
 
-        setInProgress([...inProgressJobs, ...readyForReviewJobs]);
+        setInProgress([...inProgressJobs, ...readyForReviewJobs, ...failedJobs]);
         setSaved(confirmedJobs);
 
         // Check backend availability
         const isAvailable = await apiService.checkHealth();
         setBackendAvailable(isAvailable);
+
+        // Jobs left in 'recording' state from a previous session — auto-retry or mark failed
+        // processRecording fetches the full job (incl. audioBlob) by id, so the stripped list is fine here
+        for (const job of inProgressJobs) {
+          if (isAvailable) {
+            processRecording(job.id);
+          } else {
+            await dbService.markJobFailed(job.id, 'Backend unavailable');
+            setInProgress(prev => prev.map(j =>
+              j.id === job.id ? { ...j, status: 'failed', errorMessage: 'Backend unavailable' } : j
+            ));
+          }
+        }
+
+        // Retry any confirmed jobs that never made it to the cloud
+        if (isAvailable) {
+          const pending = confirmedJobs.filter(j => j.syncStatus === 'pending' && j.transcript && j.summary);
+          for (const job of pending) {
+            try {
+              await syncService.syncJob(job);
+              await dbService.markJobSynced(job.id);
+              setSaved(prev => prev.map(j => j.id === job.id ? { ...j, syncStatus: 'synced' } : j));
+              console.log('[UI] Retried sync for job', job.id);
+            } catch (e) {
+              console.warn('[UI] Retry sync failed for job', job.id, e);
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to load jobs:', err);
         setError('Failed to load jobs');
@@ -51,6 +91,16 @@ export function HomeScreen() {
 
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  /**
+   * Classify a raw fetch/API error into a user-friendly kind token
+   */
+  const friendlyError = (err) => {
+    const msg = err?.message || '';
+    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
+      return 'offline';
+    return 'server';
+  };
 
   /**
    * Process a recording: transcribe and extract
@@ -90,7 +140,11 @@ export function HomeScreen() {
       });
     } catch (err) {
       console.error('Recording processing error:', err);
-      setError(err.message || 'Failed to process recording');
+      const kind = friendlyError(err);
+      await dbService.markJobFailed(jobId, kind);
+      setInProgress(prev => prev.map(j =>
+        j.id === jobId ? { ...j, status: 'failed', errorMessage: kind } : j
+      ));
       setProcessingIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(jobId);
@@ -123,7 +177,7 @@ export function HomeScreen() {
 
           // Add to in-progress list
           const newJob = await dbService.getJob(jobId);
-          setInProgress([newJob, ...inProgress]);
+          setInProgress(prev => [newJob, ...prev]);
 
           // Auto-trigger transcription if backend is available
           if (backendAvailable) {
@@ -151,19 +205,35 @@ export function HomeScreen() {
       if (job && job.transcript && job.summary) {
         try {
           await syncService.syncJob(job);
+          await dbService.markJobSynced(id);
+          job.syncStatus = 'synced';
           console.log('[UI] Job synced to cloud');
         } catch (syncErr) {
           console.warn('[UI] Cloud sync failed, job saved locally:', syncErr);
-          // Don't fail the UI - job is safe locally
+          // Don't fail the UI - job is safe locally, will retry on next load
         }
       }
 
       // Update UI
-      setInProgress(inProgress.filter(j => j.id !== id));
-      setSaved([job, ...saved]);
+      setInProgress(prev => prev.filter(j => j.id !== id));
+      setSaved(prev => [...prev, job].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     } catch (err) {
       console.error('Failed to confirm job:', err);
       setError('Failed to confirm job');
+    }
+  };
+
+  const handleRetry = async (id) => {
+    try {
+      setError(null);
+      await dbService.resetJobForRetry(id);
+      setInProgress(prev => prev.map(j =>
+        j.id === id ? { ...j, status: 'recording', errorMessage: null } : j
+      ));
+      processRecording(id);
+    } catch (err) {
+      console.error('Failed to retry job:', err);
+      setError('Failed to retry');
     }
   };
 
@@ -189,15 +259,36 @@ export function HomeScreen() {
   return (
     <div className="h-screen bg-white flex flex-col">
       {/* Header */}
-      <div className="border-b border-gray-200 p-6">
+      <div className="border-b border-gray-200 p-6 flex items-center justify-between">
         <h1 className="text-2xl font-light text-gray-900">JobDone</h1>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            className="w-8 h-8 flex flex-col items-center justify-center gap-1.5 text-gray-400 hover:text-gray-600 transition"
+            title="Menu"
+          >
+            <span className="w-5 h-px bg-current" />
+            <span className="w-5 h-px bg-current" />
+            <span className="w-5 h-px bg-current" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
+              <button
+                onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Leave feedback
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Backend Status */}
       {!backendAvailable && (
-        <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200">
-          <p className="text-sm text-yellow-700">
-            ⚠ Backend not available. Transcription disabled. Start backend with: <code className="bg-yellow-100 px-2 py-1 rounded text-xs">cd backend && npm run dev</code>
+        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+          <p className="text-sm text-gray-500">
+            You're offline — recordings are saved and will be processed when you're back online.
           </p>
         </div>
       )}
@@ -266,6 +357,31 @@ export function HomeScreen() {
                     </div>
                   )}
 
+                  {entry.status === 'failed' && (
+                    <>
+                      <p className="text-sm text-gray-500 mb-1">{entry.audioDuration}s recording</p>
+                      <p className="text-sm text-gray-500 mb-4">
+                        {entry.errorMessage === 'offline'
+                          ? "Recording saved — tap Retry when you're back online."
+                          : 'Something went wrong. Tap Retry to try again.'}
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleRetry(entry.id)}
+                          className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
+                        >
+                          Retry
+                        </button>
+                        <button
+                          onClick={() => handleReject(entry.id)}
+                          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </>
+                  )}
+
                   {entry.status === 'ready_for_review' && (
                     <>
                       <div className="mb-4">
@@ -310,7 +426,12 @@ export function HomeScreen() {
             <div className="space-y-4">
               {saved.map(entry => (
                 <div key={entry.id} className="py-3 border-b border-gray-200 last:border-b-0">
-                  <p className="text-sm text-gray-900 font-medium">{entry.summary || entry.transcript || 'Untitled'}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm text-gray-900 font-medium">{entry.summary || entry.transcript || 'Untitled'}</p>
+                    <span className="text-xs shrink-0" title={entry.syncStatus === 'synced' ? 'Saved to cloud' : 'Pending sync'}>
+                      {entry.syncStatus === 'synced' ? '☁️' : '⏳'}
+                    </span>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
                 </div>
               ))}

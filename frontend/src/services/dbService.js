@@ -4,8 +4,9 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'jobs';
+const FEEDBACK_STORE = 'feedback';
 
 export class DBService {
   constructor() {
@@ -31,14 +32,17 @@ export class DBService {
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
 
-        // Create jobs object store
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          
-          // Indexes for querying
           store.createIndex('status', 'status', { unique: false });
           store.createIndex('created_at', 'created_at', { unique: false });
           store.createIndex('sync_status', 'syncStatus', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(FEEDBACK_STORE)) {
+          const feedbackStore = db.createObjectStore(FEEDBACK_STORE, { keyPath: 'id' });
+          feedbackStore.createIndex('status', 'status', { unique: false });
+          feedbackStore.createIndex('created_at', 'created_at', { unique: false });
         }
       };
     });
@@ -247,6 +251,87 @@ export class DBService {
   }
 
   /**
+   * Mark a job as failed (transcription error)
+   */
+  async markJobFailed(jobId, errorMessage) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getRequest = store.get(jobId);
+
+      getRequest.onsuccess = () => {
+        const job = getRequest.result;
+        if (!job) { reject(new Error('Job not found')); return; }
+
+        job.status = 'failed';
+        job.errorMessage = errorMessage || 'Failed to process recording';
+
+        const updateRequest = store.put(job);
+        updateRequest.onsuccess = () => resolve(job);
+        updateRequest.onerror = () => reject(new Error('Failed to mark job failed'));
+      };
+
+      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+    });
+  }
+
+  /**
+   * Reset a failed job back to recording status (for retry)
+   */
+  async resetJobForRetry(jobId) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getRequest = store.get(jobId);
+
+      getRequest.onsuccess = () => {
+        const job = getRequest.result;
+        if (!job) { reject(new Error('Job not found')); return; }
+
+        job.status = 'recording';
+        job.errorMessage = null;
+
+        const updateRequest = store.put(job);
+        updateRequest.onsuccess = () => resolve(job);
+        updateRequest.onerror = () => reject(new Error('Failed to reset job'));
+      };
+
+      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+    });
+  }
+
+  /**
+   * Mark a job as successfully synced to cloud
+   */
+  async markJobSynced(jobId) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getRequest = store.get(jobId);
+
+      getRequest.onsuccess = () => {
+        const job = getRequest.result;
+        if (!job) { reject(new Error('Job not found')); return; }
+
+        job.syncStatus = 'synced';
+        job.synced_at = new Date().toISOString();
+
+        const updateRequest = store.put(job);
+        updateRequest.onsuccess = () => resolve(job);
+        updateRequest.onerror = () => reject(new Error('Failed to mark job synced'));
+      };
+
+      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+    });
+  }
+
+  /**
    * Get jobs pending sync
    */
   async getPendingSyncJobs() {
@@ -283,6 +368,152 @@ export class DBService {
    */
   generateId() {
     return `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // ─── Feedback ────────────────────────────────────────────────────────────
+
+  async createFeedback(meta, audioBlob) {
+    const db = await this.ensureDb();
+    const item = {
+      id: `fb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      audioBlob,
+      audioSize: audioBlob.size,
+      audioDuration: meta.duration,
+      status: 'recording',
+      syncStatus: 'pending',
+      errorMessage: null,
+      transcript: null,
+      created_at: new Date().toISOString(),
+      synced_at: null,
+    };
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([FEEDBACK_STORE], 'readwrite');
+      tx.objectStore(FEEDBACK_STORE).add(item).onsuccess = () => resolve(item.id);
+      tx.onerror = () => reject(new Error('Failed to create feedback'));
+    });
+  }
+
+  async getFeedbackItem(id) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction([FEEDBACK_STORE], 'readonly').objectStore(FEEDBACK_STORE).get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async getFeedbackItems(status = null) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readonly').objectStore(FEEDBACK_STORE);
+      const req = status ? store.index('status').getAll(status) : store.getAll();
+      req.onsuccess = () => {
+        const items = req.result.map(f => ({ ...f, audioBlob: undefined }));
+        items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        resolve(items);
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback items'));
+    });
+  }
+
+  async updateFeedbackWithTranscript(id, transcript) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        item.transcript = transcript;
+        item.status = 'ready_for_review';
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to update feedback'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async confirmFeedback(id) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        item.audioBlob = null;
+        item.status = 'confirmed';
+        item.syncStatus = 'pending';
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to confirm feedback'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async rejectFeedback(id) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(new Error('Failed to delete feedback'));
+    });
+  }
+
+  async markFeedbackSynced(id) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        item.syncStatus = 'synced';
+        item.synced_at = new Date().toISOString();
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to mark feedback synced'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async markFeedbackFailed(id, errorMessage) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        item.status = 'failed';
+        item.errorMessage = errorMessage;
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to mark feedback failed'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async resetFeedbackForRetry(id) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        item.status = 'recording';
+        item.errorMessage = null;
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to reset feedback'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
   }
 
   /**

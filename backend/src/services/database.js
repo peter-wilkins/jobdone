@@ -86,4 +86,55 @@ export function createAnonymousSession() {
   return `anon-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * Save a feedback note to Supabase
+ */
+export async function saveFeedback(userId, { transcript, created_at }) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping feedback save');
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('feedback')
+      .insert([{
+        user_id: userId,
+        transcript,
+        created_at: new Date(created_at).toISOString(),
+      }])
+      .select();
+
+    if (error) throw error;
+
+    console.log('[DB] Feedback saved:', data[0]?.id);
+    return data[0];
+  } catch (error) {
+    console.error('[DB] Failed to save feedback:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get all feedback for a user
+ */
+export async function getFeedback(userId) {
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('feedback')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error('[DB] Failed to fetch feedback:', error.message);
+    throw error;
+  }
+}
+
 export { supabase };

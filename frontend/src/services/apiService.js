@@ -117,6 +117,28 @@ export class APIService {
       throw error;
     }
   }
+
+  /**
+   * Save confirmed feedback to cloud
+   * @param {{ userId: string, transcript: string, created_at: string }} payload
+   */
+  async saveFeedback(payload) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/feedback/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save feedback');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Feedback save error:', error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance
