@@ -1,11 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import axios from 'axios';
 
 /**
- * Summarize transcript and extract fields using Claude
+ * Summarize transcript and extract fields using Claude API
  * @param {string} transcript - Raw transcript from Whisper
  * @returns {Promise<{summary: string, materials: string[], labour_minutes: number|null, follow_ups: string[], possible_future_work: string}>}
  */
@@ -38,19 +34,34 @@ Format your response as:
 SUMMARY: [summary here]
 JSON: [json object here]`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-      system: systemPrompt,
-    });
+    console.log('[Claude] Calling Anthropic API...');
 
-    const content = response.content[0].text;
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      },
+      {
+        headers: {
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    console.log('[Claude] Response received');
+
+    const content = response.data.content[0].text;
 
     // Parse response
     const summaryMatch = content.match(/SUMMARY:\s*(.+?)(?=JSON:|$)/s);
@@ -79,12 +90,14 @@ JSON: [json object here]`;
       }
     }
 
+    console.log('[Claude] Summarization complete');
+
     return {
       summary,
       ...extracted,
     };
   } catch (error) {
-    console.error('Summarization error:', error);
-    throw new Error(`Failed to summarize transcript: ${error.message}`);
+    console.error('Summarization error:', error.response?.data || error.message);
+    throw new Error(`Failed to summarize transcript: ${error.response?.data?.error?.message || error.message}`);
   }
 }

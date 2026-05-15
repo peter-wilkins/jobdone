@@ -17,12 +17,12 @@
   "author": "Peter Wilkins",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.3",
     "@fastify/busboy": "^3.2.0",
     "@fastify/cors": "^9.0.1",
     "@fastify/multipart": "^8.3.1",
+    "axios": "^1.16.1",
     "dotenv": "^16.4.5",
     "fastify": "^4.26.0",
-    "openai": "^4.52.7"
+    "form-data": "^4.0.5"
   }
 }
