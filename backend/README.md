@@ -18,16 +18,26 @@ npm install
 
 ### 2. Set environment variables
 
-Copy `.env.example` to `.env` and fill in:
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-You need:
+**Option A: With real APIs (recommended for production)**
 - `OPENAI_API_KEY` — Get from https://platform.openai.com/api-keys
 - `ANTHROPIC_API_KEY` — Get from https://console.anthropic.com
-- `PORT` (optional, defaults to 3000)
+- `SUPABASE_URL` and `SUPABASE_KEY` (optional, for cloud sync)
+
+**Option B: Mock mode (for testing/demoing)**
+```bash
+echo "USE_MOCK_APIS=true" >> .env
+```
+This skips real API calls and returns hardcoded plumber job examples. Useful for:
+- Testing without API credits
+- Developing offline
+- Demoing to users
+- CI/CD pipelines
 
 ### 3. Run server
 
