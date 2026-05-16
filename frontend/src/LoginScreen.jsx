@@ -47,7 +47,7 @@ export function LoginScreen({ onBack, user }) {
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Signed in as</p>
               <p className="text-gray-900">{user.email}</p>
               <p className="text-xs text-gray-400 mt-2">
-                Your jobs sync across all your devices.
+                Your entries sync across all your devices.
               </p>
             </div>
             <button
@@ -80,7 +80,7 @@ export function LoginScreen({ onBack, user }) {
               <p className="text-gray-900 font-medium mb-1">Sign in</p>
               <p className="text-sm text-gray-500">
                 Enter your email and we'll send you a link. Tap it to sign in — no password needed.
-                Your jobs will sync across all your devices.
+                Your entries sync across all your devices.
               </p>
             </div>
 

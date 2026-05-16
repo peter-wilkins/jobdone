@@ -1,11 +1,11 @@
 /**
- * IndexedDB service for local job storage
+ * IndexedDB service for local entry storage
  * Handles persistence of recordings, transcripts, and metadata
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 3;
-const STORE_NAME = 'jobs';
+const DB_VERSION = 4;
+const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 
 export class DBService {
@@ -33,7 +33,12 @@ export class DBService {
         const db = event.target.result;
         const transaction = event.target.transaction;
 
-        // Jobs store (all versions)
+        // v4: rename jobs → entries (drop old store, no prod users)
+        if (db.objectStoreNames.contains('jobs')) {
+          db.deleteObjectStore('jobs');
+        }
+
+        // Entries store
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('status', 'status', { unique: false });
@@ -48,33 +53,25 @@ export class DBService {
           feedbackStore.createIndex('status', 'status', { unique: false });
           feedbackStore.createIndex('created_at', 'created_at', { unique: false });
         }
-
-        // v3: remoteId index on existing jobs store (upgrade path)
-        if (db.objectStoreNames.contains(STORE_NAME)) {
-          const jobsStore = transaction.objectStore(STORE_NAME);
-          if (!jobsStore.indexNames.contains('remoteId')) {
-            jobsStore.createIndex('remoteId', 'remoteId', { unique: false });
-          }
-        }
       };
     });
   }
 
   /**
-   * Create a new job entry
-   * @param {Object} jobData - Job metadata
+   * Create a new entry
+   * @param {Object} entryData - Entry metadata
    * @param {Blob} audioBlob - Audio recording blob
-   * @returns {Promise<string>} Job ID
+   * @returns {Promise<string>} Entry ID
    */
-  async createJob(jobData, audioBlob) {
+  async createEntry(entryData, audioBlob) {
     const db = await this.ensureDb();
 
-    const job = {
+    const entry = {
       id: this.generateId(),
-      ...jobData,
+      ...entryData,
       audioBlob,
       audioSize: audioBlob.size,
-      audioDuration: jobData.duration,
+      audioDuration: entryData.duration,
       status: 'recording',
       syncStatus: 'pending',
       remoteId: null,
@@ -91,126 +88,126 @@ export class DBService {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.add(job);
+      const request = store.add(entry);
 
       request.onsuccess = () => {
-        resolve(job.id);
+        resolve(entry.id);
       };
 
       request.onerror = () => {
-        reject(new Error('Failed to create job'));
+        reject(new Error('Failed to create entry'));
       };
     });
   }
 
   /**
-   * Update job with transcription + summary data
+   * Update entry with transcription + summary data
    */
-  async updateJobWithTranscription(jobId, { transcript, summary, materials, labour_minutes, follow_ups, possible_future_work }) {
+  async updateEntryWithTranscription(entryId, { transcript, summary, materials, labour_minutes, follow_ups, possible_future_work }) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(jobId);
+      const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const job = getRequest.result;
-        if (!job) {
-          reject(new Error('Job not found'));
+        const entry = getRequest.result;
+        if (!entry) {
+          reject(new Error('Entry not found'));
           return;
         }
 
-        job.transcript = transcript;
-        job.summary = summary;
-        job.materials = materials || [];
-        job.labour_minutes = labour_minutes;
-        job.follow_ups = follow_ups || [];
-        job.possible_future_work = possible_future_work || '';
-        job.status = 'ready_for_review';
+        entry.transcript = transcript;
+        entry.summary = summary;
+        entry.materials = materials || [];
+        entry.labour_minutes = labour_minutes;
+        entry.follow_ups = follow_ups || [];
+        entry.possible_future_work = possible_future_work || '';
+        entry.status = 'ready_for_review';
 
-        const updateRequest = store.put(job);
+        const updateRequest = store.put(entry);
 
         updateRequest.onsuccess = () => {
-          resolve(job);
+          resolve(entry);
         };
 
         updateRequest.onerror = () => {
-          reject(new Error('Failed to update job'));
+          reject(new Error('Failed to update entry'));
         };
       };
 
       getRequest.onerror = () => {
-        reject(new Error('Failed to fetch job'));
+        reject(new Error('Failed to fetch entry'));
       };
     });
   }
 
   /**
-   * Confirm a job (delete audio, move to saved)
+   * Confirm an entry (delete audio, move to saved)
    */
-  async confirmJob(jobId) {
+  async confirmEntry(entryId) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(jobId);
+      const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const job = getRequest.result;
-        if (!job) {
-          reject(new Error('Job not found'));
+        const entry = getRequest.result;
+        if (!entry) {
+          reject(new Error('Entry not found'));
           return;
         }
 
         // Delete audio blob to save space
-        job.audioBlob = null;
-        job.status = 'confirmed';
-        job.syncStatus = 'pending';
+        entry.audioBlob = null;
+        entry.status = 'confirmed';
+        entry.syncStatus = 'pending';
 
-        const updateRequest = store.put(job);
+        const updateRequest = store.put(entry);
 
         updateRequest.onsuccess = () => {
-          resolve(job);
+          resolve(entry);
         };
 
         updateRequest.onerror = () => {
-          reject(new Error('Failed to confirm job'));
+          reject(new Error('Failed to confirm entry'));
         };
       };
 
       getRequest.onerror = () => {
-        reject(new Error('Failed to fetch job'));
+        reject(new Error('Failed to fetch entry'));
       };
     });
   }
 
   /**
-   * Reject a job (delete it)
+   * Reject an entry (delete it)
    */
-  async rejectJob(jobId) {
+  async rejectEntry(entryId) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.delete(jobId);
+      const request = store.delete(entryId);
 
       request.onsuccess = () => {
         resolve();
       };
 
       request.onerror = () => {
-        reject(new Error('Failed to delete job'));
+        reject(new Error('Failed to delete entry'));
       };
     });
   }
 
   /**
-   * Get all jobs, optionally filtered by status
+   * Get all entries, optionally filtered by status
    */
-  async getJobs(status = null) {
+  async getEntries(status = null) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -227,175 +224,175 @@ export class DBService {
 
       request.onsuccess = () => {
         // Remove audioBlob from results (not needed in list view)
-        const jobs = request.result.map(job => ({
-          ...job,
+        const entries = request.result.map(entry => ({
+          ...entry,
           audioBlob: undefined,
         }));
         // Sort by created_at descending
-        jobs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        resolve(jobs);
+        entries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        resolve(entries);
       };
 
       request.onerror = () => {
-        reject(new Error('Failed to fetch jobs'));
+        reject(new Error('Failed to fetch entries'));
       };
     });
   }
 
   /**
-   * Get a single job by ID (includes audio blob)
+   * Get a single entry by ID (includes audio blob)
    */
-  async getJob(jobId) {
+  async getEntry(entryId) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(jobId);
+      const request = store.get(entryId);
 
       request.onsuccess = () => {
         resolve(request.result);
       };
 
       request.onerror = () => {
-        reject(new Error('Failed to fetch job'));
+        reject(new Error('Failed to fetch entry'));
       };
     });
   }
 
   /**
-   * Mark a job as failed (transcription error)
+   * Mark an entry as failed (transcription error)
    */
-  async markJobFailed(jobId, errorMessage) {
+  async markEntryFailed(entryId, errorMessage) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(jobId);
+      const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const job = getRequest.result;
-        if (!job) { reject(new Error('Job not found')); return; }
+        const entry = getRequest.result;
+        if (!entry) { reject(new Error('Entry not found')); return; }
 
-        job.status = 'failed';
-        job.errorMessage = errorMessage || 'Failed to process recording';
+        entry.status = 'failed';
+        entry.errorMessage = errorMessage || 'Failed to process recording';
 
-        const updateRequest = store.put(job);
-        updateRequest.onsuccess = () => resolve(job);
-        updateRequest.onerror = () => reject(new Error('Failed to mark job failed'));
+        const updateRequest = store.put(entry);
+        updateRequest.onsuccess = () => resolve(entry);
+        updateRequest.onerror = () => reject(new Error('Failed to mark entry failed'));
       };
 
-      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+      getRequest.onerror = () => reject(new Error('Failed to fetch entry'));
     });
   }
 
   /**
-   * Reset a failed job back to recording status (for retry)
+   * Reset a failed entry back to recording status (for retry)
    */
-  async resetJobForRetry(jobId) {
+  async resetEntryForRetry(entryId) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(jobId);
+      const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const job = getRequest.result;
-        if (!job) { reject(new Error('Job not found')); return; }
+        const entry = getRequest.result;
+        if (!entry) { reject(new Error('Entry not found')); return; }
 
-        job.status = 'recording';
-        job.errorMessage = null;
+        entry.status = 'recording';
+        entry.errorMessage = null;
 
-        const updateRequest = store.put(job);
-        updateRequest.onsuccess = () => resolve(job);
-        updateRequest.onerror = () => reject(new Error('Failed to reset job'));
+        const updateRequest = store.put(entry);
+        updateRequest.onsuccess = () => resolve(entry);
+        updateRequest.onerror = () => reject(new Error('Failed to reset entry'));
       };
 
-      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+      getRequest.onerror = () => reject(new Error('Failed to fetch entry'));
     });
   }
 
   /**
-   * Mark a job as successfully synced to cloud
-   * @param {string} jobId - local job id
+   * Mark an entry as successfully synced to cloud
+   * @param {string} entryId - local entry id
    * @param {string|null} remoteId - Supabase UUID returned from the server
    */
-  async markJobSynced(jobId, remoteId = null) {
+  async markEntrySynced(entryId, remoteId = null) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(jobId);
+      const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const job = getRequest.result;
-        if (!job) { reject(new Error('Job not found')); return; }
+        const entry = getRequest.result;
+        if (!entry) { reject(new Error('Entry not found')); return; }
 
-        job.syncStatus = 'synced';
-        job.synced_at = new Date().toISOString();
-        job.remoteId = remoteId;
+        entry.syncStatus = 'synced';
+        entry.synced_at = new Date().toISOString();
+        entry.remoteId = remoteId;
 
-        const updateRequest = store.put(job);
-        updateRequest.onsuccess = () => resolve(job);
-        updateRequest.onerror = () => reject(new Error('Failed to mark job synced'));
+        const updateRequest = store.put(entry);
+        updateRequest.onsuccess = () => resolve(entry);
+        updateRequest.onerror = () => reject(new Error('Failed to mark entry synced'));
       };
 
-      getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+      getRequest.onerror = () => reject(new Error('Failed to fetch entry'));
     });
   }
 
-  /** Get confirmed jobs that haven\'t been synced to cloud yet */
-  async getConfirmedJobsUnsynced() {
-    const confirmed = await this.getJobs('confirmed');
-    return confirmed.filter(j => !j.remoteId);
+  /** Get confirmed entries that haven't been synced to cloud yet */
+  async getConfirmedEntriesUnsynced() {
+    const confirmed = await this.getEntries('confirmed');
+    return confirmed.filter(e => !e.remoteId);
   }
 
-  /** Find a local job by its Supabase remote ID */
-  async getJobByRemoteId(remoteId) {
+  /** Find a local entry by its Supabase remote ID */
+  async getEntryByRemoteId(remoteId) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
       const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
       const req = store.index('remoteId').get(remoteId);
       req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(new Error('Failed to query by remoteId'));
+      req.onerror = () => reject(new Error('Failed to query entry by remoteId'));
     });
   }
 
-  /** Add a job fetched from the cloud into local IndexedDB as confirmed */
-  async addCloudJob(cloudJob) {
+  /** Add an entry fetched from the cloud into local IndexedDB as confirmed */
+  async addCloudEntry(cloudJob) {
     const db = await this.ensureDb();
-    const job = {
-      id: `job-cloud-${cloudJob.id}`,
-      remoteId: cloudJob.id,
+    const entry = {
+      id: `entry-cloud-${cloudEntry.id}`,
+      remoteId: cloudEntry.id,
       audioBlob: null,
       audioSize: 0,
       audioDuration: null,
       status: 'confirmed',
       syncStatus: 'synced',
       errorMessage: null,
-      transcript: cloudJob.transcript,
-      summary: cloudJob.summary,
-      materials: cloudJob.materials || [],
-      labour_minutes: cloudJob.labour_minutes,
-      follow_ups: cloudJob.follow_ups || [],
-      possible_future_work: cloudJob.possible_future_work || '',
-      created_at: cloudJob.created_at,
-      synced_at: cloudJob.synced_at,
+      transcript: cloudEntry.transcript,
+      summary: cloudEntry.summary,
+      materials: cloudEntry.materials || [],
+      labour_minutes: cloudEntry.labour_minutes,
+      follow_ups: cloudEntry.follow_ups || [],
+      possible_future_work: cloudEntry.possible_future_work || '',
+      created_at: cloudEntry.created_at,
+      synced_at: cloudEntry.synced_at,
     };
     return new Promise((resolve, reject) => {
-      const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(job);
-      req.onsuccess = () => resolve(job);
-      req.onerror = () => reject(new Error('Failed to add cloud job'));
+      const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(entry);
+      req.onsuccess = () => resolve(entry);
+      req.onerror = () => reject(new Error('Failed to add cloud entry'));
     });
   }
 
   /**
-   * Get jobs pending sync
+   * Get entries pending sync
    */
-  async getPendingSyncJobs() {
+  async getPendingSyncEntries() {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -409,7 +406,7 @@ export class DBService {
       };
 
       request.onerror = () => {
-        reject(new Error('Failed to fetch pending jobs'));
+        reject(new Error('Failed to fetch pending entries'));
       };
     });
   }
@@ -428,7 +425,7 @@ export class DBService {
    * Generate unique ID
    */
   generateId() {
-    return `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────

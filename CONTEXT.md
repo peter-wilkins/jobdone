@@ -1,399 +1,56 @@
 # JobDone
 
-## Core Product
+A mobile-first voice log for self-employed tradespeople that externalises operational memory — capturing what happened on a job and surfacing it at the moment it's needed.
 
-A mobile-first voice job log for self-employed plumbers that helps them unload operational memory immediately after jobs.
+## Language
 
-Surface value:
+**Entry**:
+A single user submission to the log — voice recording or text — timestamped and fully immutable once confirmed. Photos are deferred post-MVP. Corrections are made by submitting a new Entry.
+_Avoid_: Event, Job, Note, Recording, Log
 
-voice-to-job-log
+**Timeline**:
+The chronological stream of all confirmed Entries — the user's full operational memory.
+_Avoid_: Feed, History, Log
 
-Deeper value:
+**Recall**:
+A natural-language question submitted through the same voice input as capture. Intent is classified by heuristics (question words and sentence structure) with a confirmation screen as the safety net for misclassifications. The system detects QUERY intent and filters the Timeline to relevant Entries — deterministically and cacheably. No AI synthesis at query time.
+_Avoid_: Search, Lookup, Query
 
-externalized business memory
+**Query**:
+The saved text of a Recall question, transcribed from voice via the same input as capture. Queries are persisted and shown in a recent-queries dropdown so the user can re-run them with one tap, producing the same filtered Timeline.
+_Avoid_: Search term, Filter
 
-Long-term wedge:
+**Confirmation**:
+The user gesture that commits a ready-for-review Entry into the Timeline. Irreversible.
+_Avoid_: Save, Approve
 
-structured operational memory for field work
-Target User
-Initial customer archetype
+**Rejection**:
+Permanent deletion of an Entry before it reaches the Timeline. No recovery.
+_Avoid_: Discard, Cancel
 
-Self-employed plumbers in the UK.
+**Capture Bar**:
+A browser-bar-style fixed input at the top of the screen — the single entry point for both capture and recall. Contains a mic icon to start recording, shows active Query text with a back button when a Query is active, and reveals a recent-Queries dropdown (chips, most-recent-first) when tapped.
+_Avoid_: Search bar, Input field, Record button
 
-Why:
+## Relationships
 
-high admin burden
-van/mobile workflow
-frequent forgotten follow-ups
-low tolerance for complex software
-already use voice notes informally
-Core Behavioural Loop
-Trigger moment
+- The **Timeline** is an ordered stream of **Entries** displayed chronologically — in-progress Entries (processing, ready-for-review, failed) appear at the top with distinct status styling; confirmed Entries follow below
+- When a **Query** is active, the Timeline shows the top 10 matching Entries (by semantic similarity, above a loose relevance floor) under a "Showing results for: [query]" header — full Timeline restored on dismiss
+- If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
+- An **Entry** moves through: `recording → ready_for_review → confirmed` (via Confirmation) or is permanently deleted (via Rejection)
+- A **Query** moves through: `transcribing → ready_for_review` (user sees intent label + transcription, confirms or corrects) → filters Timeline and is saved to recent Queries
+- The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
+- An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
 
-Immediately after leaving the customer’s property, sitting in the van before driving.
+## Example dialogue
 
-Loop:
+> **Dev:** "When a user submits 'What did I do at Mrs Jones last month?' — is that an Entry or a Query?"
+> **Domain expert:** "A Query — it filters the Timeline. But the system shows 'Searching…' for confirmation before acting, same as it shows 'Saving entry…' for a Note. Either can be cancelled."
+> **Dev:** "And if the plumber taps that same query again from the dropdown next week?"
+> **Domain expert:** "Same filtered Timeline. Deterministic. Any new Entries matching it will appear; nothing else changes."
 
-Finish job
-Sit in van
-Open app
-Record naturally
-Review summary
-Save
-Mental closure
+## Flagged ambiguities
 
-Primary emotional outcome:
-
-relief
-
-Secondary:
-
-quiet control
-Product Philosophy
-
-The app is:
-
-calm
-dependable
-lightweight
-assistive
-operational
-
-The app is NOT:
-
-flashy AI
-productivity theatre
-management software
-autonomous decision-maker
-
-Positioning:
-
-“Before you drive off, finish the paperwork.”
-
-Core User Promise
-“A reliable record of what I did.”
-
-Not:
-
-AI intelligence
-automation hype
-business analytics
-
-Primary value:
-
-reduced mental burden
-fewer forgotten details
-searchable business memory
-
-Economic value:
-
-reduced lost callbacks/quotes/work
-preserved operational context
-Input Model
-Voice-first capture
-
-No forms before recording.
-
-First screen:
-
-giant record button
-
-Users can:
-
-record immediately
-even before signup
-
-Goal:
-
-eliminate “I’ll do it later”
-AI Behaviour
-AI role
-
-Moderate semantic extraction only.
-
-The AI:
-
-extracts
-organizes
-structures
-
-The AI does NOT:
-
-diagnose
-estimate
-reason deeply
-make business decisions
-
-Boundary:
-
-“captures what YOU said”
-
-not:
-
-“thinks for you”
-Output Style
-Hybrid output
-
-Each log contains:
-
-clean narrative summary
-lightweight extracted metadata
-
-Example:
-
-follow-up detected
-materials used
-labour estimate
-possible future work
-
-Editing philosophy:
-
-minimal correction UX
-
-Users:
-
-lightly fix
-confirm
-move on
-
-Not:
-
-fill forms
-Trust Model
-Saved logs are:
-user-confirmed operational records
-
-Not:
-
-autonomous AI truth
-unverifiable summaries
-
-Trust is built through:
-
-reliability
-simplicity
-transparency
-exportability
-
-Key principle:
-
-calm dependable tool
-
-not:
-
-AI personality
-Data & Privacy
-Audio handling
-
-Audio deleted after processing.
-
-Keep:
-
-transcript
-structured summary
-timestamps
-
-Delete:
-
-raw recording
-
-Reason:
-
-lower privacy concern
-lower liability
-simpler trust model
-Location Strategy
-Lightweight contextual location only
-
-Allowed:
-
-attach location to jobs
-optional contextual reminders
-revisit resurfacing
-
-Not allowed:
-
-movement tracking
-surveillance behaviour
-route intelligence
-
-Philosophy:
-
-“helpful context”
-
-not:
-
-tracking
-Revisits & Memory Resurfacing
-
-When revisiting a customer/location:
-
-quietly surface prior context
-
-Example:
-
-“You worked here 8 months ago.”
-
-Potentially strongest long-term feature:
-
-contextual operational memory
-Search & Retrieval
-
-Initial retrieval:
-
-names
-addresses
-dates
-materials
-keywords
-
-Later:
-
-lightweight semantic retrieval
-
-Goal:
-
-memory recovery
-
-not:
-
-AI conversation
-Home Screen
-Timeline-first
-
-Structure:
-
-large persistent record button
-searchable chronological feed below
-
-The timeline becomes:
-
-externalized business memory
-Notifications
-Gentle contextual nudges only
-
-Never:
-
-guilt
-pressure
-productivity policing
-
-Tone:
-
-“Anything to get out of your head before tomorrow?”
-
-Offline Behaviour
-Offline recording allowed
-
-If no signal:
-
-save locally
-process later automatically
-
-Critical principle:
-
-never interrupt capture
-Signup & Activation
-Record before signup
-
-Flow:
-
-Record first
-Experience relief/value
-Create account to save
-
-Aha moment:
-
-“That’s exactly what I did — and now I don’t need to think about it anymore.”
-
-Monetization
-First 50 logs free
-
-Then subscription.
-
-Why:
-
-allows habit formation
-archive gains value
-switching cost emerges naturally
-
-Subscription justification:
-
-fewer forgotten revenue opportunities
-less mental overhead
-historical retrieval value
-Integrations
-Standalone product initially
-
-Allowed:
-
-exports
-copy invoice notes
-PDF/text export
-
-Avoid:
-
-deep integrations
-accounting systems
-platform complexity
-Scope Boundaries (Explicitly Banned)
-
-Not in v1:
-
-full invoicing
-team management
-generic AI assistant
-multi-trade support
-enterprise workflows
-
-Strategic principle:
-
-depth before breadth
-Long-Term Wedge
-Structured operational memory for field work
-
-The moat becomes:
-
-accumulated customer context
-recurring issue memory
-service continuity
-contextual resurfacing
-trusted archive
-
-Not:
-
-AI transcription itself
-Biggest Product Risk
-Users fail to form the daily habit
-
-This is fundamentally:
-
-a behavioural adoption problem
-
-not:
-
-an AI problem
-Acquisition Strategy
-
-Early growth via:
-
-authentic plumber demos
-trade communities
-TikTok/YouTube Shorts
-Facebook groups
-real-world workflow recognition
-
-Not:
-
-polished startup branding
-AI hype marketing
-Product Identity
-
-Publicly:
-
-“Voice job log for plumbers”
-
-Privately/strategically:
-
-external business memory
-
+- "Job" was used in the codebase to mean what is now called an **Entry** — these are not the same thing. A job (the work done) is a real-world concept; an Entry is a capture. The code needs renaming.
+- The spec mentioned "AI summaries editable separately" — resolved: Entries are fully immutable post-confirmation. Summary editing is not built. Corrections become new Entries.
+- No explicit Customer or Property entity exists in MVP. Customer context is carried implicitly in Entry transcripts and surfaced via semantic retrieval. Proactive call-surface (Feature 3) is deferred post-MVP as it requires a contact/phone model.

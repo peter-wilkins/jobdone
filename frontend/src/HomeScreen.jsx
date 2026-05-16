@@ -26,53 +26,53 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
 
-  // Load jobs from database on mount
+  // Load entries from database on mount
   useEffect(() => {
     const loadJobs = async () => {
       try {
-        const inProgressJobs = await dbService.getJobs('recording');
-        const readyForReviewJobs = await dbService.getJobs('ready_for_review');
-        const failedJobs = await dbService.getJobs('failed');
-        const confirmedJobs = await dbService.getJobs('confirmed');
+        const inProgressEntries = await dbService.getEntries('recording');
+        const readyForReviewEntries = await dbService.getEntries('ready_for_review');
+        const failedEntries = await dbService.getEntries('failed');
+        const confirmedEntries = await dbService.getEntries('confirmed');
 
-        setInProgress([...inProgressJobs, ...readyForReviewJobs, ...failedJobs]);
-        setSaved(confirmedJobs);
+        setInProgress([...inProgressEntries, ...readyForReviewEntries, ...failedEntries]);
+        setSaved(confirmedEntries);
 
         // Check backend availability
         const isAvailable = await apiService.checkHealth();
         setBackendAvailable(isAvailable);
 
-        // Jobs left in 'recording' state from a previous session — auto-retry or mark failed
-        // processRecording fetches the full job (incl. audioBlob) by id, so the stripped list is fine here
-        for (const job of inProgressJobs) {
+        // Entries left in 'recording' state from a previous session — auto-retry or mark failed
+        // processRecording fetches the full entry (incl. audioBlob) by id, so the stripped list is fine here
+        for (const entry of inProgressEntries) {
           if (isAvailable) {
-            processRecording(job.id);
+            processRecording(entry.id);
           } else {
-            await dbService.markJobFailed(job.id, 'Backend unavailable');
+            await dbService.markEntryFailed(entry.id, 'Backend unavailable');
             setInProgress(prev => prev.map(j =>
-              j.id === job.id ? { ...j, status: 'failed', errorMessage: 'Backend unavailable' } : j
+              j.id === entry.id ? { ...j, status: 'failed', errorMessage: 'Backend unavailable' } : j
             ));
           }
         }
 
-        // Retry any confirmed jobs that never made it to the cloud
+        // Retry any confirmed entries that never made it to the cloud
         if (isAvailable) {
-          const pending = confirmedJobs.filter(j => j.syncStatus === 'pending' && j.transcript && j.summary);
-          for (const job of pending) {
+          const pending = confirmedEntries.filter(j => j.syncStatus === 'pending' && j.transcript && j.summary);
+          for (const entry of pending) {
             try {
-              const result = await syncService.syncJob(job);
+              const result = await syncService.syncEntry(entry);
               if (result !== null) {
-                await dbService.markJobSynced(job.id, result?.job?.id);
-                setSaved(prev => prev.map(j => j.id === job.id ? { ...j, syncStatus: 'synced' } : j));
+                await dbService.markEntrySynced(entry.id, result?.entry?.id);
+                setSaved(prev => prev.map(j => j.id === entry.id ? { ...j, syncStatus: 'synced' } : j));
               }
             } catch (e) {
-              console.warn('[UI] Retry sync failed for job', job.id, e);
+              console.warn('[UI] Retry sync failed for entry', entry.id, e);
             }
           }
         }
       } catch (err) {
-        console.error('Failed to load jobs:', err);
-        setError('Failed to load jobs');
+        console.error('Failed to load entries:', err);
+        setError('Failed to load entries');
       } finally {
         setIsLoading(false);
       }
@@ -110,17 +110,17 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     try {
       setProcessingIds(prev => new Set([...prev, jobId]));
 
-      // Get the job with audio blob
-      const job = await dbService.getJob(jobId);
-      if (!job || !job.audioBlob) {
+      // Get the entry with audio blob
+      const entry = await dbService.getEntry(jobId);
+      if (!entry || !entry.audioBlob) {
         throw new Error('Recording not found');
       }
 
       // Transcribe
-      const result = await apiService.transcribeAudio(job.audioBlob);
+      const result = await apiService.transcribeAudio(entry.audioBlob);
 
-      // Update job with transcription data
-      const updated = await dbService.updateJobWithTranscription(jobId, {
+      // Update entry with transcription data
+      const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary,
         materials: result.materials,
@@ -142,7 +142,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     } catch (err) {
       console.error('Recording processing error:', err);
       const kind = friendlyError(err);
-      await dbService.markJobFailed(jobId, kind);
+      await dbService.markEntryFailed(jobId, kind);
       setInProgress(prev => prev.map(j =>
         j.id === jobId ? { ...j, status: 'failed', errorMessage: kind } : j
       ));
@@ -169,7 +169,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         const audioData = await audioService.stopRecording();
 
         if (audioData) {
-          const jobId = await dbService.createJob(
+          const jobId = await dbService.createEntry(
             {
               duration: audioData.duration,
             },
@@ -177,8 +177,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           );
 
           // Add to in-progress list
-          const newJob = await dbService.getJob(jobId);
-          setInProgress(prev => [newJob, ...prev]);
+          const newEntry = await dbService.getEntry(jobId);
+          setInProgress(prev => [newEntry, ...prev]);
 
           // Auto-trigger transcription if backend is available
           if (backendAvailable) {
@@ -197,44 +197,44 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const handleConfirm = async (id) => {
     try {
       setError(null);
-      const job = inProgress.find(j => j.id === id);
+      const entry = inProgress.find(j => j.id === id);
       
       // Delete audio and move to confirmed locally
-      await dbService.confirmJob(id);
+      await dbService.confirmEntry(id);
 
       // Try to sync to cloud (optional - don't block if it fails)
-      if (job && job.transcript && job.summary) {
+      if (entry && entry.transcript && entry.summary) {
         try {
-          const result = await syncService.syncJob(job);
+          const result = await syncService.syncEntry(entry);
           if (result !== null) {
-            await dbService.markJobSynced(id, result?.job?.id);
-            job.syncStatus = 'synced';
+            await dbService.markEntrySynced(id, result?.entry?.id);
+            entry.syncStatus = 'synced';
           }
         } catch (syncErr) {
-          console.warn('[UI] Cloud sync failed, job saved locally:', syncErr);
-          // Don't fail the UI - job is safe locally, will retry on next login
+          console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
+          // Don't fail the UI - entry is safe locally, will retry on next login
         }
       }
 
       // Update UI
       setInProgress(prev => prev.filter(j => j.id !== id));
-      setSaved(prev => [...prev, job].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      setSaved(prev => [...prev, entry].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
     } catch (err) {
-      console.error('Failed to confirm job:', err);
-      setError('Failed to confirm job');
+      console.error('Failed to confirm entry:', err);
+      setError('Failed to confirm entry');
     }
   };
 
   const handleRetry = async (id) => {
     try {
       setError(null);
-      await dbService.resetJobForRetry(id);
+      await dbService.resetEntryForRetry(id);
       setInProgress(prev => prev.map(j =>
         j.id === id ? { ...j, status: 'recording', errorMessage: null } : j
       ));
       processRecording(id);
     } catch (err) {
-      console.error('Failed to retry job:', err);
+      console.error('Failed to retry entry:', err);
       setError('Failed to retry');
     }
   };
@@ -242,11 +242,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const handleReject = async (id) => {
     try {
       setError(null);
-      await dbService.rejectJob(id);
+      await dbService.rejectEntry(id);
       setInProgress(inProgress.filter(j => j.id !== id));
     } catch (err) {
-      console.error('Failed to reject job:', err);
-      setError('Failed to reject job');
+      console.error('Failed to reject entry:', err);
+      setError('Failed to reject entry');
     }
   };
 
@@ -464,7 +464,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
         {saved.length === 0 && inProgress.length === 0 && !isRecording && (
           <div className="px-8 py-12 text-center text-gray-400">
-            <p className="text-sm">No jobs logged yet</p>
+            <p className="text-sm">No entries logged yet</p>
           </div>
         )}
       </div>

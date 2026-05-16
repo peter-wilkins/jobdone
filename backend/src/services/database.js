@@ -12,9 +12,9 @@ const supabase = supabaseUrl && supabaseKey
   : null;
 
 /**
- * Save a confirmed job to Supabase
+ * Save a confirmed entry to Supabase
  */
-export async function saveJob(userId, jobData) {
+export async function saveEntry(userId, entryData) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured, skipping save');
     return null;
@@ -22,17 +22,17 @@ export async function saveJob(userId, jobData) {
 
   try {
     const { data, error } = await supabase
-      .from('jobs')
+      .from('entries')
       .insert([
         {
           user_id: userId,
-          transcript: jobData.transcript,
-          summary: jobData.summary,
-          materials: jobData.materials,
-          labour_minutes: jobData.labour_minutes,
-          follow_ups: jobData.follow_ups,
-          possible_future_work: jobData.possible_future_work,
-          created_at: new Date(jobData.created_at).toISOString(),
+          transcript: entryData.transcript,
+          summary: entryData.summary,
+          materials: entryData.materials,
+          labour_minutes: entryData.labour_minutes,
+          follow_ups: entryData.follow_ups,
+          possible_future_work: entryData.possible_future_work,
+          created_at: new Date(entryData.created_at).toISOString(),
         },
       ])
       .select();
@@ -42,18 +42,18 @@ export async function saveJob(userId, jobData) {
       throw error;
     }
 
-    console.log('[DB] Job saved:', data[0]?.id);
+    console.log('[DB] Entry saved:', data[0]?.id);
     return data[0];
   } catch (error) {
-    console.error('[DB] Failed to save job:', error.message);
+    console.error('[DB] Failed to save entry:', error.message);
     throw error;
   }
 }
 
 /**
- * Get all jobs for a user
+ * Get all entries for a user
  */
-export async function getJobs(userId) {
+export async function getEntries(userId) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured');
     return [];
@@ -61,7 +61,7 @@ export async function getJobs(userId) {
 
   try {
     const { data, error } = await supabase
-      .from('jobs')
+      .from('entries')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -73,7 +73,7 @@ export async function getJobs(userId) {
 
     return data || [];
   } catch (error) {
-    console.error('[DB] Failed to fetch jobs:', error.message);
+    console.error('[DB] Failed to fetch entries:', error.message);
     throw error;
   }
 }

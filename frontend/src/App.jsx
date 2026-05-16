@@ -35,30 +35,30 @@ function App() {
   }, []);
 
   /**
-   * On login: push any unsynced local jobs to cloud, then pull
-   * any cloud jobs not yet on this device.
+   * On login: push any unsynced local entries to cloud, then pull
+   * any cloud entries not yet on this device.
    */
   const syncOnLogin = async () => {
     try {
-      // 1. Push: sync confirmed jobs that have no remoteId yet
-      const unsynced = await dbService.getConfirmedJobsUnsynced();
-      for (const job of unsynced) {
+      // 1. Push: sync confirmed entries that have no remoteId yet
+      const unsynced = await dbService.getConfirmedEntriesUnsynced();
+      for (const entry of unsynced) {
         try {
-          const result = await syncService.syncJob(job);
-          if (result?.job?.id) {
-            await dbService.markJobSynced(job.id, result.job.id);
+          const result = await syncService.syncEntry(entry);
+          if (result?.entry?.id) {
+            await dbService.markEntrySynced(entry.id, result.entry.id);
           }
         } catch (e) {
-          console.warn('[Login] Failed to push job:', job.id, e);
+          console.warn('[Login] Failed to push entry:', entry.id, e);
         }
       }
 
-      // 2. Pull: fetch cloud jobs and add any missing locally
-      const cloudJobs = await apiService.getCloudJobs();
-      for (const cloudJob of cloudJobs) {
-        const exists = await dbService.getJobByRemoteId(cloudJob.id);
+      // 2. Pull: fetch cloud entries and add any missing locally
+      const cloudEntries = await apiService.getCloudEntries();
+      for (const cloudEntry of cloudEntries) {
+        const exists = await dbService.getEntryByRemoteId(cloudEntry.id);
         if (!exists) {
-          await dbService.addCloudJob(cloudJob);
+          await dbService.addCloudEntry(cloudEntry);
         }
       }
     } catch (e) {

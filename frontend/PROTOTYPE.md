@@ -21,6 +21,8 @@
 
 Variant A code is now in `src/HomeScreen.jsx`. The prototype switcher and other variants have been deleted.
 
+**Superseded (2026-05-16):** The large record button is replaced by a browser-bar style Capture Bar fixed at the top of the screen (mic icon + recent-queries dropdown + back button when query active). The full screen below is the Timeline. See CONTEXT.md.
+
 Next steps:
 1. Wire up Web Audio API for recording
 2. Implement IndexedDB for local storage

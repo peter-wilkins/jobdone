@@ -23,10 +23,8 @@ A mobile-first voice job log for self-employed plumbers. Record what you did aft
 
 **TODO**
 - Auth + cloud sync (Supabase)
-- Search across jobs
-- Edit confirmed entries
+- Smart recall timeline
 - Native mobile app (iOS/Android)
-- Offline sync with retry queue
 
 **DEPLOYMENT TODO**
 - check cors on login flow

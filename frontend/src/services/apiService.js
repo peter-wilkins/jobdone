@@ -95,13 +95,13 @@ export class APIService {
   }
 
   /**
-   * Save a confirmed job to cloud
-   * @param {Object} payload - {userId, jobData}
-   * @returns {Promise<{success: boolean, job: Object}>}
+   * Save a confirmed entry to cloud
+   * @param {Object} payload - {entryData}
+   * @returns {Promise<{success: boolean, entry: Object}>}
    */
   async syncSave(payload) {
     try {
-      console.log('[API] Syncing job to cloud');
+      console.log('[API] Syncing entry to cloud');
 
       const response = await fetch(`${API_BASE_URL}/api/sync/save`, {
         method: 'POST',
@@ -123,15 +123,15 @@ export class APIService {
     }
   }
 
-  /** Fetch all cloud jobs for the logged-in user */
-  async getCloudJobs() {
+  /** Fetch all cloud entries for the logged-in user */
+  async getCloudEntries() {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sync/jobs`, {
+      const response = await fetch(`${API_BASE_URL}/api/sync/entries`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
       const result = await response.json();
-      return result.jobs || [];
+      return result.entries || [];
     } catch {
       return [];
     }
