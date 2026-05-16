@@ -30,74 +30,6 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
 
-  // Load entries from database on mount
-  useEffect(() => {
-    const loadJobs = async () => {
-      try {
-        const inProgressEntries = await dbService.getEntries('recording');
-        const readyForReviewEntries = await dbService.getEntries('ready_for_review');
-        const failedEntries = await dbService.getEntries('failed');
-        const confirmedEntries = await dbService.getEntries('confirmed');
-
-        // Merge all entries: in-progress first, then confirmed (newest first)
-        const allInProgress = [...inProgressEntries, ...readyForReviewEntries, ...failedEntries];
-        const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setEntries([...allInProgress, ...sortedConfirmed]);
-
-        // Check backend availability
-        const isAvailable = await apiService.checkHealth();
-        setBackendAvailable(isAvailable);
-
-        // Entries left in 'recording' state from a previous session — auto-retry or mark failed
-        for (const entry of inProgressEntries) {
-          if (isAvailable) {
-            processRecording(entry.id);
-          } else {
-            await dbService.markEntryFailed(entry.id, 'Backend unavailable');
-            setEntries(prev => prev.map(e =>
-              e.id === entry.id ? { ...e, status: 'failed', errorMessage: 'Backend unavailable' } : e
-            ));
-          }
-        }
-
-        // Retry any confirmed entries that never made it to the cloud
-        if (isAvailable) {
-          const pending = sortedConfirmed.filter(e => e.syncStatus === 'pending' && e.transcript && e.summary);
-          for (const entry of pending) {
-            try {
-              const result = await syncService.syncEntry(entry);
-              if (result !== null) {
-                await dbService.markEntrySynced(entry.id, result?.entry?.id);
-                setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, syncStatus: 'synced' } : e));
-              }
-            } catch (e) {
-              console.warn('[UI] Retry sync failed for entry', entry.id, e);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load entries:', err);
-        setError('Failed to load entries');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadJobs();
-  }, [refreshKey]);
-
-  // Update recording time display
-  useEffect(() => {
-    if (!isRecording) return;
-
-    const interval = setInterval(() => {
-      const status = audioService.getStatus();
-      setRecordingTime(status.elapsedSeconds);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
   /**
    * Classify a raw fetch/API error into a user-friendly kind token
    */
@@ -264,6 +196,75 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
   };
 
+  // Load entries from database on mount
+  useEffect(() => {
+    const loadJobs = async () => {
+      try {
+        const inProgressEntries = await dbService.getEntries('recording');
+        const readyForReviewEntries = await dbService.getEntries('ready_for_review');
+        const failedEntries = await dbService.getEntries('failed');
+        const confirmedEntries = await dbService.getEntries('confirmed');
+
+        // Merge all entries: in-progress first, then confirmed (newest first)
+        const allInProgress = [...inProgressEntries, ...readyForReviewEntries, ...failedEntries];
+        const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setEntries([...allInProgress, ...sortedConfirmed]);
+
+        // Check backend availability
+        const isAvailable = await apiService.checkHealth();
+        setBackendAvailable(isAvailable);
+
+        // Entries left in 'recording' state from a previous session — auto-retry or mark failed
+        for (const entry of inProgressEntries) {
+          if (isAvailable) {
+            processRecording(entry.id);
+          } else {
+            await dbService.markEntryFailed(entry.id, 'Backend unavailable');
+            setEntries(prev => prev.map(e =>
+              e.id === entry.id ? { ...e, status: 'failed', errorMessage: 'Backend unavailable' } : e
+            ));
+          }
+        }
+
+        // Retry any confirmed entries that never made it to the cloud
+        if (isAvailable) {
+          const pending = sortedConfirmed.filter(e => e.syncStatus === 'pending' && e.transcript && e.summary);
+          for (const entry of pending) {
+            try {
+              const result = await syncService.syncEntry(entry);
+              if (result !== null) {
+                await dbService.markEntrySynced(entry.id, result?.entry?.id);
+                setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, syncStatus: 'synced' } : e));
+              }
+            } catch (e) {
+              console.warn('[UI] Retry sync failed for entry', entry.id, e);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load entries:', err);
+        setError('Failed to load entries');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
+
+  // Update recording time display
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const interval = setInterval(() => {
+      const status = audioService.getStatus();
+      setRecordingTime(status.elapsedSeconds);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
   // Capture Bar states
   const renderCaptureBar = () => {
     // Dev toggle: query-active state
@@ -336,7 +337,6 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
   const renderEntry = (entry) => {
     const isProcessing = processingIds.has(entry.id);
-    const isInProgress = entry.status !== 'confirmed';
 
     if (entry.status === 'recording' || isProcessing) {
       return (
