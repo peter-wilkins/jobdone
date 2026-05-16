@@ -160,6 +160,42 @@ export class APIService {
   }
 
   /**
+   * Save a query to the server
+   * @param {string} text - Query text
+   * @returns {Promise<Object>} Saved query
+   */
+  async saveQuery(text) {
+    const response = await fetch(`${API_BASE_URL}/api/queries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to save query`);
+    }
+    const result = await response.json();
+    return result.query;
+  }
+
+  /**
+   * Fetch query history from server
+   * @returns {Promise<Array>} Recent queries
+   */
+  async getQueries() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/queries`, {
+        headers: authHeader(),
+      });
+      if (!response.ok) return [];
+      const result = await response.json();
+      return result.queries || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Recall entries matching a query
    * @param {string} query - Query text
    * @returns {Promise<Array>} Matching entries ordered by relevance

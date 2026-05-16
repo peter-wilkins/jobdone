@@ -202,4 +202,89 @@ export async function recallEntries(userId, queryEmbedding, { limit = 10, floor 
   }
 }
 
+/**
+ * Save a query to Supabase. Deduplicates by text — if same text
+ * already exists for the user, updates created_at to bubble to top.
+ */
+export async function saveQuery(userId, text) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping query save');
+    return null;
+  }
+
+  try {
+    // Try to find existing query with same text
+    const { data: existing } = await supabase
+      .from('queries')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('text', text)
+      .single();
+
+    if (existing) {
+      // Update created_at to bubble to top
+      const { data, error } = await supabase
+        .from('queries')
+        .update({ created_at: new Date().toISOString() })
+        .eq('id', existing.id)
+        .select();
+
+      if (error) throw error;
+      console.log('[DB] Query refreshed:', existing.id);
+      return data[0];
+    }
+
+    // Insert new query
+    const { data, error } = await supabase
+      .from('queries')
+      .insert([{ user_id: userId, text }])
+      .select();
+
+    if (error) throw error;
+    console.log('[DB] Query saved:', data[0]?.id);
+    return data[0];
+  } catch (error) {
+    console.error('[DB] Failed to save query:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get up to 50 most recent queries for a user, deduplicated by text.
+ * Returns distinct texts ordered by most recent created_at.
+ */
+export async function getQueries(userId, { limit = 50 } = {}) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('queries')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit * 2); // Fetch extra to account for dedup
+
+    if (error) throw error;
+
+    // Deduplicate by text, keeping first occurrence (most recent)
+    const seen = new Set();
+    const deduped = [];
+    for (const q of data || []) {
+      if (!seen.has(q.text)) {
+        seen.add(q.text);
+        deduped.push(q);
+        if (deduped.length >= limit) break;
+      }
+    }
+
+    return deduped;
+  } catch (error) {
+    console.error('[DB] Failed to fetch queries:', error.message);
+    throw error;
+  }
+}
+
 export { supabase };

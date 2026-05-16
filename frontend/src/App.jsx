@@ -6,6 +6,7 @@ import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
+import { queryHistoryService } from './services/queryHistoryService';
 
 function App() {
   const [screen, setScreen] = useState('home');
@@ -27,7 +28,10 @@ function App() {
         // Navigate away from login screen if open
         setScreen(s => s === 'login' ? 'home' : s);
         // Merge local ↔ cloud
+        // eslint-disable-next-line react-hooks/immutability
         await syncOnLogin();
+        // Sync query history
+        await queryHistoryService.syncOnLogin();
       }
     });
 

@@ -14,6 +14,7 @@ const { registerAudioRoutes } = await import('./routes/audio.js');
 const { registerSyncRoutes } = await import('./routes/sync.js');
 const { registerFeedbackRoutes } = await import('./routes/feedback.js');
 const { registerRecallRoutes } = await import('./routes/recall.js');
+const { registerQueryRoutes } = await import('./routes/queries.js');
 
 const cors = corsModule.default;
 const multipart = multipartModule.default;
@@ -45,6 +46,7 @@ await registerAudioRoutes(fastify);
 await registerSyncRoutes(fastify);
 await registerFeedbackRoutes(fastify);
 await registerRecallRoutes(fastify);
+await registerQueryRoutes(fastify);
 
 /**
  * Root endpoint

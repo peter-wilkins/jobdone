@@ -3,7 +3,7 @@ import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
-
+import { queryHistoryService } from './services/queryHistoryService';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -35,6 +35,28 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [activeQuery, setActiveQuery] = useState(null);
   const [queryResults, setQueryResults] = useState(null);
   const [isRecalling, setIsRecalling] = useState(false);
+
+  // Query history dropdown state
+  const [queryDropdownOpen, setQueryDropdownOpen] = useState(false);
+  const [recentQueries, setRecentQueries] = useState([]);
+  const dropdownRef = useRef(null);
+
+  // Load query history on mount
+  useEffect(() => {
+    queryHistoryService.getRecent().then(setRecentQueries);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!queryDropdownOpen) return;
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setQueryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [queryDropdownOpen]);
 
   /**
    * Classify a raw fetch/API error into a user-friendly kind token
@@ -143,29 +165,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setError(null);
       const entry = entries.find(e => e.id === id);
 
-      // Handle QUERY intent - save to queries table, then recall
+      // Handle QUERY intent - remove in-progress, execute query
       if (entry.intent === 'QUERY') {
-        // Save query to queries table
-        await dbService.saveQuery(entry.transcript);
-        
-        setIsRecalling(true);
-        try {
-          const results = await apiService.recall(entry.transcript);
-          setActiveQuery(entry.transcript);
-          setQueryResults(results);
-          // Remove the query entry from in-progress
-          await dbService.rejectEntry(id);
-          setEntries(prev => prev.filter(e => e.id !== id));
-        } catch (err) {
-          const isOffline = err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError');
-          if (!isOffline) {
-            setError('Something went wrong — try again.');
-          } else {
-            setError('You\'re offline — search will be available when you\'re back online.');
-          }
-        } finally {
-          setIsRecalling(false);
-        }
+        await dbService.rejectEntry(id);
+        setEntries(prev => prev.filter(e => e.id !== id));
+        await executeQuery(entry.transcript);
         return;
       }
 
@@ -227,6 +231,32 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     } catch (err) {
       console.error('Failed to reject entry:', err);
       setError('Failed to reject entry');
+    }
+  };
+
+  /**
+   * Execute a query: call recall, show results, save to history.
+   * Used for both confirm-screen queries and re-runs from dropdown.
+   */
+  const executeQuery = async (text) => {
+    setQueryDropdownOpen(false);
+    setIsRecalling(true);
+    try {
+      const results = await apiService.recall(text);
+      setActiveQuery(text);
+      setQueryResults(results);
+      // Save to local + server history
+      await queryHistoryService.add(text);
+      setRecentQueries(await queryHistoryService.getRecent());
+    } catch (err) {
+      const isOffline = err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError');
+      if (!isOffline) {
+        setError('Something went wrong — try again.');
+      } else {
+        setError('You\'re offline — search will be available when you\'re back online.');
+      }
+    } finally {
+      setIsRecalling(false);
     }
   };
 
@@ -361,8 +391,41 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       return <div className="h-12" />;
     }
 
-    // Idle state - empty bar
-    return <div className="h-12" />;
+    // Idle state - clickable bar body opens query history dropdown
+    return (
+      <div className="relative h-12" ref={dropdownRef}>
+        <button
+          onClick={() => setQueryDropdownOpen(o => !o)}
+          className="w-full h-12 px-4 flex items-center justify-between text-left hover:bg-gray-50 transition"
+        >
+          <span className="text-sm text-gray-400">Recent searches…</span>
+          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Dropdown */}
+        {queryDropdownOpen && (
+          <div className="absolute left-4 right-4 top-12 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+            {recentQueries.length === 0 ? (
+              <div className="px-4 py-6 text-center text-gray-400 text-sm">No recent searches</div>
+            ) : (
+              <div className="p-2">
+                {recentQueries.map((q, i) => (
+                  <button
+                    key={q.id || i}
+                    onClick={() => executeQuery(q.text)}
+                    className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition text-sm text-gray-700 truncate"
+                  >
+                    {q.text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Floating mic button state colors: grey (idle), red (recording), green (has in-progress entries)

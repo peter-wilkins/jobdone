@@ -32,7 +32,6 @@ export class DBService {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
-        const transaction = event.target.transaction;
 
         // v4: rename jobs → entries (drop old store, no prod users)
         if (db.objectStoreNames.contains('jobs')) {
@@ -626,19 +625,31 @@ export class DBService {
   // ─── Queries ────────────────────────────────────────────────────────────
 
   /**
-   * Save a query (QUERY intent) to the queries table
-   * @param {string} transcript - The query transcript
+   * Save a query to the queries table. Deduplicates by text.
+   * @param {string} text - The query text
+   * @param {string} [createdAt] - Optional ISO timestamp (for server sync)
+   * @param {boolean} [isSynced] - Whether already synced to server
    * @returns {Promise<string>} Query ID
    */
-  async saveQuery(transcript) {
+  async saveQuery(text, createdAt, isSynced) {
     const db = await this.ensureDb();
+    const now = new Date().toISOString();
+
+    // Check for existing query with same text
+    const existing = await this.findQueryByText(text);
+    if (existing) {
+      // Update created_at to bubble to top
+      return this.updateQuery(existing.id, {
+        created_at: createdAt || now,
+      });
+    }
 
     const query = {
       id: `query-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      transcript,
-      syncStatus: 'pending',
-      created_at: new Date().toISOString(),
-      synced_at: null,
+      text,
+      syncStatus: isSynced ? 'synced' : 'pending',
+      created_at: createdAt || now,
+      synced_at: isSynced ? now : null,
     };
 
     return new Promise((resolve, reject) => {
@@ -646,20 +657,58 @@ export class DBService {
       const store = transaction.objectStore(QUERIES_STORE);
       const request = store.add(query);
 
-      request.onsuccess = () => {
-        resolve(query.id);
-      };
-
-      request.onerror = () => {
-        reject(new Error('Failed to save query'));
-      };
+      request.onsuccess = () => resolve(query.id);
+      request.onerror = () => reject(new Error('Failed to save query'));
     });
   }
 
   /**
-   * Get all queries
+   * Find a query by text
    */
-  async getQueries() {
+  async findQueryByText(text) {
+    const queries = await this.getQueries();
+    return queries.find(q => q.text === text) || null;
+  }
+
+  /**
+   * Update a query by ID
+   */
+  async updateQuery(queryId, updates) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([QUERIES_STORE], 'readwrite');
+      const store = transaction.objectStore(QUERIES_STORE);
+      const getRequest = store.get(queryId);
+
+      getRequest.onsuccess = () => {
+        const query = getRequest.result;
+        if (!query) { reject(new Error('Query not found')); return; }
+        Object.assign(query, updates);
+        const put = store.put(query);
+        put.onsuccess = () => resolve(query.id);
+        put.onerror = () => reject(new Error('Failed to update query'));
+      };
+      getRequest.onerror = () => reject(new Error('Failed to fetch query'));
+    });
+  }
+
+  /**
+   * Mark a query as synced
+   */
+  async markQuerySynced(text) {
+    const query = await this.findQueryByText(text);
+    if (query) {
+      await this.updateQuery(query.id, {
+        syncStatus: 'synced',
+        synced_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Get up to `limit` queries, most recent first
+   */
+  async getQueries(limit = 50) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -668,15 +717,13 @@ export class DBService {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const queries = request.result.sort((a, b) => 
-          new Date(b.created_at) - new Date(a.created_at)
-        );
+        const queries = request.result
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, limit);
         resolve(queries);
       };
 
-      request.onerror = () => {
-        reject(new Error('Failed to fetch queries'));
-      };
+      request.onerror = () => reject(new Error('Failed to fetch queries'));
     });
   }
 
