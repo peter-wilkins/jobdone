@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { mockEmbedText } from './mocks.js';
 
-export const EMBEDDING_MODEL = 'voyage-3-lite';
+export const EMBEDDING_MODEL = 'voyage-3';
 export const EMBEDDING_DIMENSIONS = 1024;
 
 const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
