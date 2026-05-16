@@ -287,52 +287,29 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       );
     }
 
-    // Determine mic button state: grey (idle), red (recording), green (has in-progress entries)
-    const hasInProgress = entries.some(e => e.status !== 'confirmed');
-    let micColorClass = 'bg-gray-500';
-    if (isRecording) micColorClass = 'bg-red-500';
-    else if (hasInProgress) micColorClass = 'bg-green-500';
-
     if (isRecording) {
       return (
-        <div className="flex items-center justify-between px-4 h-12">
-          <button
-            onClick={handleRecord}
-            className={`shrink-0 w-10 h-10 flex items-center justify-center ${micColorClass} text-white rounded-full hover:opacity-90 transition`}
-            title="Stop recording"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-          </button>
+        <div className="flex items-center justify-center px-4 h-12">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
             <span className="text-sm font-medium text-gray-900">
               {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
             </span>
           </div>
-          <div className="w-10" />
         </div>
       );
     }
 
-    // Idle state
-    return (
-      <div className="flex items-center justify-between px-4 h-12">
-        <button
-          onClick={handleRecord}
-          className={`shrink-0 w-10 h-10 flex items-center justify-center ${micColorClass} text-white rounded-full hover:opacity-90 transition`}
-          title="Start recording"
-          disabled={isLoading}
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0" />
-        <div className="w-10" />
-      </div>
-    );
+    // Idle state - empty bar
+    return <div className="h-12" />;
+  };
+
+  // Floating mic button state colors: grey (idle), red (recording), green (has in-progress entries)
+  const getMicColorClass = () => {
+    if (isRecording) return 'bg-red-500';
+    const hasInProgress = entries.some(e => e.status !== 'confirmed');
+    if (hasInProgress) return 'bg-green-500';
+    return 'bg-gray-500';
   };
 
   const renderEntry = (entry) => {
@@ -541,6 +518,24 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           </div>
         )}
       </div>
+
+      {/* Floating mic button - bottom right, 50% larger (w-15 h-15 = 60px) */}
+      <button
+        onClick={handleRecord}
+        className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
+        title={isRecording ? 'Stop recording' : 'Start recording'}
+        disabled={isLoading}
+      >
+        {isRecording ? (
+          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        ) : (
+          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
