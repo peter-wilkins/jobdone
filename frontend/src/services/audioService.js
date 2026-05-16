@@ -13,7 +13,72 @@ export class AudioService {
   }
 
   /**
+   * Check microphone permission status
+   * Returns: 'granted' | 'denied' | 'prompt' | 'unknown'
+   */
+  async checkPermission() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) {
+        // Fallback for browsers without Permissions API
+        return 'unknown';
+      }
+
+      const status = await navigator.permissions.query({ name: 'microphone' });
+      return status.state; // 'granted', 'denied', or 'prompt'
+    } catch (error) {
+      console.warn('Could not check microphone permission:', error);
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Request microphone access explicitly
+   * Throws error if denied, returns true if granted
+   */
+  async requestMicrophoneAccess() {
+    try {
+      const permission = await this.checkPermission();
+
+      if (permission === 'denied') {
+        throw new Error(
+          'Microphone access has been denied. Please go to your browser settings and enable microphone access for this site, then refresh the page.'
+        );
+      }
+
+      // Try to get access (will prompt user if permission status is 'prompt')
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      // Stop the stream since we're just checking permission
+      stream.getTracks().forEach(track => track.stop());
+
+      return true;
+    } catch (error) {
+      if (error.name === 'NotAllowedError' || error.message.includes('denied')) {
+        throw new Error(
+          'Microphone access was denied. Please enable microphone access in your browser settings and try again.'
+        );
+      } else if (error.name === 'NotFoundError') {
+        throw new Error('No microphone found on this device.');
+      } else if (error.name === 'NotSupportedError') {
+        throw new Error('Microphone access is not supported in your browser.');
+      } else if (error.name === 'SecurityError') {
+        throw new Error(
+          'Microphone access is only available over HTTPS. Please use a secure connection.'
+        );
+      }
+      throw new Error(`Microphone access error: ${error.message}`);
+    }
+  }
+
+  /**
    * Start recording audio from microphone
+   * Automatically requests permission if needed
    */
   async startRecording() {
     try {
@@ -22,7 +87,10 @@ export class AudioService {
         return;
       }
 
-      // Request microphone access
+      // Ensure microphone access is granted
+      await this.requestMicrophoneAccess();
+
+      // Request microphone access for recording
       this.stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -46,8 +114,9 @@ export class AudioService {
 
       return true;
     } catch (error) {
-      console.error('Microphone access denied:', error);
-      throw new Error('Microphone access denied. Please check your browser permissions.');
+      console.error('Recording error:', error);
+      // Re-throw with original message (already formatted by requestMicrophoneAccess)
+      throw error;
     }
   }
 
