@@ -288,16 +288,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
 
     if (isRecording) {
-      return (
-        <div className="flex items-center justify-center px-4 h-12">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-gray-900">
-              {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
-            </span>
-          </div>
-        </div>
-      );
+      // Timer now shown in header
+      return <div className="h-12" />;
     }
 
     // Idle state - empty bar
@@ -425,6 +417,17 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       {/* Header */}
       <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <h1 className="text-xl font-light text-gray-900">JobDone</h1>
+        
+        {/* Recording timer in header */}
+        {isRecording && (
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-sm font-medium text-gray-900">
+              {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
+            </span>
+          </div>
+        )}
+        
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(o => !o)}
