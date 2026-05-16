@@ -1,46 +1,43 @@
-import OpenAI from 'openai';
+import axios from 'axios';
 import { mockEmbedText } from './mocks.js';
 
-export const EMBEDDING_MODEL = 'text-embedding-3-small';
-export const EMBEDDING_DIMENSIONS = 1536;
+export const EMBEDDING_MODEL = 'voyage-3-lite';
+export const EMBEDDING_DIMENSIONS = 1024;
 
 const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
- * Create an EmbeddingService bound to a given OpenAI client.
- * Allows injection of a mock client in tests.
- *
- * @param {OpenAI} client - OpenAI client instance
- * @returns {{ embedText: (text: string) => Promise<number[]> }}
+ * Create an EmbeddingService using Voyage AI API.
+ * Single HTTP POST to /v1/embeddings.
  */
-export function createEmbeddingService(client) {
+export function createEmbeddingService() {
   return {
-    /**
-     * Embed a single text string.
-     * @param {string} text
-     * @returns {Promise<number[]>} 1536-dimension vector
-     */
     async embedText(text) {
       if (!text || typeof text !== 'string') {
         throw new Error('[EmbeddingService] text must be a non-empty string');
       }
 
-      // Use mock if enabled
       if (USE_MOCK) {
         return await mockEmbedText(text);
       }
 
-      let response;
-      try {
-        response = await client.embeddings.create({
-          model: EMBEDDING_MODEL,
-          input: text,
-        });
-      } catch (err) {
-        throw new Error(`[EmbeddingService] OpenAI API failure: ${err.message}`);
+      if (!process.env.VOYAGE_API_KEY) {
+        throw new Error('[EmbeddingService] VOYAGE_API_KEY not set');
       }
 
-      const vector = response?.data?.[0]?.embedding;
+      const response = await axios.post(
+        'https://api.voyageai.com/v1/embeddings',
+        { input: text, model: EMBEDDING_MODEL },
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.VOYAGE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
+        }
+      );
+
+      const vector = response.data?.data?.[0]?.embedding;
 
       if (!Array.isArray(vector) || vector.length !== EMBEDDING_DIMENSIONS) {
         throw new Error(
@@ -53,19 +50,11 @@ export function createEmbeddingService(client) {
   };
 }
 
-/**
- * Singleton service backed by the real OpenAI key from env.
- * Lazy-initialised — safe to import even if key is absent (tests use mock).
- */
 let _defaultService = null;
 
 export function getEmbeddingService() {
   if (!_defaultService) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('[EmbeddingService] OPENAI_API_KEY not set');
-    }
-    _defaultService = createEmbeddingService(new OpenAI({ apiKey }));
+    _defaultService = createEmbeddingService();
   }
   return _defaultService;
 }

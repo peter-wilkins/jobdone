@@ -188,10 +188,10 @@ export async function mockSummarizeAndExtract(transcript) {
  * Mock OpenAI embeddings
  */
 export async function mockEmbedText(text) {
-  console.log('[Mock] OpenAI embeddings (mock)');
+  console.log('[Mock] Voyage AI embeddings (mock)');
   await new Promise(resolve => setTimeout(resolve, 200)); // Simulate delay
   
-  // Generate deterministic 1536-dim vector from text hash
+  // Generate deterministic 1024-dim vector from text hash
   let hash = 0;
   for (let i = 0; i < text.length; i++) {
     const char = text.charCodeAt(i);
@@ -200,7 +200,7 @@ export async function mockEmbedText(text) {
   }
   
   const seed = Math.abs(hash) / 2147483647; // Normalize to 0-1
-  const vector = Array.from({ length: 1536 }, (_, i) => {
+  const vector = Array.from({ length: 1024 }, (_, i) => {
     const pseudo = Math.sin((i + seed) * 12.9898) * 43758.5453;
     return pseudo - Math.floor(pseudo);
   });

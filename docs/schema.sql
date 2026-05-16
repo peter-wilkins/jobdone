@@ -9,13 +9,13 @@ DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
 DROP TABLE IF EXISTS queries CASCADE;
 
--- 3. entries
+-- 3. entries (1024-dim embeddings from voyage-3-lite)
 CREATE TABLE entries (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id              TEXT NOT NULL,
   transcript           TEXT NOT NULL,
   summary              TEXT NOT NULL,
-  embedding            vector(1536),
+  embedding            vector(1024),
   embedding_model      TEXT,
   materials            TEXT[]    DEFAULT '{}',
   labour_minutes       INTEGER,
@@ -27,7 +27,6 @@ CREATE TABLE entries (
 
 CREATE INDEX entries_user_id_idx         ON entries(user_id);
 CREATE INDEX entries_created_at_idx      ON entries(created_at DESC);
--- ivfflat index for cosine similarity — rebuild after inserting >1000 rows
 CREATE INDEX entries_embedding_idx       ON entries USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
@@ -49,10 +48,10 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 5. match_entries RPC — used by recallEntries() in database.js
+-- 5. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
-  p_query_embedding  vector(1536),
+  p_query_embedding  vector(1024),
   p_match_count      INT     DEFAULT 10,
   p_similarity_floor FLOAT   DEFAULT 0.3
 )
