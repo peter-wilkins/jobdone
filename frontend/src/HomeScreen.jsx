@@ -160,6 +160,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
   };
 
+  const OFFLINE_MSG = 'Recall isn\'t available offline. Try again when you\'re back online.';
+  const isOffline = () => !navigator.onLine || !backendAvailable;
+
   const handleConfirm = async (id) => {
     try {
       setError(null);
@@ -168,7 +171,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       // Handle QUERY intent
       if (entry.intent === 'QUERY') {
         // Offline: show message, keep entry for later retry
-        if (!backendAvailable) {
+        if (isOffline()) {
           setError('Recall isn\'t available offline. Your recording has been saved and will be processed when you\'re back online.');
           return;
         }
@@ -246,8 +249,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const executeQuery = async (text) => {
     setQueryDropdownOpen(false);
     // Offline: show message, no network call
-    if (!backendAvailable) {
-      setError('Recall isn\'t available offline. Try again when you\'re back online.');
+    if (isOffline()) {
+      setError(OFFLINE_MSG);
       return;
     }
     setIsRecalling(true);
@@ -259,7 +262,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       await queryHistoryService.add(text);
       setRecentQueries(await queryHistoryService.getRecent());
     } catch (err) {
-      setError('Something went wrong — try again.');
+      if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
+        setError(OFFLINE_MSG);
+      } else {
+        setError('Something went wrong — try again.');
+      }
     } finally {
       setIsRecalling(false);
     }
