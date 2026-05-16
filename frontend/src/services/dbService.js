@@ -144,6 +144,47 @@ export class DBService {
   }
 
   /**
+   * Update entry with arbitrary fields
+   * @param {string} entryId
+   * @param {Object} updates - Fields to update
+   * @returns {Promise<Object>} Updated entry
+   */
+  async updateEntry(entryId, updates) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const getRequest = store.get(entryId);
+
+      getRequest.onsuccess = () => {
+        const entry = getRequest.result;
+        if (!entry) {
+          reject(new Error('Entry not found'));
+          return;
+        }
+
+        // Apply updates
+        Object.assign(entry, updates);
+
+        const updateRequest = store.put(entry);
+
+        updateRequest.onsuccess = () => {
+          resolve(entry);
+        };
+
+        updateRequest.onerror = () => {
+          reject(new Error('Failed to update entry'));
+        };
+      };
+
+      getRequest.onerror = () => {
+        reject(new Error('Failed to fetch entry'));
+      };
+    });
+  }
+
+  /**
    * Confirm an entry (delete audio, move to saved)
    */
   async confirmEntry(entryId) {

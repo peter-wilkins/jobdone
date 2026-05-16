@@ -3,6 +3,7 @@ import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
+import { classify } from './services/classifyService';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -56,7 +57,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       // Transcribe
       const result = await apiService.transcribeAudio(entry.audioBlob);
 
-      // Update entry with transcription data
+      // Classify intent from transcript
+      const detectedIntent = classify(result.transcript);
+
+      // Update entry with transcription data and intent
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary,
@@ -64,6 +68,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         labour_minutes: result.labour_minutes,
         follow_ups: result.follow_ups,
         possible_future_work: result.possible_future_work,
+        intent: detectedIntent,
       });
 
       // Update UI
@@ -136,6 +141,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setError(null);
       const entry = entries.find(e => e.id === id);
 
+      // Handle QUERY intent - stub for now
+      if (entry.intent === 'QUERY') {
+        console.log('[QUERY] Searching for:', entry.transcript);
+        // Remove from in-progress (dismiss)
+        await dbService.rejectEntry(id);
+        setEntries(prev => prev.filter(e => e.id !== id));
+        return;
+      }
+
+      // Handle NOTE intent - proceed as before
       // Delete audio and move to confirmed locally
       await dbService.confirmEntry(id);
 
@@ -354,30 +369,61 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
 
     if (entry.status === 'ready_for_review') {
+      const isQuery = entry.intent === 'QUERY';
+      
+      const toggleIntent = async () => {
+        const newIntent = isQuery ? 'NOTE' : 'QUERY';
+        await dbService.updateEntry(entry.id, { intent: newIntent });
+        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, intent: newIntent } : e));
+      };
+
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
           <div className="flex items-start gap-2 mb-3">
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
               Review
             </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+              {isQuery ? 'Search' : 'Note'}
+            </span>
           </div>
-          <div className="mb-4">
-            <p className="text-gray-900 mb-2">{entry.summary}</p>
-            <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p>• Materials: {entry.materials?.join(', ') || 'None'}</p>
-              <p>• Labour: {entry.labour_minutes || '—'} mins</p>
-              {entry.follow_ups?.length > 0 && (
-                <p>• Follow-ups: {entry.follow_ups.join(', ')}</p>
-              )}
+          
+          {isQuery ? (
+            // QUERY layout
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-1">Searching for:</p>
+              <p className="text-gray-900">{entry.transcript}</p>
             </div>
-          </div>
+          ) : (
+            // NOTE layout
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
+              <p className="text-gray-900 mb-2">{entry.summary}</p>
+              <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              <div className="text-xs text-gray-500 space-y-1">
+                <p>• Materials: {entry.materials?.join(', ') || 'None'}</p>
+                <p>• Labour: {entry.labour_minutes || '—'} mins</p>
+                {entry.follow_ups?.length > 0 && (
+                  <p>• Follow-ups: {entry.follow_ups.join(', ')}</p>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Intent toggle */}
+          <button
+            onClick={toggleIntent}
+            className="text-sm text-blue-600 underline mb-4 hover:text-blue-800 transition"
+          >
+            {isQuery ? 'Save as note instead' : 'Search instead'}
+          </button>
+          
           <div className="flex gap-3">
             <button
               onClick={() => handleConfirm(entry.id)}
               className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
             >
-              Confirm
+              {isQuery ? 'Search' : 'Confirm'}
             </button>
             <button
               onClick={() => handleReject(entry.id)}
