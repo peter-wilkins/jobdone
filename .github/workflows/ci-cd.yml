@@ -58,7 +58,7 @@ jobs:
         run: npm run build
 
   deploy:
-    name: Deploy placeholder
+    name: Deploy
     runs-on: ubuntu-latest
     needs:
       - backend
@@ -67,7 +67,11 @@ jobs:
     environment:
       name: production
     steps:
-      - name: Deployment instructions
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy application
         run: |
-          echo "CI passed on main."
-          echo "Add your real deployment steps here (for example Vercel, Render, Fly.io, etc)."
+          echo "Starting deployment to production..."
+          echo "CI checks passed on main."
+          echo "Replace this command with your hosting provider CLI deploy command."
