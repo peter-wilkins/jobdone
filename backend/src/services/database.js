@@ -53,6 +53,43 @@ export async function saveEntry(userId, entryData) {
 }
 
 /**
+ * Delete all user data (GDPR right to erasure).
+ * Removes entries, queries, and feedback for the given user.
+ */
+export async function deleteUserData(userId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping delete');
+    return null;
+  }
+
+  try {
+    const { error: entriesErr } = await supabase
+      .from('entries')
+      .delete()
+      .eq('user_id', userId);
+    if (entriesErr) throw entriesErr;
+
+    const { error: queriesErr } = await supabase
+      .from('queries')
+      .delete()
+      .eq('user_id', userId);
+    if (queriesErr) throw queriesErr;
+
+    const { error: feedbackErr } = await supabase
+      .from('feedback')
+      .delete()
+      .eq('user_id', userId);
+    if (feedbackErr) throw feedbackErr;
+
+    console.log('[DB] All user data deleted:', userId);
+    return { success: true };
+  } catch (error) {
+    console.error('[DB] Failed to delete user data:', error.message);
+    throw error;
+  }
+}
+
+/**
  * Get all entries for a user
  */
 export async function getEntries(userId) {

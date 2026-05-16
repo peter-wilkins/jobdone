@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, updateEntryEmbedding } from '../services/database.js';
+import { saveEntry, getEntries, updateEntryEmbedding, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -55,6 +55,23 @@ export async function registerSyncRoutes(fastify) {
     } catch (error) {
       console.error('Sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch entries' });
+    }
+  });
+
+  /**
+   * DELETE /api/user/data
+   * GDPR right to erasure — deletes all entries, queries, and feedback for the user.
+   */
+  fastify.delete('/api/user/data', async (request, reply) => {
+    const user = await requireAuth(request, reply);
+    if (!user) return;
+
+    try {
+      await deleteUserData(user.id);
+      return { success: true };
+    } catch (error) {
+      console.error('Delete user data error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to delete user data' });
     }
   });
 }

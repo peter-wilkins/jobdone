@@ -196,6 +196,21 @@ export class APIService {
   }
 
   /**
+   * Delete all user data (GDPR)
+   */
+  async deleteUserData() {
+    const response = await fetch(`${API_BASE_URL}/api/user/data`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to delete user data`);
+    }
+    return true;
+  }
+
+  /**
    * Recall entries matching a query
    * @param {string} query - Query text
    * @returns {Promise<Array>} Matching entries ordered by relevance

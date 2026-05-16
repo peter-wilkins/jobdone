@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authService } from './services/authService';
+import { apiService } from './services/apiService';
 
 export function LoginScreen({ onBack, user }) {
   const [email, setEmail] = useState('');
@@ -26,6 +27,21 @@ export function LoginScreen({ onBack, user }) {
     onBack();
   };
 
+  const handleDeleteData = async () => {
+    if (!window.confirm(
+      'This will permanently delete all your entries, queries, and feedback. This cannot be undone. Continue?'
+    )) return;
+
+    try {
+      await apiService.deleteUserData();
+      alert('All your data has been deleted.');
+      await authService.signOut();
+      onBack();
+    } catch (err) {
+      alert('Failed to delete data: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   return (
     <div className="h-screen bg-white flex flex-col">
       {/* Header */}
@@ -50,6 +66,12 @@ export function LoginScreen({ onBack, user }) {
                 Your entries sync across all your devices.
               </p>
             </div>
+            <button
+              onClick={handleDeleteData}
+              className="w-full px-4 py-3 border border-red-300 text-red-700 text-sm font-medium rounded hover:bg-red-50 transition"
+            >
+              Delete my data
+            </button>
             <button
               onClick={handleSignOut}
               className="w-full px-4 py-3 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
