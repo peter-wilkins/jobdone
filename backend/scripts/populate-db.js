@@ -1,13 +1,15 @@
 /**
  * Populate database with 1000 realistic test entries
+ * - All entries belong to a single user (provided at runtime)
  * - 10 customer identities with consistent addresses but name inconsistencies
  * - Realistic job summaries with semantic variation for embedding testing
- * - Run: USE_MOCK_APIS=false node scripts/populate-db.js
+ * - Run: USE_MOCK_APIS=true node scripts/populate-db.js
  */
 
 import dotenv from 'dotenv';
 dotenv.config();
 
+import readline from 'readline';
 import { createClient } from '@supabase/supabase-js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../src/services/embedding.js';
 
@@ -20,6 +22,47 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const embeddingService = getEmbeddingService();
+
+// ---------------------------------------------------------------------------
+// User Input
+// ---------------------------------------------------------------------------
+
+function prompt(question) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question(question, answer => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Database Setup
+// ---------------------------------------------------------------------------
+
+async function resetEntriesTable() {
+  console.log('🔄 Clearing existing entries...');
+  
+  try {
+    // Delete all existing entries
+    const { error } = await supabase
+      .from('entries')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+    
+    if (error) {
+      console.warn('   ⚠️  Could not clear entries:', error.message);
+    } else {
+      console.log('   ✅ Entries cleared');
+    }
+  } catch (err) {
+    console.warn('   ⚠️  Error:', err.message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Customer Identities
@@ -203,7 +246,7 @@ const futureWorkTemplates = [
 // Generate Entries
 // ---------------------------------------------------------------------------
 
-function generateEntry(customer, entryIndex) {
+function generateEntry(customer, userId, entryIndex) {
   const template = jobTemplates[Math.floor(Math.random() * jobTemplates.length)];
   const object = template.object(customer);
   const context = template.context(customer);
@@ -217,7 +260,7 @@ function generateEntry(customer, entryIndex) {
   const hasFutureWork = Math.random() > 0.7;
 
   return {
-    user_id: customer.id,
+    user_id: userId,
     transcript,
     summary,
     materials: template.materials.slice(0, Math.floor(Math.random() * 3) + 1),
@@ -233,10 +276,23 @@ function generateEntry(customer, entryIndex) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log('🚀 Populating database with 1000 test entries...\n');
-  console.log(`📍 Customers: ${customers.length}`);
-  console.log(`📝 Entries per customer: ~${Math.floor(1000 / customers.length)}`);
-  console.log(`🧠 Generating embeddings with: ${EMBEDDING_MODEL}\n`);
+  console.log('🚀 JobDone Database Populator\n');
+  
+  // Ask for user_id
+  const userId = await prompt('Enter your user ID (UUID or string): ');
+  if (!userId || userId.trim() === '') {
+    console.error('❌ User ID required');
+    process.exit(1);
+  }
+
+  console.log(`\n✅ Using user_id: ${userId.trim()}\n`);
+  
+  // Reset database
+  await resetEntriesTable();
+  
+  console.log('\n📝 Generating 1000 test entries...');
+  console.log(`📍 Customer variations: ${customers.length}`);
+  console.log(`🧠 Embedding model: ${EMBEDDING_MODEL}\n`);
 
   const entries = [];
   let entryIndex = 0;
@@ -245,14 +301,14 @@ async function main() {
   for (const customer of customers) {
     const entriesPerCustomer = Math.floor(1000 / customers.length);
     for (let i = 0; i < entriesPerCustomer; i++) {
-      entries.push(generateEntry(customer, entryIndex++));
+      entries.push(generateEntry(customer, userId.trim(), entryIndex++));
     }
   }
 
   // Add remaining entries to reach exactly 1000
   while (entries.length < 1000) {
     const customer = customers[entries.length % customers.length];
-    entries.push(generateEntry(customer, entryIndex++));
+    entries.push(generateEntry(customer, userId.trim(), entryIndex++));
   }
 
   console.log(`✅ Generated ${entries.length} entries\n`);
@@ -335,10 +391,10 @@ async function main() {
 
   // Test a query
   console.log('🧪 Testing query recall...');
-  const testQuery = 'tap replacement at Smiths';
+  const testQuery = 'tap replacement';
   const testEmbedding = await embeddingService.embedText(testQuery);
   const results = await supabase.rpc('match_entries', {
-    p_user_id: customers[0].id,
+    p_user_id: userId.trim(),
     p_query_embedding: `[${testEmbedding.join(',')}]`,
     p_match_count: 5,
     p_similarity_floor: 0.3,
@@ -353,7 +409,7 @@ async function main() {
     });
   }
 
-  console.log('\n✅ Done!\n');
+  console.log('\n✨ Database ready for testing!\n');
 }
 
 main().catch(err => {
