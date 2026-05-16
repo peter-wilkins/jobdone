@@ -158,6 +158,35 @@ export class APIService {
       throw error;
     }
   }
+
+  /**
+   * Recall entries matching a query
+   * @param {string} query - Query text
+   * @returns {Promise<Array>} Matching entries ordered by relevance
+   */
+  async recall(query) {
+    try {
+      console.log('[API] Recalling entries for query:', query);
+
+      const response = await fetch(`${API_BASE_URL}/api/recall`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `HTTP ${response.status}: Recall failed`);
+      }
+
+      const result = await response.json();
+      console.log('[API] Recall successful, entries:', result.entries?.length || 0);
+      return result.entries || [];
+    } catch (error) {
+      console.error('Recall error:', error);
+      throw error;
+    }
+  }
 }
 
 // Singleton instance

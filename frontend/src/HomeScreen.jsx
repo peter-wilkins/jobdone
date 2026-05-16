@@ -31,6 +31,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
 
+  // Query/Recall state
+  const [activeQuery, setActiveQuery] = useState(null);
+  const [queryResults, setQueryResults] = useState(null);
+  const [isRecalling, setIsRecalling] = useState(false);
+
   /**
    * Classify a raw fetch/API error into a user-friendly kind token
    */
@@ -141,12 +146,26 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setError(null);
       const entry = entries.find(e => e.id === id);
 
-      // Handle QUERY intent - stub for now
+      // Handle QUERY intent - call recall endpoint
       if (entry.intent === 'QUERY') {
-        console.log('[QUERY] Searching for:', entry.transcript);
-        // Remove from in-progress (dismiss)
-        await dbService.rejectEntry(id);
-        setEntries(prev => prev.filter(e => e.id !== id));
+        setIsRecalling(true);
+        try {
+          const results = await apiService.recall(entry.transcript);
+          setActiveQuery(entry.transcript);
+          setQueryResults(results);
+          // Remove the query entry from in-progress
+          await dbService.rejectEntry(id);
+          setEntries(prev => prev.filter(e => e.id !== id));
+        } catch (err) {
+          const isOffline = err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError');
+          if (!isOffline) {
+            setError('Something went wrong — try again.');
+          } else {
+            setError('You\'re offline — search will be available when you\'re back online.');
+          }
+        } finally {
+          setIsRecalling(false);
+        }
         return;
       }
 
@@ -282,7 +301,42 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
   // Capture Bar states
   const renderCaptureBar = () => {
-    // Dev toggle: query-active state
+    // Query recall loading state
+    if (isRecalling) {
+      return (
+        <div className="flex items-center justify-center px-4 h-12">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <span className="text-sm text-gray-600">Searching...</span>
+          </div>
+        </div>
+      );
+    }
+
+    // Active query state
+    if (activeQuery) {
+      return (
+        <div className="flex items-center gap-3 px-4 h-12">
+          <button
+            onClick={() => {
+              setActiveQuery(null);
+              setQueryResults(null);
+            }}
+            className="shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 transition"
+            title="Back to timeline"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-gray-900 truncate">{activeQuery}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Dev toggle: query-active state (for testing)
     if (SHOW_QUERY_BAR) {
       return (
         <div className="flex items-center gap-3 px-4 h-12">
@@ -556,12 +610,46 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto px-4">
-        {entries.length === 0 ? (
+        {/* Query Results View */}
+        {activeQuery && (
+          <div className="py-2">
+            <p className="text-sm text-gray-500 mb-4">
+              Showing results for: <span className="font-medium text-gray-900">{activeQuery}</span>
+            </p>
+            {queryResults === null ? (
+              <div className="py-12 text-center text-gray-400">
+                <p className="text-sm">Searching...</p>
+              </div>
+            ) : queryResults.length === 0 ? (
+              <div className="py-12 text-center text-gray-400">
+                <p className="text-sm">Nothing found — try rephrasing.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {queryResults.map((entry, index) => (
+                  <div key={entry.id || index} className="py-3 border-b border-gray-100 last:border-b-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-900 font-medium">{entry.summary || entry.transcript || 'Untitled'}</p>
+                      <span className="text-xs shrink-0" title={entry.syncStatus === 'synced' ? 'Saved to cloud' : 'Pending sync'}>
+                        {entry.syncStatus === 'synced' ? '☁️' : '⏳'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Normal Timeline View */}
+        {!activeQuery && entries.length === 0 && (
           <div className="py-12 text-center text-gray-400">
             <p className="text-sm">No entries logged yet</p>
             <p className="text-xs mt-1">Tap the mic to start recording</p>
           </div>
-        ) : (
+        )}
+        {!activeQuery && entries.length > 0 && (
           <div className="py-2">
             {entries.map(renderEntry)}
           </div>
