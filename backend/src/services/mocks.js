@@ -1,9 +1,44 @@
 /**
  * Mock API responses for testing
- * Updated to match customer identities from populate-db.js script
+ * Queries (Recall questions) that match customer identities from populate-db.js script
+ * Users ask these questions to filter their Timeline of Entries
  */
 
-export const mockTranscripts = [
+export const mockQueries = [
+  "What did I do at Mrs Smith's place on Oak Street?",
+  "Have I worked at the Jones office building before?",
+  "Show me tap replacements at Henderson's",
+  "When was I last at Ivy Lane for Henderson?",
+  "What emergency calls have I done at London Tower?",
+  "Show me recent maintenance work at Park View Estate",
+  "What work did I do at Riverside Hotel?",
+  "Have I been to Parkside Retail Centre?",
+  "Show me school plumbing jobs at Crown School",
+  "What work did I do at Medway Dental?",
+  "Farm plumbing jobs at Greenfield Farm",
+  "Show me all radiator work",
+  "What pipes have I replaced?",
+  "Did I do any emergency work last week?",
+  "Show me kitchen work from last month",
+  "How many times have I visited the Smith place?",
+  "What commercial jobs have I done?",
+  "Show me jobs over 90 minutes",
+  "Tap and valve repairs in Croydon",
+  "What future work is recommended at Smith's?",
+];
+
+/**
+ * Get a random mock query
+ */
+export function getRandomMockQuery() {
+  return mockQueries[Math.floor(Math.random() * mockQueries.length)];
+}
+
+// ---------------------------------------------------------------------------
+// Entry transcripts and summaries (for Capture flow)
+// ---------------------------------------------------------------------------
+
+const entryTranscripts = [
   "Fixed the kitchen tap at Mrs Smith's place on 42 Oak Street, Croydon, used a 15mm compression fitting, took about 45 minutes, they want the bathroom looked at next week",
   "Emergency burst pipe repair at Jones & Co office building on Business Park, patched it temporarily with epoxy putty, advised them to call for permanent fix next week, also spotted rust on the main line should replace",
   "Replaced the toilet cistern fill valve at Henderson's on Ivy Lane, very straightforward job, took 15 minutes, used a new ballcock valve",
@@ -17,7 +52,7 @@ export const mockTranscripts = [
   "Farm plumbing at Greenfield Farm, external main line repair, water tank service completed, feeding system checked, took about 2 hours",
 ];
 
-export const mockResults = {
+const entrySummaries = {
   0: {
     summary: "Fixed kitchen tap at Mrs Smith's on 42 Oak Street, Croydon. 15mm fitting, 45 minutes. Bathroom inspection follow-up.",
     materials: ["15mm compression fitting"],
@@ -98,33 +133,15 @@ export const mockResults = {
 };
 
 /**
- * Get a random mock transcript and result
- */
-export function getRandomMockResult() {
-  const index = Math.floor(Math.random() * mockTranscripts.length);
-  const transcript = mockTranscripts[index];
-  const result = mockResults[index];
-
-  return {
-    transcript,
-    summary: result.summary,
-    materials: result.materials,
-    labour_minutes: result.labour_minutes,
-    follow_ups: result.follow_ups,
-    possible_future_work: result.possible_future_work,
-  };
-}
-
-/**
  * Mock Whisper transcription
  */
 export async function mockTranscribeAudio() {
   console.log('[Mock] Whisper transcription (mock)');
   await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
   
-  const index = Math.floor(Math.random() * mockTranscripts.length);
+  const index = Math.floor(Math.random() * entryTranscripts.length);
   return {
-    transcript: mockTranscripts[index],
+    transcript: entryTranscripts[index],
     language: 'en',
   };
 }
@@ -137,15 +154,15 @@ export async function mockSummarizeAndExtract(transcript) {
   await new Promise(resolve => setTimeout(resolve, 800)); // Simulate delay
   
   // Find matching result or return first one
-  const index = mockTranscripts.findIndex(t => t === transcript);
-  const result = mockResults[index >= 0 ? index : 0];
+  const index = entryTranscripts.findIndex(t => t === transcript);
+  const summary = entrySummaries[index >= 0 ? index : 0];
 
   return {
-    summary: result.summary,
-    materials: result.materials,
-    labour_minutes: result.labour_minutes,
-    follow_ups: result.follow_ups,
-    possible_future_work: result.possible_future_work,
+    summary: summary.summary,
+    materials: summary.materials,
+    labour_minutes: summary.labour_minutes,
+    follow_ups: summary.follow_ups,
+    possible_future_work: summary.possible_future_work,
   };
 }
 
