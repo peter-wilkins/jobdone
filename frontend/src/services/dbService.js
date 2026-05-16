@@ -110,7 +110,7 @@ export class DBService {
   /**
    * Update entry with transcription + summary data
    */
-  async updateEntryWithTranscription(entryId, { transcript, summary, materials, labour_minutes, follow_ups, possible_future_work }) {
+  async updateEntryWithTranscription(entryId, { transcript, summary, materials, labour_minutes, follow_ups, possible_future_work, intent }) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -131,6 +131,7 @@ export class DBService {
         entry.labour_minutes = labour_minutes;
         entry.follow_ups = follow_ups || [];
         entry.possible_future_work = possible_future_work || '';
+        if (intent) entry.intent = intent;
         entry.status = 'ready_for_review';
 
         const updateRequest = store.put(entry);
