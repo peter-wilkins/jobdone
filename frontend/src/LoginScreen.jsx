@@ -7,6 +7,8 @@ export function LoginScreen({ onBack, user }) {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -27,18 +29,18 @@ export function LoginScreen({ onBack, user }) {
     onBack();
   };
 
-  const handleDeleteData = async () => {
-    if (!window.confirm(
-      'This will permanently delete all your entries, queries, and feedback. This cannot be undone. Continue?'
-    )) return;
-
+  const handleDeleteConfirm = async () => {
+    setDeleteLoading(true);
+    setError(null);
     try {
       await apiService.deleteUserData();
-      alert('All your data has been deleted.');
       await authService.signOut();
       onBack();
     } catch (err) {
-      alert('Failed to delete data: ' + (err.message || 'Unknown error'));
+      setError(err.message || 'Failed to delete data');
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -66,12 +68,42 @@ export function LoginScreen({ onBack, user }) {
                 Your entries sync across all your devices.
               </p>
             </div>
-            <button
-              onClick={handleDeleteData}
-              className="w-full px-4 py-3 border border-red-300 text-red-700 text-sm font-medium rounded hover:bg-red-50 transition"
-            >
-              Delete my data
-            </button>
+
+            {error && (
+              <p className="text-sm text-red-600">{error}</p>
+            )}
+
+            {showDeleteConfirm ? (
+              <div className="space-y-3 p-4 border border-red-200 rounded-lg bg-red-50">
+                <p className="text-sm text-red-900 font-medium">Delete all your data?</p>
+                <p className="text-xs text-red-700">
+                  This permanently deletes all entries, queries, and feedback. Cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={deleteLoading}
+                    className="flex-1 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded hover:bg-red-600 disabled:opacity-50 transition"
+                  >
+                    {deleteLoading ? 'Deleting…' : 'Delete everything'}
+                  </button>
+                  <button
+                    onClick={() => { setShowDeleteConfirm(false); setError(null); }}
+                    className="flex-1 px-4 py-2 border border-red-300 text-red-700 text-sm font-medium rounded hover:bg-red-100 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full px-4 py-3 border border-red-300 text-red-700 text-sm font-medium rounded hover:bg-red-50 transition"
+              >
+                Delete my data
+              </button>
+            )}
+
             <button
               onClick={handleSignOut}
               className="w-full px-4 py-3 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
