@@ -97,7 +97,7 @@ const start = async () => {
     if (USE_MOCK) {
       console.log(`🎭 MOCK MODE ENABLED - using hardcoded API responses\n`);
     } else {
-      console.log(`📡 Using real OpenAI/Anthropic APIs\n`);
+      console.log(`📡 Using real Deepgram/Anthropic APIs\n`);
     }
   } catch (err) {
     fastify.log.error(err);
