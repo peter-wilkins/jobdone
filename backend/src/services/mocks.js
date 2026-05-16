@@ -147,22 +147,19 @@ export async function mockTranscribeAudio() {
 }
 
 /**
- * Mock Claude summarization
+ * Mock Claude summarization (passthrough)
+ * Returns transcript as-is without extraction — real Claude API does the work
  */
 export async function mockSummarizeAndExtract(transcript) {
   console.log('[Mock] Claude summarization (mock)');
   await new Promise(resolve => setTimeout(resolve, 800)); // Simulate delay
   
-  // Find matching result or return first one
-  const index = entryTranscripts.findIndex(t => t === transcript);
-  const summary = entrySummaries[index >= 0 ? index : 0];
-
   return {
-    summary: summary.summary,
-    materials: summary.materials,
-    labour_minutes: summary.labour_minutes,
-    follow_ups: summary.follow_ups,
-    possible_future_work: summary.possible_future_work,
+    summary: transcript,
+    materials: [],
+    labour_minutes: null,
+    follow_ups: [],
+    possible_future_work: '',
   };
 }
 
