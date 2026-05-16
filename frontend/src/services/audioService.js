@@ -61,18 +61,20 @@ export class AudioService {
     } catch (error) {
       if (error.name === 'NotAllowedError' || error.message.includes('denied')) {
         throw new Error(
-          'Microphone access was denied. Please enable microphone access in your browser settings and try again.'
+          'Microphone access was denied. Please enable microphone access in your browser settings and try again.',
+          { cause: error }
         );
       } else if (error.name === 'NotFoundError') {
-        throw new Error('No microphone found on this device.');
+        throw new Error('No microphone found on this device.', { cause: error });
       } else if (error.name === 'NotSupportedError') {
-        throw new Error('Microphone access is not supported in your browser.');
+        throw new Error('Microphone access is not supported in your browser.', { cause: error });
       } else if (error.name === 'SecurityError') {
         throw new Error(
-          'Microphone access is only available over HTTPS. Please use a secure connection.'
+          'Microphone access is only available over HTTPS. Please use a secure connection.',
+          { cause: error }
         );
       }
-      throw new Error(`Microphone access error: ${error.message}`);
+      throw new Error(`Microphone access error: ${error.message}`, { cause: error });
     }
   }
 
