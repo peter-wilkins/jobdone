@@ -62,21 +62,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       // Transcribe - backend returns intent in response
       const result = await apiService.transcribeAudio(entry.audioBlob);
 
-      // Check intent from API response and handle accordingly
-      if (result.intent === 'QUERY') {
-        // Save query to queries table and remove in-progress entry
-        await dbService.saveQuery(result.transcript);
-        await dbService.rejectEntry(jobId);
-        setEntries(prev => prev.filter(e => e.id !== jobId));
-        setProcessingIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(jobId);
-          return newSet;
-        });
-        return;
-      }
-
-      // NOTE intent - save to entries as before
+      // Update entry with transcription data and intent (goes to ready_for_review)
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary,
@@ -157,8 +143,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setError(null);
       const entry = entries.find(e => e.id === id);
 
-      // Handle QUERY intent - call recall endpoint
+      // Handle QUERY intent - save to queries table, then recall
       if (entry.intent === 'QUERY') {
+        // Save query to queries table
+        await dbService.saveQuery(entry.transcript);
+        
         setIsRecalling(true);
         try {
           const results = await apiService.recall(entry.transcript);
@@ -180,7 +169,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         return;
       }
 
-      // Handle NOTE intent - proceed as before
+      // Handle NOTE intent - save to entries, proceed as before
       // Delete audio and move to confirmed locally
       await dbService.confirmEntry(id);
 
