@@ -145,7 +145,7 @@ export class APIService {
     try {
       const response = await fetch(`${API_BASE_URL}/api/feedback/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(payload),
       });
       if (!response.ok) {

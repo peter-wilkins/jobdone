@@ -15,13 +15,10 @@ export class QueryHistoryService {
     // Save to local IndexedDB
     await dbService.saveQuery(text);
 
-    // Sync to server (non-blocking)
+    // Sync to server (non-blocking, apiService handles auth)
     try {
-      const token = localStorage.getItem('supabase.auth.token');
-      if (token) {
-        await apiService.saveQuery(text);
-        await dbService.markQuerySynced(text);
-      }
+      await apiService.saveQuery(text);
+      await dbService.markQuerySynced(text);
     } catch (err) {
       console.warn('[QueryHistory] Server sync failed, saved locally:', err.message);
     }
