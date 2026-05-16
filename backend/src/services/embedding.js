@@ -1,7 +1,10 @@
 import OpenAI from 'openai';
+import { mockEmbedText } from './mocks.js';
 
 export const EMBEDDING_MODEL = 'text-embedding-3-small';
 export const EMBEDDING_DIMENSIONS = 1536;
+
+const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
  * Create an EmbeddingService bound to a given OpenAI client.
@@ -20,6 +23,11 @@ export function createEmbeddingService(client) {
     async embedText(text) {
       if (!text || typeof text !== 'string') {
         throw new Error('[EmbeddingService] text must be a non-empty string');
+      }
+
+      // Use mock if enabled
+      if (USE_MOCK) {
+        return await mockEmbedText(text);
       }
 
       let response;
