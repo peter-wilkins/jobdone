@@ -1,10 +1,10 @@
-import { Deepgram } from '@deepgram/sdk';
+import axios from 'axios';
 import { mockTranscribeAudio } from './mocks.js';
 
 const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
- * Transcribe audio blob using Deepgram API
+ * Transcribe audio blob using Deepgram API (nova-3)
  * @param {Buffer} audioBuffer - Audio file buffer
  * @returns {Promise<{transcript: string, language: string}>}
  */
@@ -14,25 +14,25 @@ export async function transcribeAudio(audioBuffer) {
       throw new Error('Audio buffer is empty');
     }
 
-    // Use mock if enabled
     if (USE_MOCK) {
       return await mockTranscribeAudio();
     }
 
     console.log('[Deepgram] Buffer size:', audioBuffer.length, 'bytes');
 
-    const deepgram = new Deepgram(process.env.DEEPGRAM_API_KEY);
-
-    const response = await deepgram.transcription.preRecorded(
-      { buffer: audioBuffer, mimetype: 'audio/webm' },
+    const response = await axios.post(
+      'https://api.deepgram.com/v1/listen?model=nova-3&language=en&smart_format=true',
+      audioBuffer,
       {
-        model: 'nova-3',
-        language: 'en',
-        smart_format: true,
+        headers: {
+          'Authorization': `Token ${process.env.DEEPGRAM_API_KEY}`,
+          'Content-Type': 'audio/webm',
+        },
+        timeout: 120000,
       }
     );
 
-    const transcript = response.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+    const transcript = response.data?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
 
     if (!transcript) {
       throw new Error('Deepgram returned empty transcription');
@@ -45,8 +45,9 @@ export async function transcribeAudio(audioBuffer) {
       language: 'en',
     };
   } catch (error) {
-    console.error('Transcription error:', error.message);
-    throw new Error(`Failed to transcribe audio: ${error.message}`);
+    const msg = error.response?.data || error.message;
+    console.error('Transcription error:', msg);
+    throw new Error(`Failed to transcribe audio: ${msg}`);
   }
 }
 
