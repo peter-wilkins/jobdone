@@ -1,9 +1,15 @@
 /**
- * Populate database with 1000 realistic test entries
- * - All entries belong to a single user (provided at runtime)
+ * Populate database with test entries
+ * - Fetches user_id from auth by email (default: poppetew)
+ * - Creates N test entries (default: 5, configurable via --entries)
  * - 10 customer identities with consistent addresses but name inconsistencies
  * - Realistic job summaries with semantic variation for embedding testing
- * - Run: USE_MOCK_APIS=true node scripts/populate-db.js
+ * 
+ * Usage:
+ *   USE_MOCK_APIS=true node scripts/populate-db.js                    # 5 entries for poppetew
+ *   USE_MOCK_APIS=true node scripts/populate-db.js --entries 50       # 50 entries for poppetew
+ *   USE_MOCK_APIS=true node scripts/populate-db.js --email user@test  # 5 entries for user@test
+ *   USE_MOCK_APIS=true node scripts/populate-db.js --entries 100 --email user@test
  */
 
 import dotenv from 'dotenv';
@@ -24,6 +30,34 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const embeddingService = getEmbeddingService();
 
 // ---------------------------------------------------------------------------
+// CLI Arguments
+// ---------------------------------------------------------------------------
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const config = {
+    email: 'poppetew@gmail.com',
+    entries: 5,
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--email' && args[i + 1]) {
+      config.email = args[i + 1];
+      i++;
+    } else if (args[i] === '--entries' && args[i + 1]) {
+      config.entries = parseInt(args[i + 1], 10);
+      if (isNaN(config.entries) || config.entries < 1) {
+        console.error('❌ --entries must be a positive number');
+        process.exit(1);
+      }
+      i++;
+    }
+  }
+
+  return config;
+}
+
+// ---------------------------------------------------------------------------
 // User Input
 // ---------------------------------------------------------------------------
 
@@ -38,6 +72,49 @@ function prompt(question) {
       resolve(answer);
     });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+async function getUserIdByEmail(email) {
+  try {
+    // Query auth.users via admin endpoint
+    const { data, error } = await supabase.auth.admin.listUsers();
+
+    if (error) {
+      throw new Error(`Failed to list users: ${error.message}`);
+    }
+
+    let user = data.users.find(u => u.email === email);
+    
+    if (!user) {
+      console.warn(`⚠️  User with email "${email}" not found\n`);
+      console.log('Available users:');
+      if (data.users.length === 0) {
+        console.log('   (none)');
+        console.error('\n❌ No users found in auth');
+        process.exit(1);
+      }
+      data.users.slice(0, 10).forEach((u, i) => {
+        console.log(`   ${i + 1}. ${u.email} (${u.id})`);
+      });
+      
+      // Prompt for email
+      const selectedEmail = await prompt('\nEnter email of user to populate (or Ctrl+C to exit): ');
+      user = data.users.find(u => u.email === selectedEmail);
+      if (!user) {
+        console.error(`❌ User with email "${selectedEmail}" not found`);
+        process.exit(1);
+      }
+    }
+
+    return user;
+  } catch (err) {
+    console.error(`❌ Auth error: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -278,37 +355,30 @@ function generateEntry(customer, userId, entryIndex) {
 async function main() {
   console.log('🚀 JobDone Database Populator\n');
   
-  // Ask for user_id
-  const userId = await prompt('Enter your user ID (UUID or string): ');
-  if (!userId || userId.trim() === '') {
-    console.error('❌ User ID required');
-    process.exit(1);
-  }
-
-  console.log(`\n✅ Using user_id: ${userId.trim()}\n`);
+  // Parse CLI args
+  const config = parseArgs();
+  
+  // Fetch user by email
+  console.log(`📧 Fetching user for email: ${config.email}...`);
+  const user = await getUserIdByEmail(config.email);
+  const userId = user.id;
+  console.log(`✅ User: ${user.email} (${userId})\n`);
   
   // Reset database
   await resetEntriesTable();
   
-  console.log('\n📝 Generating 1000 test entries...');
+  const numEntries = config.entries;
+  console.log(`📝 Generating ${numEntries} test entries...`);
   console.log(`📍 Customer variations: ${customers.length}`);
   console.log(`🧠 Embedding model: ${EMBEDDING_MODEL}\n`);
 
   const entries = [];
   let entryIndex = 0;
 
-  // Generate all entries
-  for (const customer of customers) {
-    const entriesPerCustomer = Math.floor(1000 / customers.length);
-    for (let i = 0; i < entriesPerCustomer; i++) {
-      entries.push(generateEntry(customer, userId.trim(), entryIndex++));
-    }
-  }
-
-  // Add remaining entries to reach exactly 1000
-  while (entries.length < 1000) {
-    const customer = customers[entries.length % customers.length];
-    entries.push(generateEntry(customer, userId.trim(), entryIndex++));
+  // Generate entries
+  for (let i = 0; i < numEntries; i++) {
+    const customer = customers[i % customers.length];
+    entries.push(generateEntry(customer, userId, entryIndex++));
   }
 
   console.log(`✅ Generated ${entries.length} entries\n`);
@@ -381,9 +451,9 @@ async function main() {
   // Summary
   console.log('📊 Database Population Summary');
   console.log('═'.repeat(50));
+  console.log(`Email:             ${user.email}`);
+  console.log(`User ID:           ${userId}`);
   console.log(`Total entries:     ${inserted}`);
-  console.log(`Customers:         ${customers.length}`);
-  console.log(`Entries/customer:  ~${Math.floor(inserted / customers.length)}`);
   console.log(`Embedding model:   ${EMBEDDING_MODEL}`);
   console.log(`Total time:        ${((Date.now() - startEmbed) / 1000).toFixed(1)}s`);
   console.log('═'.repeat(50));
@@ -394,7 +464,7 @@ async function main() {
   const testQuery = 'tap replacement';
   const testEmbedding = await embeddingService.embedText(testQuery);
   const results = await supabase.rpc('match_entries', {
-    p_user_id: userId.trim(),
+    p_user_id: userId,
     p_query_embedding: `[${testEmbedding.join(',')}]`,
     p_match_count: 5,
     p_similarity_floor: 0.3,
