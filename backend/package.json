@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node --test src/**/*.test.js"
   },
   "keywords": [
     "plumber",
@@ -24,6 +25,7 @@
     "axios": "^1.16.1",
     "dotenv": "^16.4.5",
     "fastify": "^4.26.0",
-    "form-data": "^4.0.5"
+    "form-data": "^4.0.5",
+    "openai": "^6.38.0"
   }
 }

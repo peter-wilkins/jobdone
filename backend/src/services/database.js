@@ -33,6 +33,8 @@ export async function saveEntry(userId, entryData) {
           follow_ups: entryData.follow_ups,
           possible_future_work: entryData.possible_future_work,
           created_at: new Date(entryData.created_at).toISOString(),
+          embedding: entryData.embedding ?? null,
+          embedding_model: entryData.embedding_model ?? null,
         },
       ])
       .select();
@@ -134,6 +136,69 @@ export async function getFeedback(userId) {
   } catch (error) {
     console.error('[DB] Failed to fetch feedback:', error.message);
     throw error;
+  }
+}
+
+/**
+ * Update an entry's embedding after it has been saved.
+ */
+export async function updateEntryEmbedding(entryId, embedding, embeddingModel) {
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('entries')
+      .update({
+        embedding: `[${embedding.join(',')}]`,
+        embedding_model: embeddingModel,
+      })
+      .eq('id', entryId);
+
+    if (error) {
+      console.error('[DB] Failed to update embedding:', error);
+    } else {
+      console.log('[DB] Embedding stored for entry:', entryId);
+    }
+  } catch (err) {
+    console.error('[DB] updateEntryEmbedding error:', err.message);
+  }
+}
+
+/**
+ * Recall: cosine-similarity search against a user's entries.
+ *
+ * @param {string} userId
+ * @param {number[]} queryEmbedding - 1536-dim vector
+ * @param {object} opts
+ * @param {number} opts.limit - max results (default 10)
+ * @param {number} opts.floor - minimum similarity (default 0.3)
+ * @returns {Promise<Array>} rows with similarity score
+ */
+export async function recallEntries(userId, queryEmbedding, { limit = 10, floor = 0.3 } = {}) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  try {
+    const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+
+    const { data, error } = await supabase.rpc('match_entries', {
+      p_user_id: userId,
+      p_query_embedding: vectorLiteral,
+      p_match_count: limit,
+      p_similarity_floor: floor,
+    });
+
+    if (error) {
+      console.error('[DB] Recall error:', error);
+      throw error;
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('[DB] recallEntries failed:', err.message);
+    throw err;
   }
 }
 

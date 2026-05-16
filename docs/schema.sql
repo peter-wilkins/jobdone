@@ -1,0 +1,90 @@
+-- JobDone schema rewrite (clean slate — no production data)
+-- Run in Supabase SQL Editor.
+
+-- 1. Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 2. Drop old tables if present (clean rewrite)
+DROP TABLE IF EXISTS jobs CASCADE;
+DROP TABLE IF EXISTS entries CASCADE;
+DROP TABLE IF EXISTS queries CASCADE;
+
+-- 3. entries
+CREATE TABLE entries (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              TEXT NOT NULL,
+  transcript           TEXT NOT NULL,
+  summary              TEXT NOT NULL,
+  embedding            vector(1536),
+  embedding_model      TEXT,
+  materials            TEXT[]    DEFAULT '{}',
+  labour_minutes       INTEGER,
+  follow_ups           TEXT[]    DEFAULT '{}',
+  possible_future_work TEXT      DEFAULT '',
+  created_at           TIMESTAMPTZ NOT NULL,
+  synced_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX entries_user_id_idx         ON entries(user_id);
+CREATE INDEX entries_created_at_idx      ON entries(created_at DESC);
+-- ivfflat index for cosine similarity — rebuild after inserting >1000 rows
+CREATE INDEX entries_embedding_idx       ON entries USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_entries" ON entries FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_entries" ON entries FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_entries" ON entries FOR UPDATE USING (TRUE);
+
+-- 4. queries (persisted Recall questions)
+CREATE TABLE queries (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX queries_user_id_idx ON queries(user_id);
+
+ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
+
+-- 5. match_entries RPC — used by recallEntries() in database.js
+CREATE OR REPLACE FUNCTION match_entries(
+  p_user_id          TEXT,
+  p_query_embedding  vector(1536),
+  p_match_count      INT     DEFAULT 10,
+  p_similarity_floor FLOAT   DEFAULT 0.3
+)
+RETURNS TABLE (
+  id                   UUID,
+  user_id              TEXT,
+  transcript           TEXT,
+  summary              TEXT,
+  materials            TEXT[],
+  labour_minutes       INTEGER,
+  follow_ups           TEXT[],
+  possible_future_work TEXT,
+  created_at           TIMESTAMPTZ,
+  similarity           FLOAT
+)
+LANGUAGE sql STABLE
+AS $$
+  SELECT
+    e.id,
+    e.user_id,
+    e.transcript,
+    e.summary,
+    e.materials,
+    e.labour_minutes,
+    e.follow_ups,
+    e.possible_future_work,
+    e.created_at,
+    1 - (e.embedding <=> p_query_embedding) AS similarity
+  FROM entries e
+  WHERE e.user_id = p_user_id
+    AND e.embedding IS NOT NULL
+    AND 1 - (e.embedding <=> p_query_embedding) >= p_similarity_floor
+  ORDER BY e.embedding <=> p_query_embedding
+  LIMIT p_match_count;
+$$;

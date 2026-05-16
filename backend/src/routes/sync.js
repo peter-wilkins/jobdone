@@ -1,5 +1,6 @@
-import { saveEntry, getEntries } from '../services/database.js';
+import { saveEntry, getEntries, updateEntryEmbedding } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
+import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
 export async function registerSyncRoutes(fastify) {
   /**
@@ -19,6 +20,19 @@ export async function registerSyncRoutes(fastify) {
       }
 
       const saved = await saveEntry(user.id, entryData);
+
+      // Fire embedding in the background — failures must not block the response.
+      if (saved?.id && entryData.summary) {
+        (async () => {
+          try {
+            const svc = getEmbeddingService();
+            const vector = await svc.embedText(entryData.summary);
+            await updateEntryEmbedding(saved.id, vector, EMBEDDING_MODEL);
+          } catch (embErr) {
+            console.error('[Sync] Embedding failed (non-fatal):', embErr.message);
+          }
+        })();
+      }
 
       return { success: true, entry: saved };
     } catch (error) {

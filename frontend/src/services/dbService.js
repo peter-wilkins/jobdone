@@ -365,22 +365,22 @@ export class DBService {
   async addCloudEntry(cloudJob) {
     const db = await this.ensureDb();
     const entry = {
-      id: `entry-cloud-${cloudEntry.id}`,
-      remoteId: cloudEntry.id,
+      id: `entry-cloud-${cloudJob.id}`,
+      remoteId: cloudJob.id,
       audioBlob: null,
       audioSize: 0,
       audioDuration: null,
       status: 'confirmed',
       syncStatus: 'synced',
       errorMessage: null,
-      transcript: cloudEntry.transcript,
-      summary: cloudEntry.summary,
-      materials: cloudEntry.materials || [],
-      labour_minutes: cloudEntry.labour_minutes,
-      follow_ups: cloudEntry.follow_ups || [],
-      possible_future_work: cloudEntry.possible_future_work || '',
-      created_at: cloudEntry.created_at,
-      synced_at: cloudEntry.synced_at,
+      transcript: cloudJob.transcript,
+      summary: cloudJob.summary,
+      materials: cloudJob.materials || [],
+      labour_minutes: cloudJob.labour_minutes,
+      follow_ups: cloudJob.follow_ups || [],
+      possible_future_work: cloudJob.possible_future_work || '',
+      created_at: cloudJob.created_at,
+      synced_at: cloudJob.synced_at,
     };
     return new Promise((resolve, reject) => {
       const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(entry);

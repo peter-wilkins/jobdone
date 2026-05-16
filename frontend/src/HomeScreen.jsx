@@ -204,15 +204,20 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
       // Try to sync to cloud (optional - don't block if it fails)
       if (entry && entry.transcript && entry.summary) {
-        try {
-          const result = await syncService.syncEntry(entry);
-          if (result !== null) {
-            await dbService.markEntrySynced(id, result?.entry?.id);
-            entry.syncStatus = 'synced';
+        if (!user) {
+          // Not logged in — entry saved locally, will sync when user logs in
+          console.log('[Sync] Skipped — not logged in. Will retry on login.');
+        } else {
+          try {
+            const result = await syncService.syncEntry(entry);
+            if (result !== null) {
+              await dbService.markEntrySynced(id, result?.entry?.id);
+              entry.syncStatus = 'synced';
+            }
+          } catch (syncErr) {
+            console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
+            // Don't fail the UI - entry is safe locally, will retry on next login
           }
-        } catch (syncErr) {
-          console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
-          // Don't fail the UI - entry is safe locally, will retry on next login
         }
       }
 
@@ -306,6 +311,21 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           )}
         </div>
       </div>
+
+      {/* Login nudge — shown when saved entries are pending sync and user isn't logged in */}
+      {!user && saved.some(e => e.syncStatus !== 'synced') && (
+        <div className="px-6 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between gap-4">
+          <p className="text-sm text-blue-700">
+            💾 {saved.filter(e => e.syncStatus !== 'synced').length} entr{saved.filter(e => e.syncStatus !== 'synced').length === 1 ? 'y' : 'ies'} saved locally — log in to sync to cloud.
+          </p>
+          <button
+            onClick={() => onNavigate('login')}
+            className="text-sm font-medium text-blue-700 underline shrink-0"
+          >
+            Log in
+          </button>
+        </div>
+      )}
 
       {/* Backend Status */}
       {!backendAvailable && (
