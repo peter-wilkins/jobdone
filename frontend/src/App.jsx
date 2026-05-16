@@ -34,6 +34,27 @@ function App() {
     return unsubscribe;
   }, []);
 
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      setScreen('home');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Navigate with history support
+  const navigateTo = (newScreen) => {
+    if (newScreen !== 'home' && screen === 'home') {
+      // Push state when leaving home
+      window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
+    } else if (newScreen === 'home' && screen !== 'home') {
+      // Going back to home - replace state
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    setScreen(newScreen);
+  };
+
   /**
    * On login: push any unsynced local entries to cloud, then pull
    * any cloud entries not yet on this device.
@@ -70,14 +91,14 @@ function App() {
   };
 
   if (screen === 'feedback') {
-    return <FeedbackScreen onBack={() => setScreen('home')} />;
+    return <FeedbackScreen onBack={() => navigateTo('home')} />;
   }
 
   if (screen === 'login') {
-    return <LoginScreen onBack={() => setScreen('home')} user={user} />;
+    return <LoginScreen onBack={() => navigateTo('home')} user={user} />;
   }
 
-  return <HomeScreen onNavigate={setScreen} user={user} refreshKey={refreshKey} />;
+  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} />;
 }
 
 export default App;
