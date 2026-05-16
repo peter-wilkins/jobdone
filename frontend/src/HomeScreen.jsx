@@ -165,8 +165,13 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setError(null);
       const entry = entries.find(e => e.id === id);
 
-      // Handle QUERY intent - remove in-progress, execute query
+      // Handle QUERY intent
       if (entry.intent === 'QUERY') {
+        // Offline: show message, keep entry for later retry
+        if (!backendAvailable) {
+          setError('Recall isn\'t available offline. Your recording has been saved and will be processed when you\'re back online.');
+          return;
+        }
         await dbService.rejectEntry(id);
         setEntries(prev => prev.filter(e => e.id !== id));
         await executeQuery(entry.transcript);
@@ -240,6 +245,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
    */
   const executeQuery = async (text) => {
     setQueryDropdownOpen(false);
+    // Offline: show message, no network call
+    if (!backendAvailable) {
+      setError('Recall isn\'t available offline. Try again when you\'re back online.');
+      return;
+    }
     setIsRecalling(true);
     try {
       const results = await apiService.recall(text);
@@ -249,12 +259,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       await queryHistoryService.add(text);
       setRecentQueries(await queryHistoryService.getRecent());
     } catch (err) {
-      const isOffline = err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError');
-      if (!isOffline) {
-        setError('Something went wrong — try again.');
-      } else {
-        setError('You\'re offline — search will be available when you\'re back online.');
-      }
+      setError('Something went wrong — try again.');
     } finally {
       setIsRecalling(false);
     }
