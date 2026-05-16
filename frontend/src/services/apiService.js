@@ -2,7 +2,14 @@
  * API service for communicating with JobDone backend
  */
 
+import { authService } from './authService.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+function authHeader() {
+  const token = authService.getToken();
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
 
 export class APIService {
   /**
@@ -98,9 +105,7 @@ export class APIService {
 
       const response = await fetch(`${API_BASE_URL}/api/sync/save`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(payload),
       });
 
@@ -115,6 +120,20 @@ export class APIService {
     } catch (error) {
       console.error('Sync error:', error);
       throw error;
+    }
+  }
+
+  /** Fetch all cloud jobs for the logged-in user */
+  async getCloudJobs() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sync/jobs`, {
+        headers: authHeader(),
+      });
+      if (!response.ok) return [];
+      const result = await response.json();
+      return result.jobs || [];
+    } catch {
+      return [];
     }
   }
 

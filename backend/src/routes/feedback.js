@@ -1,25 +1,22 @@
 import { saveFeedback, getFeedback } from '../services/database.js';
+import { requireAuth } from '../services/auth.js';
 
-/**
- * Register feedback routes
- */
 export async function registerFeedbackRoutes(fastify) {
   /**
    * POST /api/feedback/save
-   * Save a confirmed feedback note to cloud
-   *
-   * Expects JSON:
-   * { userId: string, transcript: string, created_at: ISO string }
    */
   fastify.post('/api/feedback/save', async (request, reply) => {
-    try {
-      const { userId, transcript, created_at } = request.body;
+    const user = await requireAuth(request, reply);
+    if (!user) return;
 
-      if (!userId || !transcript) {
-        return reply.status(400).send({ error: 'userId and transcript required' });
+    try {
+      const { transcript, created_at } = request.body;
+
+      if (!transcript) {
+        return reply.status(400).send({ error: 'transcript required' });
       }
 
-      const saved = await saveFeedback(userId, { transcript, created_at });
+      const saved = await saveFeedback(user.id, { transcript, created_at });
 
       return { success: true, feedback: saved };
     } catch (error) {
@@ -29,15 +26,14 @@ export async function registerFeedbackRoutes(fastify) {
   });
 
   /**
-   * GET /api/feedback/:userId
-   * Fetch all feedback for a user
+   * GET /api/feedback
    */
-  fastify.get('/api/feedback/:userId', async (request, reply) => {
+  fastify.get('/api/feedback', async (request, reply) => {
+    const user = await requireAuth(request, reply);
+    if (!user) return;
+
     try {
-      const { userId } = request.params;
-
-      const items = await getFeedback(userId);
-
+      const items = await getFeedback(user.id);
       return { success: true, feedback: items };
     } catch (error) {
       console.error('Feedback fetch error:', error);

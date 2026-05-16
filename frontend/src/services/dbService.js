@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'jobs';
 const FEEDBACK_STORE = 'feedback';
 
@@ -31,18 +31,30 @@ export class DBService {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const transaction = event.target.transaction;
 
+        // Jobs store (all versions)
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('status', 'status', { unique: false });
           store.createIndex('created_at', 'created_at', { unique: false });
           store.createIndex('sync_status', 'syncStatus', { unique: false });
+          store.createIndex('remoteId', 'remoteId', { unique: false });
         }
 
+        // v2: feedback store
         if (!db.objectStoreNames.contains(FEEDBACK_STORE)) {
           const feedbackStore = db.createObjectStore(FEEDBACK_STORE, { keyPath: 'id' });
           feedbackStore.createIndex('status', 'status', { unique: false });
           feedbackStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // v3: remoteId index on existing jobs store (upgrade path)
+        if (db.objectStoreNames.contains(STORE_NAME)) {
+          const jobsStore = transaction.objectStore(STORE_NAME);
+          if (!jobsStore.indexNames.contains('remoteId')) {
+            jobsStore.createIndex('remoteId', 'remoteId', { unique: false });
+          }
         }
       };
     });
@@ -65,6 +77,7 @@ export class DBService {
       audioDuration: jobData.duration,
       status: 'recording',
       syncStatus: 'pending',
+      remoteId: null,
       created_at: new Date().toISOString(),
       synced_at: null,
       transcript: null,
@@ -306,8 +319,10 @@ export class DBService {
 
   /**
    * Mark a job as successfully synced to cloud
+   * @param {string} jobId - local job id
+   * @param {string|null} remoteId - Supabase UUID returned from the server
    */
-  async markJobSynced(jobId) {
+  async markJobSynced(jobId, remoteId = null) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -321,6 +336,7 @@ export class DBService {
 
         job.syncStatus = 'synced';
         job.synced_at = new Date().toISOString();
+        job.remoteId = remoteId;
 
         const updateRequest = store.put(job);
         updateRequest.onsuccess = () => resolve(job);
@@ -328,6 +344,51 @@ export class DBService {
       };
 
       getRequest.onerror = () => reject(new Error('Failed to fetch job'));
+    });
+  }
+
+  /** Get confirmed jobs that haven\'t been synced to cloud yet */
+  async getConfirmedJobsUnsynced() {
+    const confirmed = await this.getJobs('confirmed');
+    return confirmed.filter(j => !j.remoteId);
+  }
+
+  /** Find a local job by its Supabase remote ID */
+  async getJobByRemoteId(remoteId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
+      const req = store.index('remoteId').get(remoteId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(new Error('Failed to query by remoteId'));
+    });
+  }
+
+  /** Add a job fetched from the cloud into local IndexedDB as confirmed */
+  async addCloudJob(cloudJob) {
+    const db = await this.ensureDb();
+    const job = {
+      id: `job-cloud-${cloudJob.id}`,
+      remoteId: cloudJob.id,
+      audioBlob: null,
+      audioSize: 0,
+      audioDuration: null,
+      status: 'confirmed',
+      syncStatus: 'synced',
+      errorMessage: null,
+      transcript: cloudJob.transcript,
+      summary: cloudJob.summary,
+      materials: cloudJob.materials || [],
+      labour_minutes: cloudJob.labour_minutes,
+      follow_ups: cloudJob.follow_ups || [],
+      possible_future_work: cloudJob.possible_future_work || '',
+      created_at: cloudJob.created_at,
+      synced_at: cloudJob.synced_at,
+    };
+    return new Promise((resolve, reject) => {
+      const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(job);
+      req.onsuccess = () => resolve(job);
+      req.onerror = () => reject(new Error('Failed to add cloud job'));
     });
   }
 

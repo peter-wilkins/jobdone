@@ -5,7 +5,7 @@ import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { formatTime } from './mockData';
 
-export function HomeScreen({ onNavigate }) {
+export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -60,10 +60,11 @@ export function HomeScreen({ onNavigate }) {
           const pending = confirmedJobs.filter(j => j.syncStatus === 'pending' && j.transcript && j.summary);
           for (const job of pending) {
             try {
-              await syncService.syncJob(job);
-              await dbService.markJobSynced(job.id);
-              setSaved(prev => prev.map(j => j.id === job.id ? { ...j, syncStatus: 'synced' } : j));
-              console.log('[UI] Retried sync for job', job.id);
+              const result = await syncService.syncJob(job);
+              if (result !== null) {
+                await dbService.markJobSynced(job.id, result?.job?.id);
+                setSaved(prev => prev.map(j => j.id === job.id ? { ...j, syncStatus: 'synced' } : j));
+              }
             } catch (e) {
               console.warn('[UI] Retry sync failed for job', job.id, e);
             }
@@ -78,7 +79,7 @@ export function HomeScreen({ onNavigate }) {
     };
 
     loadJobs();
-  }, []);
+  }, [refreshKey]);
 
   // Update recording time display
   useEffect(() => {
@@ -204,13 +205,14 @@ export function HomeScreen({ onNavigate }) {
       // Try to sync to cloud (optional - don't block if it fails)
       if (job && job.transcript && job.summary) {
         try {
-          await syncService.syncJob(job);
-          await dbService.markJobSynced(id);
-          job.syncStatus = 'synced';
-          console.log('[UI] Job synced to cloud');
+          const result = await syncService.syncJob(job);
+          if (result !== null) {
+            await dbService.markJobSynced(id, result?.job?.id);
+            job.syncStatus = 'synced';
+          }
         } catch (syncErr) {
           console.warn('[UI] Cloud sync failed, job saved locally:', syncErr);
-          // Don't fail the UI - job is safe locally, will retry on next load
+          // Don't fail the UI - job is safe locally, will retry on next login
         }
       }
 
@@ -273,12 +275,33 @@ export function HomeScreen({ onNavigate }) {
           </button>
           {menuOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-10">
+              {user ? (
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-xs text-gray-400">Signed in as</p>
+                  <p className="text-xs text-gray-700 truncate">{user.email}</p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setMenuOpen(false); onNavigate('login'); }}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Log in
+                </button>
+              )}
               <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
                 Leave feedback
               </button>
+              {user && (
+                <button
+                  onClick={() => { setMenuOpen(false); onNavigate('login'); }}
+                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition border-t border-gray-100"
+                >
+                  Account
+                </button>
+              )}
             </div>
           )}
         </div>

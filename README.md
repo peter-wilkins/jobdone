@@ -28,6 +28,11 @@ A mobile-first voice job log for self-employed plumbers. Record what you did aft
 - Native mobile app (iOS/Android)
 - Offline sync with retry queue
 
+**DEPLOYMENT TODO**
+- check cors on login flow
+- security audit
+- captcha 
+
 ## Tech Stack
 
 **Frontend**

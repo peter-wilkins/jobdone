@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
-import { syncService } from './services/syncService';
+import { authService } from './services/authService';
 import { formatTime } from './mockData';
 
 export function FeedbackScreen({ onBack }) {
@@ -116,14 +116,15 @@ export function FeedbackScreen({ onBack }) {
       const item = inProgress.find(f => f.id === id);
       await dbService.confirmFeedback(id);
 
-      // Sync to cloud (best-effort)
+      // Sync to cloud (best-effort, requires login)
       try {
-        await apiService.saveFeedback({
-          userId: syncService.getUserId(),
-          transcript: item.transcript,
-          created_at: item.created_at,
-        });
-        await dbService.markFeedbackSynced(id);
+        if (authService.isLoggedIn()) {
+          await apiService.saveFeedback({
+            transcript: item.transcript,
+            created_at: item.created_at,
+          });
+          await dbService.markFeedbackSynced(id);
+        }
       } catch (syncErr) {
         console.warn('Feedback sync failed:', syncErr);
       }
