@@ -1,5 +1,6 @@
 import { transcribeAudio, validateAudioBuffer } from '../services/transcription.js';
 import { summarizeAndExtract } from '../services/summarization.js';
+import { classify } from '../services/classify.js';
 
 /**
  * Register audio processing routes
@@ -14,7 +15,7 @@ export async function registerAudioRoutes(fastify) {
 
   /**
    * POST /api/transcribe
-   * Transcribe and summarize audio
+   * Transcribe, classify intent, and (if NOTE) summarize and extract
    *
    * Expects multipart form data:
    * - audio: audio file blob
@@ -22,11 +23,12 @@ export async function registerAudioRoutes(fastify) {
    * Returns:
    * {
    *   transcript: string,
-   *   summary: string,
-   *   materials: string[],
-   *   labour_minutes: number | null,
-   *   follow_ups: string[],
-   *   possible_future_work: string
+   *   intent: 'QUERY' | 'NOTE',
+   *   summary?: string,              // Only if intent='NOTE'
+   *   materials?: string[],          // Only if intent='NOTE'
+   *   labour_minutes?: number | null,// Only if intent='NOTE'
+   *   follow_ups?: string[],         // Only if intent='NOTE'
+   *   possible_future_work?: string  // Only if intent='NOTE'
    * }
    */
   fastify.post('/api/transcribe', async (request, reply) => {
@@ -63,19 +65,27 @@ export async function registerAudioRoutes(fastify) {
       const { transcript } = await transcribeAudio(audioBuffer);
       console.log('[Transcribe] Transcription complete');
 
-      // Summarize and extract
-      console.log('[Transcribe] Starting Claude summarization...');
-      const result = await summarizeAndExtract(transcript);
-      console.log('[Transcribe] Summarization complete');
+      // Classify intent (QUERY or NOTE)
+      console.log('[Transcribe] Classifying intent...');
+      const intent = classify(transcript);
+      console.log(`[Transcribe] Intent: ${intent}`);
 
-      return {
-        transcript,
-        summary: result.summary,
-        materials: result.materials,
-        labour_minutes: result.labour_minutes,
-        follow_ups: result.follow_ups,
-        possible_future_work: result.possible_future_work,
-      };
+      // If NOTE, summarize and extract
+      const response = { transcript, intent };
+      
+      if (intent === 'NOTE') {
+        console.log('[Transcribe] Starting Claude summarization...');
+        const result = await summarizeAndExtract(transcript);
+        console.log('[Transcribe] Summarization complete');
+        
+        response.summary = result.summary;
+        response.materials = result.materials;
+        response.labour_minutes = result.labour_minutes;
+        response.follow_ups = result.follow_ups;
+        response.possible_future_work = result.possible_future_work;
+      }
+
+      return response;
     } catch (error) {
       console.error('Transcription endpoint error:', error);
       return reply.status(500).send({
@@ -86,12 +96,20 @@ export async function registerAudioRoutes(fastify) {
 
   /**
    * POST /api/summarize
-   * Summarize and extract from existing transcript
+   * Classify intent and (if NOTE) summarize and extract from transcript
    *
    * Expects JSON:
    * { transcript: string }
    *
-   * Returns: same as /api/transcribe but without transcript field
+   * Returns:
+   * {
+   *   intent: 'QUERY' | 'NOTE',
+   *   summary?: string,              // Only if intent='NOTE'
+   *   materials?: string[],          // Only if intent='NOTE'
+   *   labour_minutes?: number | null,// Only if intent='NOTE'
+   *   follow_ups?: string[],         // Only if intent='NOTE'
+   *   possible_future_work?: string  // Only if intent='NOTE'
+   * }
    */
   fastify.post('/api/summarize', async (request, reply) => {
     try {
@@ -101,15 +119,22 @@ export async function registerAudioRoutes(fastify) {
         return reply.status(400).send({ error: 'transcript field required' });
       }
 
-      const result = await summarizeAndExtract(transcript);
+      // Classify intent
+      const intent = classify(transcript);
 
-      return {
-        summary: result.summary,
-        materials: result.materials,
-        labour_minutes: result.labour_minutes,
-        follow_ups: result.follow_ups,
-        possible_future_work: result.possible_future_work,
-      };
+      const response = { intent };
+
+      // If NOTE, summarize and extract
+      if (intent === 'NOTE') {
+        const result = await summarizeAndExtract(transcript);
+        response.summary = result.summary;
+        response.materials = result.materials;
+        response.labour_minutes = result.labour_minutes;
+        response.follow_ups = result.follow_ups;
+        response.possible_future_work = result.possible_future_work;
+      }
+
+      return response;
     } catch (error) {
       console.error('Summarization endpoint error:', error);
       return reply.status(500).send({
