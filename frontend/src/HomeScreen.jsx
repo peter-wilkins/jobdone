@@ -286,24 +286,31 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       );
     }
 
+    // Determine mic button state: grey (idle), red (recording), green (has in-progress entries)
+    const hasInProgress = entries.some(e => e.status !== 'confirmed');
+    let micColorClass = 'bg-gray-500';
+    if (isRecording) micColorClass = 'bg-red-500';
+    else if (hasInProgress) micColorClass = 'bg-green-500';
+
     if (isRecording) {
       return (
         <div className="flex items-center justify-between px-4 h-12">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-gray-900">
-              {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
-            </span>
-          </div>
           <button
             onClick={handleRecord}
-            className="shrink-0 w-10 h-10 flex items-center justify-center bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+            className={`shrink-0 w-10 h-10 flex items-center justify-center ${micColorClass} text-white rounded-full hover:opacity-90 transition`}
             title="Stop recording"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="6" width="12" height="12" rx="2" />
             </svg>
           </button>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-sm font-medium text-gray-900">
+              {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
+            </span>
+          </div>
+          <div className="w-10" />
         </div>
       );
     }
@@ -311,17 +318,18 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     // Idle state
     return (
       <div className="flex items-center justify-between px-4 h-12">
-        <div className="flex-1 min-w-0" />
         <button
           onClick={handleRecord}
-          className="shrink-0 w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 transition"
+          className={`shrink-0 w-10 h-10 flex items-center justify-center ${micColorClass} text-white rounded-full hover:opacity-90 transition`}
           title="Start recording"
           disabled={isLoading}
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
           </svg>
         </button>
+        <div className="flex-1 min-w-0" />
+        <div className="w-10" />
       </div>
     );
   };
