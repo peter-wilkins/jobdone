@@ -10,7 +10,6 @@ export function FeedbackScreen({ onBack }) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [inProgress, setInProgress] = useState([]);
   const [submitted, setSubmitted] = useState([]);
-  const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -56,15 +55,14 @@ export function FeedbackScreen({ onBack }) {
 
   const friendlyError = (err) => {
     const msg = err?.message || '';
-    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
+    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network')) {
       return 'offline';
+    }
     return 'server';
   };
 
-  const processFeedback = async (id) => {
+  async function processFeedback(id) {
     try {
-      setProcessingIds(prev => new Set([...prev, id]));
-
       const item = await dbService.getFeedbackItem(id);
       if (!item?.audioBlob) throw new Error('Recording not found');
 
@@ -73,7 +71,6 @@ export function FeedbackScreen({ onBack }) {
       const updated = await dbService.updateFeedbackWithTranscript(id, result.transcript);
 
       setInProgress(prev => prev.map(f => f.id === id ? updated : f));
-      setProcessingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
     } catch (err) {
       console.error('Feedback processing error:', err);
       const kind = friendlyError(err);
@@ -81,9 +78,8 @@ export function FeedbackScreen({ onBack }) {
       setInProgress(prev => prev.map(f =>
         f.id === id ? { ...f, status: 'failed', errorMessage: kind } : f
       ));
-      setProcessingIds(prev => { const s = new Set(prev); s.delete(id); return s; });
     }
-  };
+  }
 
   const handleRecord = async () => {
     try {
