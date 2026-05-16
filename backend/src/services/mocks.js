@@ -2,7 +2,13 @@
  * Mock API responses for testing
  * Queries (Recall questions) that match customer identities from populate-db.js script
  * Users ask these questions to filter their Timeline of Entries
+ * 
+ * Feature flag: MOCK_RETURN_QUERIES
+ *   true  → mockTranscribeAudio() returns queries (for Recall testing)
+ *   false → mockTranscribeAudio() returns entries (for Capture testing, default)
  */
+
+const MOCK_RETURN_QUERIES = process.env.MOCK_RETURN_QUERIES === 'true';
 
 export const mockQueries = [
   "What did I do at Mrs Smith's place on Oak Street?",
@@ -134,14 +140,29 @@ const entrySummaries = {
 
 /**
  * Mock Whisper transcription
+ * 
+ * Feature flag MOCK_RETURN_QUERIES controls what type of transcript is returned:
+ * - true: returns QUERY transcripts (recall questions) → intent: 'QUERY'
+ * - false: returns NOTE transcripts (entry captures) → intent: 'NOTE' (default)
  */
 export async function mockTranscribeAudio() {
   console.log('[Mock] Whisper transcription (mock)');
   await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
   
-  const index = Math.floor(Math.random() * entryTranscripts.length);
+  let transcript;
+  
+  if (MOCK_RETURN_QUERIES) {
+    // Return a query (recall question)
+    const index = Math.floor(Math.random() * mockQueries.length);
+    transcript = mockQueries[index];
+  } else {
+    // Return an entry (capture note)
+    const index = Math.floor(Math.random() * entryTranscripts.length);
+    transcript = entryTranscripts[index];
+  }
+  
   return {
-    transcript: entryTranscripts[index],
+    transcript,
     language: 'en',
   };
 }
