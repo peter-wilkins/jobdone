@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { authService } from './services/authService';
 import { apiService } from './services/apiService';
+import { dbService } from './services/dbService';
 
 export function LoginScreen({ onBack, user }) {
   const [email, setEmail] = useState('');
@@ -33,6 +34,7 @@ export function LoginScreen({ onBack, user }) {
     setDeleteLoading(true);
     setError(null);
     try {
+      await dbService.clearAll();
       await apiService.deleteUserData();
       await authService.signOut();
       onBack();

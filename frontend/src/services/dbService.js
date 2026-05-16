@@ -731,21 +731,17 @@ export class DBService {
   /**
    * Clear all data (for testing)
    */
-  async clear() {
+  async clearAll() {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.clear();
+      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE], 'readwrite');
+      transaction.objectStore(STORE_NAME).clear();
+      transaction.objectStore(QUERIES_STORE).clear();
+      transaction.objectStore(FEEDBACK_STORE).clear();
 
-      request.onsuccess = () => {
-        resolve();
-      };
-
-      request.onerror = () => {
-        reject(new Error('Failed to clear database'));
-      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(new Error('Failed to clear database'));
     });
   }
 }
