@@ -4,9 +4,10 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
+const QUERIES_STORE = 'queries';
 
 export class DBService {
   constructor() {
@@ -52,6 +53,13 @@ export class DBService {
           const feedbackStore = db.createObjectStore(FEEDBACK_STORE, { keyPath: 'id' });
           feedbackStore.createIndex('status', 'status', { unique: false });
           feedbackStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // v5: queries store for QUERY intents
+        if (!db.objectStoreNames.contains(QUERIES_STORE)) {
+          const queriesStore = db.createObjectStore(QUERIES_STORE, { keyPath: 'id' });
+          queriesStore.createIndex('created_at', 'created_at', { unique: false });
+          queriesStore.createIndex('syncStatus', 'syncStatus', { unique: false });
         }
       };
     });
@@ -612,6 +620,63 @@ export class DBService {
         put.onerror = () => reject(new Error('Failed to reset feedback'));
       };
       req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  // ─── Queries ────────────────────────────────────────────────────────────
+
+  /**
+   * Save a query (QUERY intent) to the queries table
+   * @param {string} transcript - The query transcript
+   * @returns {Promise<string>} Query ID
+   */
+  async saveQuery(transcript) {
+    const db = await this.ensureDb();
+
+    const query = {
+      id: `query-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      transcript,
+      syncStatus: 'pending',
+      created_at: new Date().toISOString(),
+      synced_at: null,
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([QUERIES_STORE], 'readwrite');
+      const store = transaction.objectStore(QUERIES_STORE);
+      const request = store.add(query);
+
+      request.onsuccess = () => {
+        resolve(query.id);
+      };
+
+      request.onerror = () => {
+        reject(new Error('Failed to save query'));
+      };
+    });
+  }
+
+  /**
+   * Get all queries
+   */
+  async getQueries() {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([QUERIES_STORE], 'readonly');
+      const store = transaction.objectStore(QUERIES_STORE);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const queries = request.result.sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        );
+        resolve(queries);
+      };
+
+      request.onerror = () => {
+        reject(new Error('Failed to fetch queries'));
+      };
     });
   }
 

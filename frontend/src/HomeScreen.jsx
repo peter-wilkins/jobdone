@@ -3,7 +3,7 @@ import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
-import { classify } from './services/classifyService';
+
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -59,13 +59,24 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         throw new Error('Recording not found');
       }
 
-      // Transcribe
+      // Transcribe - backend returns intent in response
       const result = await apiService.transcribeAudio(entry.audioBlob);
 
-      // Classify intent from transcript
-      const detectedIntent = classify(result.transcript);
+      // Check intent from API response and handle accordingly
+      if (result.intent === 'QUERY') {
+        // Save query to queries table and remove in-progress entry
+        await dbService.saveQuery(result.transcript);
+        await dbService.rejectEntry(jobId);
+        setEntries(prev => prev.filter(e => e.id !== jobId));
+        setProcessingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(jobId);
+          return newSet;
+        });
+        return;
+      }
 
-      // Update entry with transcription data and intent
+      // NOTE intent - save to entries as before
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary,
@@ -73,7 +84,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         labour_minutes: result.labour_minutes,
         follow_ups: result.follow_ups,
         possible_future_work: result.possible_future_work,
-        intent: detectedIntent,
+        intent: result.intent || 'NOTE',
       });
 
       // Update UI
