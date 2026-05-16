@@ -61,7 +61,7 @@ export async function registerAudioRoutes(fastify) {
       validateAudioBuffer(audioBuffer);
 
       // Transcribe
-      console.log('[Transcribe] Starting Whisper transcription...');
+      console.log('[Transcribe] Starting Deepgram transcription...');
       const { transcript } = await transcribeAudio(audioBuffer);
       console.log('[Transcribe] Transcription complete');
 

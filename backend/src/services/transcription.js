@@ -1,12 +1,10 @@
-import axios from 'axios';
-import fs from 'fs';
-import FormData from 'form-data';
+import { Deepgram } from '@deepgram/sdk';
 import { mockTranscribeAudio } from './mocks.js';
 
 const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
 /**
- * Transcribe audio blob using Whisper API
+ * Transcribe audio blob using Deepgram API
  * @param {Buffer} audioBuffer - Audio file buffer
  * @returns {Promise<{transcript: string, language: string}>}
  */
@@ -21,52 +19,34 @@ export async function transcribeAudio(audioBuffer) {
       return await mockTranscribeAudio();
     }
 
-    console.log('[Whisper] Buffer size:', audioBuffer.length, 'bytes');
+    console.log('[Deepgram] Buffer size:', audioBuffer.length, 'bytes');
 
-    // Create a temporary file
-    const tempFile = `/tmp/audio-${Date.now()}-${Math.random().toString(36).slice(2)}.webm`;
-    fs.writeFileSync(tempFile, audioBuffer);
-    console.log('[Whisper] Temp file created:', tempFile);
+    const deepgram = new Deepgram(process.env.DEEPGRAM_API_KEY);
 
-    try {
-      const stat = fs.statSync(tempFile);
-      console.log('[Whisper] Temp file size:', stat.size, 'bytes');
-
-      // Create FormData for Whisper API
-      const form = new FormData();
-      form.append('file', fs.createReadStream(tempFile));
-      form.append('model', 'whisper-1');
-      form.append('language', 'en');
-
-      console.log('[Whisper] Calling OpenAI API...');
-      const response = await axios.post(
-        'https://api.openai.com/v1/audio/transcriptions',
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          },
-          timeout: 120000, // 2 minutes for large files
-        }
-      );
-
-      console.log('[Whisper] Transcription received');
-
-      return {
-        transcript: response.data.text,
+    const response = await deepgram.transcription.preRecorded(
+      { buffer: audioBuffer, mimetype: 'audio/webm' },
+      {
+        model: 'nova-3',
         language: 'en',
-      };
-    } finally {
-      // Clean up temp file
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-        console.log('[Whisper] Temp file cleaned up');
+        smart_format: true,
       }
+    );
+
+    const transcript = response.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+
+    if (!transcript) {
+      throw new Error('Deepgram returned empty transcription');
     }
+
+    console.log('[Deepgram] Transcription complete');
+
+    return {
+      transcript,
+      language: 'en',
+    };
   } catch (error) {
-    console.error('Transcription error:', error.response?.data || error.message);
-    throw new Error(`Failed to transcribe audio: ${error.response?.data?.error?.message || error.message}`);
+    console.error('Transcription error:', error.message);
+    throw new Error(`Failed to transcribe audio: ${error.message}`);
   }
 }
 

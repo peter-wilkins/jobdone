@@ -4,7 +4,7 @@ Audio transcription and summarization service for JobDone.
 
 ## What it does
 
-- **Transcription**: Converts audio to text using Whisper
+- **Transcription**: Converts audio to text using Deepgram (nova-3)
 - **Summarization**: Creates clean summaries using Claude
 - **Extraction**: Pulls out materials, labour time, follow-ups, and future work
 
@@ -25,7 +25,7 @@ cp .env.example .env
 ```
 
 **Option A: With real APIs (recommended for production)**
-- `OPENAI_API_KEY` — Get from https://platform.openai.com/api-keys
+- `DEEPGRAM_API_KEY` — Get from https://console.deepgram.com/
 - `ANTHROPIC_API_KEY` — Get from https://console.anthropic.com
 - `SUPABASE_URL` and `SUPABASE_KEY` (optional, for cloud sync)
 
@@ -74,6 +74,7 @@ curl -X POST http://localhost:3000/api/transcribe \
 ```json
 {
   "transcript": "Fixed the kitchen tap...",
+  "intent": "NOTE",
   "summary": "Replaced tap valve at Henderson's.",
   "materials": ["valve cartridge", "plumber's tape"],
   "labour_minutes": 30,
@@ -98,9 +99,15 @@ src/
 ├─ index.js                 Main server
 ├─ routes/
 │  └─ audio.js             API route handlers
+│  └─ queries.js           Query persistence
+│  └─ recall.js            Semantic search
+│  └─ sync.js              Cloud sync
+│  └─ feedback.js          Feedback collection
 └─ services/
-   ├─ transcription.js     Whisper integration
-   └─ summarization.js     Claude integration
+   ├─ transcription.js     Deepgram integration
+   ├─ summarization.js     Claude integration
+   ├─ database.js          Supabase/PostgreSQL
+   └─ embedding.js         OpenAI embeddings
 ```
 
 ## Error handling
@@ -111,5 +118,5 @@ src/
 
 ## Limits
 
-- Max audio file size: 25MB (Whisper limit)
-- Supported formats: Any format Whisper accepts (MP3, MP4, WAV, WebM, etc.)
+- Max audio file size: 25MB
+- Supported formats: WebM, MP3, MP4, WAV, FLAC, OGG, etc.
