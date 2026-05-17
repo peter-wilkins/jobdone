@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
+import { parseContactPayload, buildContactSummary, summarizeContactConflicts, getContactIdentity } from './services/contactParser';
 
 function payloadPreview(payload) {
   if (payload.type === 'link') {
@@ -9,14 +10,67 @@ function payloadPreview(payload) {
       body: payload.url || payload.text,
     };
   }
+  if (payload.type === 'vcard' || payload.type === 'contact_text' || payload.format === 'vcard') {
+    return {
+      title: payload.title || 'Shared Contact',
+      body: payload.rawText || payload.text || 'Contact payload',
+    };
+  }
   return {
     title: payload.title || 'Shared Text',
     body: payload.text,
   };
 }
 
+async function loadContactDrafts(capture) {
+  const drafts = [];
+  const seen = new Set();
+
+  for (const [index, payload] of (capture.payloads || []).entries()) {
+    const candidates = parseContactPayload(payload);
+    if (candidates.length === 0) {
+      drafts.push({
+        identity: `fallback-${capture.id}-${index}`,
+        payloadIndex: index,
+        payload,
+        displayName: payload.title || 'Shared contact',
+        phones: [],
+        emails: [],
+        normalizedPhones: [],
+        normalizedEmails: [],
+        organization: '',
+        title: '',
+        note: '',
+        existing: null,
+        conflicts: [],
+      });
+      continue;
+    }
+
+    for (const candidate of candidates) {
+      const identity = getContactIdentity(candidate) || `fallback-${capture.id}-${index}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+
+      const matches = await dbService.findPeopleByContactKeys(candidate);
+      const existing = matches[0] || null;
+      drafts.push({
+        ...candidate,
+        identity,
+        payloadIndex: index,
+        payload,
+        existing,
+        conflicts: summarizeContactConflicts(existing, candidate),
+      });
+    }
+  }
+
+  return drafts;
+}
+
 export function ShareTargetScreen({ onBack, user }) {
   const [capture, setCapture] = useState(null);
+  const [contactDrafts, setContactDrafts] = useState([]);
   const captureId = new URLSearchParams(window.location.search).get('id');
   const shareTargetError = new URLSearchParams(window.location.search).get('shareTargetError');
   const routeError = shareErrorMessage(shareTargetError) || (!captureId ? 'No capture ID provided' : null);
@@ -42,6 +96,12 @@ export function ShareTargetScreen({ onBack, user }) {
             setError('Capture not found');
           } else {
             setCapture(row);
+            if ((row.kind || inferCaptureKind(row)) === 'person') {
+              const drafts = await loadContactDrafts(row);
+              if (!cancelled) setContactDrafts(drafts);
+            } else {
+              if (!cancelled) setContactDrafts([]);
+            }
           }
         }
       } catch (err) {
@@ -63,32 +123,56 @@ export function ShareTargetScreen({ onBack, user }) {
     setError(null);
 
     try {
-      // Create Entry from Capture payloads
-      const payload = capture.payloads?.[0];
-      if (!payload) {
-        throw new Error('No payload in capture');
-      }
+      const captureKind = capture.kind || inferCaptureKind(capture);
+      if (captureKind === 'person') {
+        const drafts = contactDrafts.length > 0 ? contactDrafts : await loadContactDrafts(capture);
+        if (drafts.length === 0) {
+          throw new Error('No contact payload in capture');
+        }
 
-      const preview = payloadPreview(payload);
-      const entryId = await dbService.createEntryFromCapture({
-        captureId: capture.id,
-        transcript: preview.body,
-        summary: preview.title,
-        created_at: capture.created_at,
-      });
+        for (const draft of drafts) {
+          await dbService.upsertPerson({
+            displayName: draft.displayName,
+            givenName: draft.givenName,
+            familyName: draft.familyName,
+            organization: draft.organization,
+            title: draft.title,
+            note: draft.note,
+            phones: draft.phones,
+            emails: draft.emails,
+            normalizedPhones: draft.normalizedPhones,
+            normalizedEmails: draft.normalizedEmails,
+            sourceCaptureIds: [capture.id],
+          });
+        }
+      } else {
+        // Create Entry from Capture payloads
+        const payload = capture.payloads?.[0];
+        if (!payload) {
+          throw new Error('No payload in capture');
+        }
 
-      // Get the created entry for optional sync
-      const entry = await dbService.getEntry(entryId);
+        const preview = payloadPreview(payload);
+        const entryId = await dbService.createEntryFromCapture({
+          captureId: capture.id,
+          transcript: preview.body,
+          summary: preview.title,
+          created_at: capture.created_at,
+        });
 
-      // Try sync if logged in
-      if (user && entry) {
-        try {
-          const result = await syncService.syncEntry(entry);
-          if (result?.entry?.id) {
-            await dbService.markEntrySynced(entryId, result.entry.id);
+        // Get the created entry for optional sync
+        const entry = await dbService.getEntry(entryId);
+
+        // Try sync if logged in
+        if (user && entry) {
+          try {
+            const result = await syncService.syncEntry(entry);
+            if (result?.entry?.id) {
+              await dbService.markEntrySynced(entryId, result.entry.id);
+            }
+          } catch (syncErr) {
+            console.warn('[ShareTarget] Sync failed, entry saved locally:', syncErr);
           }
-        } catch (syncErr) {
-          console.warn('[ShareTarget] Sync failed, entry saved locally:', syncErr);
         }
       }
 
@@ -169,29 +253,68 @@ export function ShareTargetScreen({ onBack, user }) {
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                 Review
               </span>
+              {(capture.kind || inferCaptureKind(capture)) === 'person' && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                  Person
+                </span>
+              )}
               <span className="text-xs text-gray-400">
                 {(capture.source || 'manual').replaceAll('_', ' ')}
               </span>
             </div>
 
+            {(capture.kind || inferCaptureKind(capture)) === 'person' && contactDrafts.some(draft => draft.conflicts.length > 0) && (
+              <div className="rounded border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-medium text-amber-900 mb-2">Potential updates found</p>
+                <p className="text-sm text-amber-800">
+                  Matching contacts already exist. Review the contact cards below before confirming.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-4">
-              {(capture.payloads || []).map((payload, index) => {
-                const preview = payloadPreview(payload);
-                return (
-                  <div key={`${capture.id}-${index}`} className="rounded border border-gray-200 p-4">
-                    <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
-                      {payload.type || 'Payload'}
-                    </p>
-                    <p className="text-base font-medium text-gray-900 mb-2">{preview.title}</p>
-                    <p className="text-sm text-gray-600 break-words">{preview.body}</p>
-                  </div>
-                );
-              })}
+              {(capture.kind || inferCaptureKind(capture)) === 'person'
+                ? contactDrafts.map((draft, index) => (
+                    <div key={`${capture.id}-${draft.identity}-${index}`} className="rounded border border-gray-200 p-4">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className="text-base font-medium text-gray-900">{draft.displayName || 'Shared contact'}</p>
+                        <span className="text-xs text-gray-400">Contact {index + 1}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 break-words">{buildContactSummary(draft) || 'No contact details parsed'}</p>
+                      {draft.conflicts.length > 0 && (
+                        <div className="mt-3 rounded bg-amber-50 border border-amber-200 p-3">
+                          <p className="text-xs font-medium text-amber-900 mb-2">Conflicts</p>
+                          <div className="space-y-2">
+                            {draft.conflicts.map(conflict => (
+                              <div key={conflict.field} className="text-xs text-amber-900">
+                                <span className="font-medium capitalize">{conflict.field}:</span>
+                                <span className="ml-1">existing "{conflict.existing}" vs incoming "{conflict.incoming}"</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                : (capture.payloads || []).map((payload, index) => {
+                    const preview = payloadPreview(payload);
+                    return (
+                      <div key={`${capture.id}-${index}`} className="rounded border border-gray-200 p-4">
+                        <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
+                          {payload.type || 'Payload'}
+                        </p>
+                        <p className="text-base font-medium text-gray-900 mb-2">{preview.title}</p>
+                        <p className="text-sm text-gray-600 break-words">{preview.body}</p>
+                      </div>
+                    );
+                  })}
             </div>
 
             <div className="pt-4">
               <p className="text-sm text-gray-500 mb-4">
-                Save this to your Timeline?
+                {(capture.kind || inferCaptureKind(capture)) === 'person'
+                  ? 'Save these contacts?'
+                  : 'Save this to your Timeline?'}
               </p>
               <div className="flex gap-3">
                 <button
@@ -199,7 +322,11 @@ export function ShareTargetScreen({ onBack, user }) {
                   disabled={isProcessing}
                   className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isProcessing ? 'Saving...' : 'Confirm'}
+                  {isProcessing
+                    ? 'Saving...'
+                    : (capture.kind || inferCaptureKind(capture)) === 'person'
+                      ? 'Save Contacts'
+                      : 'Confirm'}
                 </button>
                 <button
                   onClick={handleReject}
@@ -221,4 +348,10 @@ function shareErrorMessage(error) {
   if (error === 'unsupported') return 'That share type is not supported yet. Share text or a link.';
   if (error === 'failed') return 'Share could not be saved. Try again.';
   return null;
+}
+
+function inferCaptureKind(capture) {
+  return (capture.payloads || []).some(payload =>
+    ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard'
+  ) ? 'person' : 'entry';
 }

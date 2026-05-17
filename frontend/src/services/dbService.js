@@ -4,22 +4,27 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
+const PEOPLE_STORE = 'people';
 
 export class DBService {
   constructor() {
     this.db = null;
+    this.initPromise = null;
   }
 
   /**
    * Initialize database
    */
   async init() {
-    return new Promise((resolve, reject) => {
+    if (this.db) return this.db;
+    if (this.initPromise) return this.initPromise;
+
+    const openOnce = () => new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
@@ -82,9 +87,39 @@ export class DBService {
           capturesStore.createIndex('status', 'status', { unique: false });
           capturesStore.createIndex('created_at', 'created_at', { unique: false });
           capturesStore.createIndex('source', 'source', { unique: false });
+          capturesStore.createIndex('kind', 'kind', { unique: false });
+        }
+
+        // v8: local-first People store
+        if (!db.objectStoreNames.contains(PEOPLE_STORE)) {
+          const peopleStore = db.createObjectStore(PEOPLE_STORE, { keyPath: 'id' });
+          peopleStore.createIndex('status', 'status', { unique: false });
+          peopleStore.createIndex('created_at', 'created_at', { unique: false });
+          peopleStore.createIndex('updated_at', 'updated_at', { unique: false });
+          peopleStore.createIndex('primaryEmail', 'primaryEmail', { unique: false });
+          peopleStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
         }
       };
     });
+
+    this.initPromise = (async () => {
+      try {
+        return await openOnce();
+      } catch (error) {
+        console.warn('[DB] Open failed, resetting local database:', error.message);
+        await new Promise((resolve) => {
+          const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+          deleteRequest.onsuccess = () => resolve();
+          deleteRequest.onerror = () => resolve();
+          deleteRequest.onblocked = () => resolve();
+        });
+        return await openOnce();
+      } finally {
+        this.initPromise = null;
+      }
+    })();
+
+    return this.initPromise;
   }
 
   /**
@@ -555,10 +590,8 @@ export class DBService {
    * Ensure database is initialized
    */
   async ensureDb() {
-    if (!this.db) {
-      await this.init();
-    }
-    return this.db;
+    if (this.db) return this.db;
+    return this.init();
   }
 
   /**
@@ -572,6 +605,10 @@ export class DBService {
     return `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  generatePersonId() {
+    return `person-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
   // ─── Captures ────────────────────────────────────────────────────────────
 
   /**
@@ -582,7 +619,7 @@ export class DBService {
    * @param {Array<object>} captureData.payloads - raw reviewable payload metadata
    * @param {string} [captureData.status] - lifecycle status, defaults ready_for_review
    */
-  async createCapture({ source = 'manual', payloads = [], status = 'ready_for_review', ...rest } = {}) {
+  async createCapture({ source = 'manual', payloads = [], status = 'ready_for_review', kind = 'entry', ...rest } = {}) {
     if (!Array.isArray(payloads) || payloads.length === 0) {
       throw new Error('Cannot create capture without payloads');
     }
@@ -592,6 +629,7 @@ export class DBService {
     const capture = {
       id: this.generateCaptureId(),
       source,
+      kind,
       payloads,
       status,
       errorMessage: null,
@@ -674,6 +712,155 @@ export class DBService {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error('Failed to reject capture'));
     });
+  }
+
+  // ─── People ─────────────────────────────────────────────────────────────
+
+  async createPerson(personData) {
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const person = {
+      id: this.generatePersonId(),
+      status: 'confirmed',
+      displayName: '',
+      givenName: '',
+      familyName: '',
+      organization: '',
+      title: '',
+      note: '',
+      phones: [],
+      emails: [],
+      normalizedPhones: [],
+      normalizedEmails: [],
+      primaryPhone: null,
+      primaryEmail: null,
+      sourceCaptureIds: [],
+      created_at: now,
+      updated_at: now,
+      ...personData,
+    };
+
+    const tx = db.transaction([PEOPLE_STORE], 'readwrite');
+    const request = tx.objectStore(PEOPLE_STORE).add(person);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(person);
+      request.onerror = () => reject(new Error('Failed to create person'));
+    });
+  }
+
+  async getPerson(personId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE).get(personId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(new Error('Failed to fetch person'));
+    });
+  }
+
+  async getPeople(status = 'confirmed') {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE);
+      const request = status ? store.index('status').getAll(status) : store.getAll();
+      request.onsuccess = () => {
+        const people = (request.result || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+        resolve(people);
+      };
+      request.onerror = () => reject(new Error('Failed to fetch people'));
+    });
+  }
+
+  async searchPeople(query) {
+    const people = await this.getPeople('confirmed');
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return people;
+
+    return people.filter(person => {
+      const haystack = [
+        person.displayName,
+        person.givenName,
+        person.familyName,
+        person.organization,
+        person.title,
+        ...(person.emails || []).map(email => email.value),
+        ...(person.phones || []).map(phone => phone.value),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }
+
+  async findPeopleByContactKeys({ normalizedEmails = [], normalizedPhones = [] } = {}) {
+    const people = await this.getPeople('confirmed');
+    const emailSet = new Set((normalizedEmails || []).filter(Boolean));
+    const phoneSet = new Set((normalizedPhones || []).filter(Boolean));
+
+    return people.filter(person =>
+      (person.normalizedEmails || []).some(email => emailSet.has(email)) ||
+      (person.normalizedPhones || []).some(phone => phoneSet.has(phone))
+    );
+  }
+
+  async upsertPerson(personData) {
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const normalizedEmails = Array.from(new Set((personData.normalizedEmails || []).filter(Boolean)));
+    const normalizedPhones = Array.from(new Set((personData.normalizedPhones || []).filter(Boolean)));
+    const matches = await this.findPeopleByContactKeys({ normalizedEmails, normalizedPhones });
+    const existing = matches[0] || null;
+    const primaryEmail = normalizedEmails[0] || null;
+    const primaryPhone = normalizedPhones[0] || null;
+
+    if (!existing) {
+      return this.createPerson({
+        ...personData,
+        normalizedEmails,
+        normalizedPhones,
+        primaryEmail,
+        primaryPhone,
+      });
+    }
+
+    const merged = {
+      ...existing,
+      displayName: personData.displayName || existing.displayName,
+      givenName: personData.givenName || existing.givenName,
+      familyName: personData.familyName || existing.familyName,
+      organization: personData.organization || existing.organization,
+      title: personData.title || existing.title,
+      note: personData.note || existing.note,
+      phones: this.mergeContactValues(existing.phones, personData.phones),
+      emails: this.mergeContactValues(existing.emails, personData.emails),
+      normalizedPhones: Array.from(new Set([...(existing.normalizedPhones || []), ...normalizedPhones])),
+      normalizedEmails: Array.from(new Set([...(existing.normalizedEmails || []), ...normalizedEmails])),
+      primaryPhone: existing.primaryPhone || primaryPhone,
+      primaryEmail: existing.primaryEmail || primaryEmail,
+      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...(personData.sourceCaptureIds || [])])),
+      updated_at: now,
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([PEOPLE_STORE], 'readwrite');
+      const store = tx.objectStore(PEOPLE_STORE);
+      const req = store.put(merged);
+      req.onsuccess = () => resolve(merged);
+      req.onerror = () => reject(new Error('Failed to update person'));
+    });
+  }
+
+  mergeContactValues(existingValues = [], incomingValues = []) {
+    const merged = [...existingValues];
+    for (const value of incomingValues || []) {
+      const key = value?.normalized || value?.value;
+      if (!key) continue;
+      if (!merged.some(item => (item?.normalized || item?.value) === key)) {
+        merged.push(value);
+      }
+    }
+    return merged;
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────
@@ -952,11 +1139,12 @@ export class DBService {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE], 'readwrite');
+      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE, PEOPLE_STORE], 'readwrite');
       transaction.objectStore(STORE_NAME).clear();
       transaction.objectStore(QUERIES_STORE).clear();
       transaction.objectStore(FEEDBACK_STORE).clear();
       transaction.objectStore(CAPTURES_STORE).clear();
+      transaction.objectStore(PEOPLE_STORE).clear();
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(new Error('Failed to clear database'));

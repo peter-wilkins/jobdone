@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { HomeScreen } from './HomeScreen';
 import { FeedbackScreen } from './FeedbackScreen';
 import { InboxScreen } from './InboxScreen';
+import { PeopleScreen } from './PeopleScreen';
 import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { authService } from './services/authService';
@@ -15,7 +16,7 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
-  return ['feedback', 'inbox', 'login', 'share-target'].includes(hash) ? hash : 'home';
+  return ['feedback', 'inbox', 'people', 'login', 'share-target'].includes(hash) ? hash : 'home';
 }
 
 function App() {
@@ -127,6 +128,10 @@ function App() {
 
   if (screen === 'inbox') {
     return <InboxScreen onBack={() => navigateTo('home')} />;
+  }
+
+  if (screen === 'people') {
+    return <PeopleScreen onBack={() => navigateTo('home')} />;
   }
 
   if (screen === 'share-target') {

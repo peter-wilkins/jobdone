@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { formatTime } from './mockData';
+import { parseContactPayload, buildContactSummary } from './services/contactParser';
 
 function payloadLabel(payload) {
   if (payload.type === 'link') return payload.url || payload.title || 'Link';
   if (payload.type === 'text') return payload.text || payload.title || 'Text';
+  if (payload.type === 'vcard' || payload.type === 'contact_text' || payload.format === 'vcard') {
+    const drafts = parseContactPayload(payload);
+    return drafts.length > 0 ? buildContactSummary(drafts[0]) : payload.title || 'Contact';
+  }
   return payload.title || payload.type || 'Payload';
 }
 
@@ -81,6 +86,11 @@ export function InboxScreen({ onBack }) {
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                         Review
                       </span>
+                      {(capture.kind === 'person' || (capture.payloads || []).some(payload => ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard')) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Person
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400">
                         {(capture.source || 'manual').replaceAll('_', ' ')}
                       </span>
