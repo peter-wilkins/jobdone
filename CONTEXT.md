@@ -40,6 +40,10 @@ _Avoid_: Search, Lookup, Query
 The saved text of a Recall question, transcribed from voice via the same input as capture. Queries are persisted and shown in a recent-queries dropdown so the user can re-run them with one tap, producing the same filtered Timeline.
 _Avoid_: Search term, Filter
 
+**Share Pack**:
+A user-curated subset of Recall-returned Entries, optionally with a short user-written message, prepared as a revocable share link for an external recipient. The user selects each Entry explicitly; a Share Pack is not the Query itself, not all Recall results, and not an AI-generated answer. It is a snapshot of selected Entry content at send time, not a live view into the Timeline.
+_Avoid_: Report, Export, Search Result
+
 **Confirmation**:
 The user gesture that commits a ready-for-review Entry into the Timeline. Irreversible.
 _Avoid_: Save, Approve
@@ -74,6 +78,20 @@ _Avoid_: Search bar, Input field, Record button
 - **Person** deduplication uses normalized email or normalized phone number per user; names alone never deduplicate People
 - **People** are local-first and sync to Supabase eventually, using the same per-user normalized identifier rules
 - **Recall** returns Entries only; linked People can improve matching but are not returned as Timeline results
+- A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
+- A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
+- Transcripts are excluded from MVP Share Packs because they may contain incidental personal data
+- A **Share Pack** never grants access to the Timeline, People, Queries, audio blobs, or future Entries
+- Share Packs are shared link-first in MVP so the user can send them through WhatsApp, SMS, email, or another native share channel
+- Creating a Share Pack requires login because the link is cloud-backed and must be owner-revocable
+- Visible Recall results enter Share Pack preview selected by default; the user removes sensitive Entries before creating the share link. Hidden, unloaded, or future matches are never auto-selected.
+- Share Pack links use unguessable tokens, expire after 7 days by default, can be revoked, and expose only the Share Pack snapshot
+- Expired, revoked, missing, or invalid Share Pack links show the same neutral unavailable message and never reveal whether a specific Share Pack existed
+- Share Pack ownership is server-side link context for revocation and audit; the recipient-facing MVP does not need to display sender identity
+- Share Pack recipients view the snapshot in-browser for MVP; PDF/download/export is deferred
+- Recipient-facing Share Pack pages avoid third-party embeds and unnecessary tracking
+- Share Pack access does not create recipient-facing read receipts in MVP; operational access metadata is only for abuse/debug if needed
+- Share Pack recipients are arbitrary external recipients for MVP; sharing a link does not automatically create a Person
 - A Person-only Confirmation updates People and removes the Capture from the Inbox without creating a Timeline Entry
 - A minimal People surface lists, searches, and displays People; merge and full editing are deferred
 - A Person with no linked Entries can be deleted; a Person linked to Entries is hidden from People surfaces while immutable Entry snapshots remain
