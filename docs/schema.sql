@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 2. Drop old tables if present (clean rewrite)
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
+DROP TABLE IF EXISTS people CASCADE;
 DROP TABLE IF EXISTS queries CASCADE;
 
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
@@ -37,7 +38,42 @@ CREATE POLICY "backend_insert_entries" ON entries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_entries" ON entries FOR SELECT USING (TRUE);
 CREATE POLICY "backend_update_entries" ON entries FOR UPDATE USING (TRUE);
 
--- 4. queries (persisted Recall questions)
+-- 4. people (local-first contacts created from confirmed Captures)
+CREATE TABLE people (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id            TEXT NOT NULL,
+  local_id           TEXT,
+  status             TEXT NOT NULL DEFAULT 'confirmed',
+  display_name       TEXT NOT NULL DEFAULT '',
+  given_name         TEXT NOT NULL DEFAULT '',
+  family_name        TEXT NOT NULL DEFAULT '',
+  organization       TEXT NOT NULL DEFAULT '',
+  title              TEXT NOT NULL DEFAULT '',
+  note               TEXT NOT NULL DEFAULT '',
+  phones             JSONB NOT NULL DEFAULT '[]'::jsonb,
+  emails             JSONB NOT NULL DEFAULT '[]'::jsonb,
+  normalized_phones  TEXT[] NOT NULL DEFAULT '{}',
+  normalized_emails  TEXT[] NOT NULL DEFAULT '{}',
+  primary_phone      TEXT,
+  primary_email      TEXT,
+  source_capture_ids TEXT[] NOT NULL DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX people_user_id_idx           ON people(user_id);
+CREATE INDEX people_updated_at_idx        ON people(updated_at DESC);
+CREATE INDEX people_normalized_phones_idx ON people USING GIN (normalized_phones);
+CREATE INDEX people_normalized_emails_idx ON people USING GIN (normalized_emails);
+CREATE UNIQUE INDEX people_user_id_local_id_uidx ON people(user_id, local_id) WHERE local_id IS NOT NULL;
+
+ALTER TABLE people ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_people" ON people FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_people" ON people FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_people" ON people FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_people" ON people FOR DELETE USING (TRUE);
+
+-- 5. queries (persisted Recall questions)
 CREATE TABLE queries (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -51,7 +87,7 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 5. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 6. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  vector(1024),

@@ -26,6 +26,7 @@ async function buildApp(deps = {}) {
   await registerSyncRoutes(app, {
     requireAuth: async () => ({ id: 'user-1' }),
     getEntries: async () => [],
+    getPeople: async () => [],
     getEntryByCreatedAt: async () => null,
     deleteUserData: async () => ({ success: true }),
     ...deps,
@@ -159,5 +160,49 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
     assert.deepEqual(JSON.parse(res.body).entry, existing);
+  });
+});
+
+describe('SyncRoute People sync', () => {
+  test('saves local-first people for authenticated user', async () => {
+    let savedArgs;
+    const app = await buildApp({
+      savePerson: async (userId, person) => {
+        savedArgs = { userId, person };
+        return { id: 'person-cloud-1', user_id: userId, local_id: person.localId };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/people',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        people: [{ localId: 'person-local-1', displayName: 'Ann Smith' }],
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(savedArgs.userId, 'user-1');
+    assert.equal(savedArgs.person.displayName, 'Ann Smith');
+    assert.equal(JSON.parse(res.body).people[0].local_id, 'person-local-1');
+  });
+
+  test('fetches cloud people for authenticated user', async () => {
+    const cloudPeople = [{ id: 'person-cloud-1', display_name: 'Ann Smith' }];
+    const app = await buildApp({
+      getPeople: async (userId) => {
+        assert.equal(userId, 'user-1');
+        return cloudPeople;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sync/people',
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).people, cloudPeople);
   });
 });

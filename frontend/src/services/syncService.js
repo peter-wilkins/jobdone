@@ -40,6 +40,31 @@ export class SyncService {
       throw error;
     }
   }
+
+  async syncPeople(people) {
+    if (!authService.isLoggedIn() || !people.length) return null;
+
+    const response = await apiService.syncPeople(people.map(person => ({
+      id: person.id,
+      localId: person.id,
+      status: person.status,
+      displayName: person.displayName,
+      givenName: person.givenName,
+      familyName: person.familyName,
+      organization: person.organization,
+      title: person.title,
+      note: person.note,
+      phones: person.phones,
+      emails: person.emails,
+      normalizedPhones: person.normalizedPhones,
+      normalizedEmails: person.normalizedEmails,
+      primaryPhone: person.primaryPhone,
+      primaryEmail: person.primaryEmail,
+      sourceCaptureIds: person.sourceCaptureIds,
+      created_at: person.created_at,
+    })));
+    return response;
+  }
 }
 
 export const syncService = new SyncService();

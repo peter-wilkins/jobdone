@@ -16,6 +16,31 @@ function toVectorLiteral(embedding) {
   return `[${embedding.join(',')}]`;
 }
 
+function unique(values = []) {
+  return Array.from(new Set((values || []).filter(Boolean)));
+}
+
+function mergeByKey(existingValues = [], incomingValues = []) {
+  const merged = [...(existingValues || [])];
+  for (const value of incomingValues || []) {
+    const key = value?.normalized || value?.value;
+    if (!key) continue;
+    if (!merged.some(item => (item?.normalized || item?.value) === key)) {
+      merged.push(value);
+    }
+  }
+  return merged;
+}
+
+function peopleMatch(existing, incoming) {
+  if (existing.local_id && incoming.localId && existing.local_id === incoming.localId) return true;
+
+  const existingEmails = new Set(existing.normalized_emails || []);
+  const existingPhones = new Set(existing.normalized_phones || []);
+  return (incoming.normalizedEmails || []).some(email => existingEmails.has(email)) ||
+    (incoming.normalizedPhones || []).some(phone => existingPhones.has(phone));
+}
+
 /**
  * Save a confirmed entry to Supabase
  */
@@ -137,6 +162,12 @@ export async function deleteUserData(userId) {
       .eq('user_id', userId);
     if (entriesErr) throw entriesErr;
 
+    const { error: peopleErr } = await supabase
+      .from('people')
+      .delete()
+      .eq('user_id', userId);
+    if (peopleErr) throw peopleErr;
+
     const { error: queriesErr } = await supabase
       .from('queries')
       .delete()
@@ -183,6 +214,93 @@ export async function getEntries(userId) {
     console.error('[DB] Failed to fetch entries:', error.message);
     throw error;
   }
+}
+
+export async function savePerson(userId, personData) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping person save');
+    return null;
+  }
+
+  const normalizedEmails = unique(personData.normalizedEmails || personData.normalized_emails);
+  const normalizedPhones = unique(personData.normalizedPhones || personData.normalized_phones);
+  const existingPeople = await getPeople(userId);
+  const existing = existingPeople.find(person => peopleMatch(person, {
+    localId: personData.localId || personData.local_id || personData.id,
+    normalizedEmails,
+    normalizedPhones,
+  }));
+
+  const payload = {
+    user_id: userId,
+    local_id: personData.localId || personData.local_id || personData.id || null,
+    status: personData.status || 'confirmed',
+    display_name: personData.displayName || personData.display_name || '',
+    given_name: personData.givenName || personData.given_name || '',
+    family_name: personData.familyName || personData.family_name || '',
+    organization: personData.organization || '',
+    title: personData.title || '',
+    note: personData.note || '',
+    phones: personData.phones || [],
+    emails: personData.emails || [],
+    normalized_phones: normalizedPhones,
+    normalized_emails: normalizedEmails,
+    primary_phone: personData.primaryPhone || personData.primary_phone || normalizedPhones[0] || null,
+    primary_email: personData.primaryEmail || personData.primary_email || normalizedEmails[0] || null,
+    source_capture_ids: unique(personData.sourceCaptureIds || personData.source_capture_ids),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (!existing) {
+    const { data, error } = await supabase
+      .from('people')
+      .insert([{ ...payload, created_at: new Date(personData.created_at || Date.now()).toISOString() }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  const merged = {
+    ...payload,
+    local_id: existing.local_id || payload.local_id,
+    display_name: payload.display_name || existing.display_name,
+    given_name: payload.given_name || existing.given_name,
+    family_name: payload.family_name || existing.family_name,
+    organization: payload.organization || existing.organization,
+    title: payload.title || existing.title,
+    note: payload.note || existing.note,
+    phones: mergeByKey(existing.phones, payload.phones),
+    emails: mergeByKey(existing.emails, payload.emails),
+    normalized_phones: unique([...(existing.normalized_phones || []), ...normalizedPhones]),
+    normalized_emails: unique([...(existing.normalized_emails || []), ...normalizedEmails]),
+    source_capture_ids: unique([...(existing.source_capture_ids || []), ...payload.source_capture_ids]),
+  };
+
+  const { data, error } = await supabase
+    .from('people')
+    .update(merged)
+    .eq('id', existing.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getPeople(userId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('people')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'confirmed')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
 }
 
 /**

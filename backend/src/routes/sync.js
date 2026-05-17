@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, savePerson, getPeople, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -9,6 +9,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getEntries: deps.getEntries ?? getEntries,
     getEntryByCaptureId: deps.getEntryByCaptureId ?? getEntryByCaptureId,
     getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
+    savePerson: deps.savePerson ?? savePerson,
+    getPeople: deps.getPeople ?? getPeople,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
@@ -73,6 +75,36 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     } catch (error) {
       console.error('Sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch entries' });
+    }
+  });
+
+  fastify.post('/api/sync/people', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const people = Array.isArray(request.body?.people) ? request.body.people : [];
+      const saved = [];
+      for (const person of people) {
+        saved.push(await db.savePerson(user.id, person));
+      }
+      return { success: true, people: saved.filter(Boolean) };
+    } catch (error) {
+      console.error('People sync save error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to save people' });
+    }
+  });
+
+  fastify.get('/api/sync/people', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const people = await db.getPeople(user.id);
+      return { success: true, people };
+    } catch (error) {
+      console.error('People sync fetch error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to fetch people' });
     }
   });
 

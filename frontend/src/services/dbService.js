@@ -11,6 +11,34 @@ const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
 const PEOPLE_STORE = 'people';
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function containsExactPhrase(haystack, phrase) {
+  const normalizedHaystack = ` ${normalizeSearchText(haystack)} `;
+  const normalizedPhrase = normalizeSearchText(phrase);
+  if (!normalizedPhrase) return false;
+  return normalizedHaystack.includes(` ${normalizedPhrase} `);
+}
+
+export function entryMentionsPerson(entry, person) {
+  const displayName = normalizeSearchText(person?.displayName);
+  if (!displayName) return false;
+
+  const searchableText = [
+    entry?.summary,
+    entry?.transcript,
+  ].filter(Boolean).join(' ');
+
+  return containsExactPhrase(searchableText, displayName);
+}
+
 export class DBService {
   constructor() {
     this.db = null;
@@ -735,6 +763,9 @@ export class DBService {
       primaryPhone: null,
       primaryEmail: null,
       sourceCaptureIds: [],
+      remoteId: null,
+      syncStatus: 'pending',
+      synced_at: null,
       created_at: now,
       updated_at: now,
       ...personData,
@@ -755,6 +786,20 @@ export class DBService {
       const request = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE).get(personId);
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(new Error('Failed to fetch person'));
+    });
+  }
+
+  async deletePerson(personId) {
+    const linkedEntries = await this.getEntriesForPerson(personId);
+    if (linkedEntries.length > 0) {
+      throw new Error('Cannot delete a person linked to entries');
+    }
+
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).delete(personId);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to delete person'));
     });
   }
 
@@ -791,6 +836,19 @@ export class DBService {
         .toLowerCase();
       return haystack.includes(needle);
     });
+  }
+
+  async getEntriesForPerson(personId) {
+    const person = await this.getPerson(personId);
+    if (!person) return [];
+
+    const sourceCaptureIds = new Set((person.sourceCaptureIds || []).filter(Boolean));
+    const entries = await this.getEntries('confirmed');
+    return entries.filter(entry =>
+      (entry.captureId && sourceCaptureIds.has(entry.captureId)) ||
+      (Array.isArray(entry.personIds) && entry.personIds.includes(personId)) ||
+      entryMentionsPerson(entry, person)
+    );
   }
 
   async findPeopleByContactKeys({ normalizedEmails = [], normalizedPhones = [] } = {}) {
@@ -839,6 +897,7 @@ export class DBService {
       primaryPhone: existing.primaryPhone || primaryPhone,
       primaryEmail: existing.primaryEmail || primaryEmail,
       sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...(personData.sourceCaptureIds || [])])),
+      syncStatus: 'pending',
       updated_at: now,
     };
 
@@ -861,6 +920,89 @@ export class DBService {
       }
     }
     return merged;
+  }
+
+  async getPeopleUnsynced() {
+    const people = await this.getPeople('confirmed');
+    return people.filter(person => person.syncStatus !== 'synced' || !person.remoteId);
+  }
+
+  async markPersonSynced(personId, remoteId = null) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE);
+      const request = store.get(personId);
+
+      request.onsuccess = () => {
+        const person = request.result;
+        if (!person) { reject(new Error('Person not found')); return; }
+
+        const synced = {
+          ...person,
+          remoteId: remoteId || person.remoteId,
+          syncStatus: 'synced',
+          synced_at: new Date().toISOString(),
+        };
+        const updateRequest = store.put(synced);
+        updateRequest.onsuccess = () => resolve(synced);
+        updateRequest.onerror = () => reject(new Error('Failed to mark person synced'));
+      };
+
+      request.onerror = () => reject(new Error('Failed to fetch person'));
+    });
+  }
+
+  async upsertCloudPerson(cloudPerson) {
+    const normalizedEmails = Array.from(new Set((cloudPerson.normalized_emails || []).filter(Boolean)));
+    const normalizedPhones = Array.from(new Set((cloudPerson.normalized_phones || []).filter(Boolean)));
+    const matches = await this.findPeopleByContactKeys({ normalizedEmails, normalizedPhones });
+    const existing = matches.find(person => person.remoteId === cloudPerson.id) || matches[0] || null;
+    const personData = {
+      displayName: cloudPerson.display_name || '',
+      givenName: cloudPerson.given_name || '',
+      familyName: cloudPerson.family_name || '',
+      organization: cloudPerson.organization || '',
+      title: cloudPerson.title || '',
+      note: cloudPerson.note || '',
+      phones: cloudPerson.phones || [],
+      emails: cloudPerson.emails || [],
+      normalizedPhones,
+      normalizedEmails,
+      primaryPhone: cloudPerson.primary_phone || normalizedPhones[0] || null,
+      primaryEmail: cloudPerson.primary_email || normalizedEmails[0] || null,
+      sourceCaptureIds: cloudPerson.source_capture_ids || [],
+      remoteId: cloudPerson.id,
+      syncStatus: 'synced',
+      synced_at: new Date().toISOString(),
+    };
+
+    if (!existing) {
+      return this.createPerson({
+        ...personData,
+        id: cloudPerson.local_id || this.generatePersonId(),
+        created_at: cloudPerson.created_at || new Date().toISOString(),
+        updated_at: cloudPerson.updated_at || cloudPerson.created_at || new Date().toISOString(),
+      });
+    }
+
+    const db = await this.ensureDb();
+    const merged = {
+      ...existing,
+      ...personData,
+      displayName: personData.displayName || existing.displayName,
+      phones: this.mergeContactValues(existing.phones, personData.phones),
+      emails: this.mergeContactValues(existing.emails, personData.emails),
+      normalizedPhones: Array.from(new Set([...(existing.normalizedPhones || []), ...normalizedPhones])),
+      normalizedEmails: Array.from(new Set([...(existing.normalizedEmails || []), ...normalizedEmails])),
+      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...personData.sourceCaptureIds])),
+      updated_at: cloudPerson.updated_at || existing.updated_at,
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).put(merged);
+      request.onsuccess = () => resolve(merged);
+      request.onerror = () => reject(new Error('Failed to save cloud person'));
+    });
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────

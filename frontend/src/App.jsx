@@ -24,10 +24,74 @@ function App() {
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  /**
+   * Push unsynced local confirmed data to cloud, then pull cloud data not yet on this device.
+   */
+  async function syncConfirmedData() {
+    try {
+      const unsynced = await dbService.getConfirmedEntriesUnsynced();
+      for (const entry of unsynced) {
+        try {
+          const result = await syncService.syncEntry(entry);
+          if (result?.entry?.id) {
+            await dbService.markEntrySynced(entry.id, result.entry.id);
+          }
+        } catch (e) {
+          console.warn('[Login] Failed to push entry:', entry.id, e);
+        }
+      }
+
+      const cloudEntries = await apiService.getCloudEntries();
+      for (const cloudEntry of cloudEntries) {
+        const existsByRemoteId = await dbService.getEntryByRemoteId(cloudEntry.id);
+        if (existsByRemoteId) continue;
+
+        const existingCaptureEntry = cloudEntry.capture_id
+          ? await dbService.getEntryByCaptureId(cloudEntry.capture_id)
+          : null;
+        if (existingCaptureEntry) {
+          if (!existingCaptureEntry.remoteId) {
+            await dbService.markEntrySynced(existingCaptureEntry.id, cloudEntry.id);
+          }
+          continue;
+        }
+
+        const existingByCreatedAt = await dbService.getEntryByCreatedAt(cloudEntry.created_at);
+        if (existingByCreatedAt) {
+          if (!existingByCreatedAt.remoteId) {
+            await dbService.markEntrySynced(existingByCreatedAt.id, cloudEntry.id);
+          }
+        } else {
+          await dbService.addCloudEntry(cloudEntry);
+        }
+      }
+
+      const unsyncedPeople = await dbService.getPeopleUnsynced();
+      const peopleSyncResult = await syncService.syncPeople(unsyncedPeople);
+      if (peopleSyncResult?.people?.length) {
+        for (const cloudPerson of peopleSyncResult.people) {
+          await dbService.upsertCloudPerson(cloudPerson);
+        }
+      }
+
+      const cloudPeople = await apiService.getCloudPeople();
+      for (const cloudPerson of cloudPeople) {
+        await dbService.upsertCloudPerson(cloudPerson);
+      }
+    } catch (e) {
+      console.error('[Sync] Confirmed data sync failed:', e);
+    } finally {
+      setRefreshKey(k => k + 1);
+    }
+  }
+
   useEffect(() => {
     // Restore existing session on load
     authService.init().then(session => {
       setUser(session?.user || null);
+      if (session?.user) {
+        syncConfirmedData();
+      }
     });
 
     // Listen for auth state changes
@@ -39,8 +103,7 @@ function App() {
         // Navigate away from login screen if open
         setScreen(s => s === 'login' ? 'home' : s);
         // Merge local ↔ cloud
-        // eslint-disable-next-line react-hooks/immutability
-        await syncOnLogin();
+        await syncConfirmedData();
         // Sync query history
         await queryHistoryService.syncOnLogin();
       }
@@ -68,58 +131,6 @@ function App() {
       window.history.replaceState({}, '', '/');
     }
     setScreen(newScreen);
-  };
-
-  /**
-   * On login: push any unsynced local entries to cloud, then pull
-   * any cloud entries not yet on this device.
-   */
-  const syncOnLogin = async () => {
-    try {
-      // 1. Push: sync confirmed entries that have no remoteId yet
-      const unsynced = await dbService.getConfirmedEntriesUnsynced();
-      for (const entry of unsynced) {
-        try {
-          const result = await syncService.syncEntry(entry);
-          if (result?.entry?.id) {
-            await dbService.markEntrySynced(entry.id, result.entry.id);
-          }
-        } catch (e) {
-          console.warn('[Login] Failed to push entry:', entry.id, e);
-        }
-      }
-
-      // 2. Pull: fetch cloud entries and add any missing locally
-      const cloudEntries = await apiService.getCloudEntries();
-      for (const cloudEntry of cloudEntries) {
-        const existsByRemoteId = await dbService.getEntryByRemoteId(cloudEntry.id);
-        if (existsByRemoteId) continue;
-
-        const existingCaptureEntry = cloudEntry.capture_id
-          ? await dbService.getEntryByCaptureId(cloudEntry.capture_id)
-          : null;
-        if (existingCaptureEntry) {
-          if (!existingCaptureEntry.remoteId) {
-            await dbService.markEntrySynced(existingCaptureEntry.id, cloudEntry.id);
-          }
-          continue;
-        }
-
-        const existingByCreatedAt = await dbService.getEntryByCreatedAt(cloudEntry.created_at);
-        if (existingByCreatedAt) {
-          if (!existingByCreatedAt.remoteId) {
-            await dbService.markEntrySynced(existingByCreatedAt.id, cloudEntry.id);
-          }
-        } else {
-          await dbService.addCloudEntry(cloudEntry);
-        }
-      }
-    } catch (e) {
-      console.error('[Login] Sync on login failed:', e);
-    } finally {
-      // Refresh HomeScreen to show merged state
-      setRefreshKey(k => k + 1);
-    }
   };
 
   if (screen === 'feedback') {

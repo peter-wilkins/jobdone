@@ -150,6 +150,32 @@ export class APIService {
     }
   }
 
+  async syncPeople(people) {
+    const response = await fetch(`${API_BASE_URL}/api/sync/people`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ people }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'People sync failed');
+    }
+    return response.json();
+  }
+
+  async getCloudPeople() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sync/people`, {
+        headers: authHeader(),
+      });
+      if (!response.ok) return [];
+      const result = await response.json();
+      return result.people || [];
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Save confirmed feedback to cloud
    * @param {{ userId: string, transcript: string, created_at: string }} payload
