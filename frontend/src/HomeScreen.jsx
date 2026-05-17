@@ -26,6 +26,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
+  const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -276,6 +277,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   useEffect(() => {
     const loadJobs = async () => {
       try {
+        const captures = await dbService.getCaptures();
+        setCaptureCount(captures.length);
+
         const inProgressEntries = await dbService.getEntries('recording');
         const readyForReviewEntries = await dbService.getEntries('ready_for_review');
         const failedEntries = await dbService.getEntries('failed');
@@ -628,6 +632,15 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
                   Log in
                 </button>
               )}
+              <button
+                onClick={() => { setMenuOpen(false); onNavigate('inbox'); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center justify-between"
+              >
+                <span>Inbox</span>
+                {captureCount > 0 && (
+                  <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">{captureCount}</span>
+                )}
+              </button>
               <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"

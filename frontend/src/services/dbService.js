@@ -4,10 +4,11 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
+const CAPTURES_STORE = 'captures';
 
 export class DBService {
   constructor() {
@@ -59,6 +60,14 @@ export class DBService {
           const queriesStore = db.createObjectStore(QUERIES_STORE, { keyPath: 'id' });
           queriesStore.createIndex('created_at', 'created_at', { unique: false });
           queriesStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+        }
+
+        // v6: local-only Capture Inbox for pre-confirmation material
+        if (!db.objectStoreNames.contains(CAPTURES_STORE)) {
+          const capturesStore = db.createObjectStore(CAPTURES_STORE, { keyPath: 'id' });
+          capturesStore.createIndex('status', 'status', { unique: false });
+          capturesStore.createIndex('created_at', 'created_at', { unique: false });
+          capturesStore.createIndex('source', 'source', { unique: false });
         }
       };
     });
@@ -477,6 +486,114 @@ export class DBService {
     return `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  generateCaptureId() {
+    return `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // ─── Captures ────────────────────────────────────────────────────────────
+
+  /**
+   * Create a local-only Capture. Captures never sync before Confirmation.
+   *
+   * @param {object} captureData
+   * @param {string} captureData.source - e.g. voice, share_target, manual
+   * @param {Array<object>} captureData.payloads - raw reviewable payload metadata
+   * @param {string} [captureData.status] - lifecycle status, defaults ready_for_review
+   */
+  async createCapture({ source = 'manual', payloads = [], status = 'ready_for_review', ...rest } = {}) {
+    if (!Array.isArray(payloads) || payloads.length === 0) {
+      throw new Error('Cannot create capture without payloads');
+    }
+
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const capture = {
+      id: this.generateCaptureId(),
+      source,
+      payloads,
+      status,
+      errorMessage: null,
+      created_at: now,
+      updated_at: now,
+      ...rest,
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = db
+        .transaction([CAPTURES_STORE], 'readwrite')
+        .objectStore(CAPTURES_STORE)
+        .add(capture);
+
+      request.onsuccess = () => resolve(capture.id);
+      request.onerror = () => reject(new Error('Failed to create capture'));
+    });
+  }
+
+  async getCapture(captureId) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const request = db
+        .transaction([CAPTURES_STORE], 'readonly')
+        .objectStore(CAPTURES_STORE)
+        .get(captureId);
+
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(new Error('Failed to fetch capture'));
+    });
+  }
+
+  async getCaptures(status = null) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([CAPTURES_STORE], 'readonly').objectStore(CAPTURES_STORE);
+      const request = status ? store.index('status').getAll(status) : store.getAll();
+
+      request.onsuccess = () => {
+        const captures = request.result
+          .filter(capture => capture.status !== 'confirmed' && capture.status !== 'rejected')
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        resolve(captures);
+      };
+      request.onerror = () => reject(new Error('Failed to fetch captures'));
+    });
+  }
+
+  async updateCapture(captureId, updates) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([CAPTURES_STORE], 'readwrite').objectStore(CAPTURES_STORE);
+      const getRequest = store.get(captureId);
+
+      getRequest.onsuccess = () => {
+        const capture = getRequest.result;
+        if (!capture) { reject(new Error('Capture not found')); return; }
+
+        Object.assign(capture, updates, { updated_at: new Date().toISOString() });
+        const putRequest = store.put(capture);
+        putRequest.onsuccess = () => resolve(capture);
+        putRequest.onerror = () => reject(new Error('Failed to update capture'));
+      };
+      getRequest.onerror = () => reject(new Error('Failed to fetch capture'));
+    });
+  }
+
+  async rejectCapture(captureId) {
+    const db = await this.ensureDb();
+
+    return new Promise((resolve, reject) => {
+      const request = db
+        .transaction([CAPTURES_STORE], 'readwrite')
+        .objectStore(CAPTURES_STORE)
+        .delete(captureId);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to reject capture'));
+    });
+  }
+
   // ─── Feedback ────────────────────────────────────────────────────────────
 
   async createFeedback(meta, audioBlob) {
@@ -735,10 +852,11 @@ export class DBService {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE], 'readwrite');
+      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE], 'readwrite');
       transaction.objectStore(STORE_NAME).clear();
       transaction.objectStore(QUERIES_STORE).clear();
       transaction.objectStore(FEEDBACK_STORE).clear();
+      transaction.objectStore(CAPTURES_STORE).clear();
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(new Error('Failed to clear database'));

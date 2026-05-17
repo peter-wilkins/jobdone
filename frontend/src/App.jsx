@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HomeScreen } from './HomeScreen';
 import { FeedbackScreen } from './FeedbackScreen';
+import { InboxScreen } from './InboxScreen';
 import { LoginScreen } from './LoginScreen';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
@@ -96,6 +97,10 @@ function App() {
 
   if (screen === 'feedback') {
     return <FeedbackScreen onBack={() => navigateTo('home')} />;
+  }
+
+  if (screen === 'inbox') {
+    return <InboxScreen onBack={() => navigateTo('home')} />;
   }
 
   if (screen === 'login') {
