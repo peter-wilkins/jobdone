@@ -16,46 +16,7 @@ In the Supabase dashboard:
 
 1. Go to **SQL Editor** (left sidebar)
 2. Click **New Query**
-3. Paste this SQL:
-
-```sql
--- Create jobs table
-CREATE TABLE jobs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL,
-  transcript TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  materials TEXT[] DEFAULT '{}',
-  labour_minutes INTEGER,
-  follow_ups TEXT[] DEFAULT '{}',
-  possible_future_work TEXT DEFAULT '',
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-  synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
-  -- Indexes for fast queries
-  CONSTRAINT jobs_user_id_created_at 
-    UNIQUE (user_id, created_at)
-);
-
--- Enable RLS (Row Level Security)
-ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
-
--- Create policy: anyone can read their own jobs
-CREATE POLICY "Users can read own jobs"
-  ON jobs
-  FOR SELECT
-  USING (TRUE);
-
--- Create policy: backend service role can insert
-CREATE POLICY "Backend can insert jobs"
-  ON jobs
-  FOR INSERT
-  WITH CHECK (TRUE);
-
--- Create indexes
-CREATE INDEX jobs_user_id_idx ON jobs(user_id);
-CREATE INDEX jobs_created_at_idx ON jobs(created_at DESC);
-```
+3. Paste the schema from [docs/schema.sql](./schema.sql)
 
 4. Click **Run**
 5. Should see "Success" message

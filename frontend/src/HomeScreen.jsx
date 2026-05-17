@@ -110,6 +110,15 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       const kind = friendlyError(err);
       if (kind === 'offline') setBackendAvailable(false);
       try {
+        if (kind === 'offline') {
+          const queued = await dbService.updateEntry(jobId, {
+            errorMessage: 'offline',
+          });
+          setEntries(prev => prev.map(e =>
+            e.id === jobId ? queued : e
+          ));
+          return;
+        }
         await dbService.markEntryFailed(jobId, kind);
         setEntries(prev => prev.map(e =>
           e.id === jobId ? { ...e, status: 'failed', errorMessage: kind } : e
@@ -158,8 +167,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           if (backendAvailable) {
             processRecording(jobId);
           } else {
-            const failedEntry = await dbService.markEntryFailed(jobId, 'offline');
-            setEntries(prev => prev.map(e => e.id === jobId ? { ...failedEntry, audioBlob: undefined } : e));
+            const queuedEntry = await dbService.updateEntry(jobId, {
+              errorMessage: 'offline',
+            });
+            setEntries(prev => prev.map(e => e.id === jobId ? queuedEntry : e));
           }
         }
       }
@@ -171,7 +182,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
   };
 
-  const OFFLINE_MSG = 'Recall isn\'t available offline. Try again when you\'re back online.';
+  const OFFLINE_MSG = 'Recall isn\'t available right now. Try again in a moment.';
   const isOffline = () => !navigator.onLine || !backendAvailable;
 
   const handleConfirm = async (id) => {
@@ -183,7 +194,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       if (entry.intent === 'QUERY') {
         // Offline: show message, keep entry for later retry
         if (isOffline()) {
-          setError('Recall isn\'t available offline. Your recording has been saved and will be processed when you\'re back online.');
+          setError('Recall isn\'t available right now. Your recording has been saved locally.');
           return;
         }
         await dbService.rejectEntry(id);
@@ -337,9 +348,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           if (isAvailable) {
             processRecording(entry.id);
           } else {
-            await dbService.markEntryFailed(entry.id, 'offline');
             setEntries(prev => prev.map(e =>
-              e.id === entry.id ? { ...e, status: 'failed', errorMessage: 'offline' } : e
+              e.id === entry.id ? { ...e, errorMessage: 'offline' } : e
             ));
           }
         }
@@ -516,12 +526,19 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     const isProcessing = processingIds.has(entry.id);
 
     if (entry.status === 'recording' || isProcessing) {
+      const isQueued = entry.errorMessage === 'offline';
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
           <div className="flex items-center gap-3">
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <div
+              className={`h-4 w-4 border-2 rounded-full ${
+                isQueued ? 'border-gray-300 border-t-transparent' : 'animate-spin border-blue-500 border-t-transparent'
+              }`}
+            />
             <div className="flex-1">
-              <p className="text-sm text-gray-600">Processing...</p>
+              <p className="text-sm text-gray-600">
+                {isQueued ? 'There is an issue with Sync right now but carry on.' : 'Processing...'}
+              </p>
               <p className="text-xs text-gray-400">{entry.audioDuration}s recording</p>
             </div>
           </div>
@@ -540,7 +557,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           </div>
           <p className="text-sm text-gray-600 mb-3">
             {entry.errorMessage === 'offline'
-              ? "Recording saved — tap Retry when you're back online."
+              ? 'There is an issue with Sync right now but carry on.'
               : 'Something went wrong. Tap Retry to try again.'}
           </p>
           <div className="flex gap-3">
@@ -739,7 +756,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       {!backendAvailable && (
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
           <p className="text-sm text-gray-500">
-            You're offline — recordings are saved and will be processed when you're back online.
+            There is an issue with Sync right now but carry on.
           </p>
         </div>
       )}

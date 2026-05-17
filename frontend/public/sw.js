@@ -1,6 +1,6 @@
-const CACHE_VERSION = 'jobdone-app-shell-v1';
+const CACHE_VERSION = 'jobdone-app-shell-v2';
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const ENTRIES_STORE = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -20,6 +20,7 @@ function ensureObjectStore(db, name, options, indexes) {
 
   const store = db.createObjectStore(name, options);
   indexes.forEach(index => store.createIndex(index.name, index.keyPath, { unique: false }));
+  return store;
 }
 
 function openDb() {
@@ -33,19 +34,26 @@ function openDb() {
       db.onversionchange = () => db.close();
       resolve(db);
     };
-    request.onupgradeneeded = event => {
-      const db = event.target.result;
+      request.onupgradeneeded = event => {
+        const db = event.target.result;
 
       if (db.objectStoreNames.contains('jobs')) {
         db.deleteObjectStore('jobs');
       }
 
-      ensureObjectStore(db, ENTRIES_STORE, { keyPath: 'id' }, [
+      const entriesStore = ensureObjectStore(db, ENTRIES_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
         { name: 'created_at', keyPath: 'created_at' },
         { name: 'sync_status', keyPath: 'syncStatus' },
         { name: 'remoteId', keyPath: 'remoteId' },
+        { name: 'captureId', keyPath: 'captureId' },
       ]);
+      if (!entriesStore) {
+        const existingEntriesStore = event.target.transaction.objectStore(ENTRIES_STORE);
+        if (!existingEntriesStore.indexNames.contains('captureId')) {
+          existingEntriesStore.createIndex('captureId', 'captureId', { unique: false });
+        }
+      }
       ensureObjectStore(db, FEEDBACK_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
         { name: 'created_at', keyPath: 'created_at' },
@@ -118,14 +126,14 @@ async function handleShareTarget(request) {
     const capture = buildShareCapture(formData);
 
     if (!capture) {
-      return Response.redirect('/?shareTargetError=unsupported#inbox', 303);
+      return Response.redirect('/share-target?shareTargetError=unsupported', 303);
     }
 
     await addCapture(capture);
-    return Response.redirect('/#inbox', 303);
+    return Response.redirect(`/share-target?id=${capture.id}`, 303);
   } catch (error) {
     console.warn('[PWA] Share target failed:', error);
-    return Response.redirect('/?shareTargetError=failed#inbox', 303);
+    return Response.redirect('/share-target?shareTargetError=failed', 303);
   }
 }
 
@@ -169,8 +177,15 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Share target POST handling
   if (request.method === 'POST' && url.origin === self.location.origin && url.pathname === SHARE_TARGET_PATH) {
     event.respondWith(handleShareTarget(request));
+    return;
+  }
+
+  // Share target GET handling - serve app shell so URL appears valid
+  if (request.method === 'GET' && url.pathname === SHARE_TARGET_PATH) {
+    event.respondWith(caches.match('/index.html'));
     return;
   }
 

@@ -29,6 +29,7 @@ export class SyncService {
           follow_ups: entryData.follow_ups,
           possible_future_work: entryData.possible_future_work,
           created_at: entryData.created_at,
+          captureId: entryData.captureId || entryData.capture_id || null,
         },
       });
 

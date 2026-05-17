@@ -31,6 +31,7 @@ export async function saveEntry(userId, entryData) {
       .insert([
         {
           user_id: userId,
+          capture_id: entryData.captureId ?? entryData.capture_id ?? null,
           transcript: entryData.transcript,
           summary: entryData.summary,
           materials: entryData.materials,
@@ -53,6 +54,68 @@ export async function saveEntry(userId, entryData) {
     return data[0];
   } catch (error) {
     console.error('[DB] Failed to save entry:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Find an existing confirmed entry by Capture ID.
+ */
+export async function getEntryByCaptureId(userId, captureId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('entries')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('capture_id', captureId)
+      .order('synced_at', { ascending: true })
+      .limit(1);
+
+    if (error) {
+      console.error('[DB] Fetch by capture_id error:', error);
+      throw error;
+    }
+
+    return data?.[0] || null;
+  } catch (error) {
+    console.error('[DB] Failed to fetch entry by capture_id:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Find an existing confirmed entry by the local creation timestamp.
+ * This makes cloud sync idempotent for retries from the same device.
+ */
+export async function getEntryByCreatedAt(userId, createdAt) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return null;
+  }
+
+  try {
+    const createdAtIso = new Date(createdAt).toISOString();
+    const { data, error } = await supabase
+      .from('entries')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('created_at', createdAtIso)
+      .order('synced_at', { ascending: true })
+      .limit(1);
+
+    if (error) {
+      console.error('[DB] Fetch by created_at error:', error);
+      throw error;
+    }
+
+    return data?.[0] || null;
+  } catch (error) {
+    console.error('[DB] Failed to fetch entry by created_at:', error.message);
     throw error;
   }
 }

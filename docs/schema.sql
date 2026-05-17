@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS queries CASCADE;
 CREATE TABLE entries (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id              TEXT NOT NULL,
+  capture_id           TEXT,
   transcript           TEXT NOT NULL,
   summary              TEXT NOT NULL,
   embedding            vector(1024),
@@ -28,6 +29,8 @@ CREATE TABLE entries (
 CREATE INDEX entries_user_id_idx         ON entries(user_id);
 CREATE INDEX entries_created_at_idx      ON entries(created_at DESC);
 CREATE INDEX entries_embedding_idx       ON entries USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE UNIQUE INDEX entries_user_id_capture_id_uidx ON entries(user_id, capture_id) WHERE capture_id IS NOT NULL;
+CREATE UNIQUE INDEX entries_user_id_created_at_uidx ON entries(user_id, created_at) WHERE capture_id IS NULL;
 
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_entries" ON entries FOR INSERT WITH CHECK (TRUE);

@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -54,6 +54,12 @@ export class DBService {
           store.createIndex('created_at', 'created_at', { unique: false });
           store.createIndex('sync_status', 'syncStatus', { unique: false });
           store.createIndex('remoteId', 'remoteId', { unique: false });
+          store.createIndex('captureId', 'captureId', { unique: false });
+        } else {
+          const store = event.target.transaction.objectStore(STORE_NAME);
+          if (!store.indexNames.contains('captureId')) {
+            store.createIndex('captureId', 'captureId', { unique: false });
+          }
         }
 
         // v2: feedback store
@@ -101,6 +107,7 @@ export class DBService {
       remoteId: null,
       created_at: new Date().toISOString(),
       synced_at: null,
+      captureId: null,
       transcript: null,
       summary: null,
       materials: [],
@@ -149,6 +156,7 @@ export class DBService {
         entry.follow_ups = follow_ups || [];
         entry.possible_future_work = possible_future_work || '';
         if (intent) entry.intent = intent;
+        entry.errorMessage = null;
         entry.status = 'ready_for_review';
 
         const updateRequest = store.put(entry);
@@ -246,6 +254,49 @@ export class DBService {
       getRequest.onerror = () => {
         reject(new Error('Failed to fetch entry'));
       };
+    });
+  }
+
+  /**
+   * Create an Entry directly from a Capture (for share-target text/link confirms).
+   * Entry is created as 'confirmed' since user already reviewed.
+   * @param {object} params
+   * @param {string} params.captureId - Source capture ID (for reference)
+   * @param {string} params.transcript - Entry transcript
+   * @param {string} params.summary - Entry summary
+   * @param {string} [params.created_at] - Optional timestamp (defaults to now)
+   * @returns {Promise<string>} New entry ID
+   */
+  async createEntryFromCapture({ captureId, transcript, summary, created_at }) {
+    const db = await this.ensureDb();
+
+    const entry = {
+      id: this.generateId(),
+      captureId,
+      transcript,
+      summary,
+      audioBlob: null,
+      audioSize: 0,
+      audioDuration: null,
+      status: 'confirmed',
+      syncStatus: 'pending',
+      remoteId: null,
+      created_at: created_at || new Date().toISOString(),
+      synced_at: null,
+      materials: [],
+      labour_minutes: null,
+      follow_ups: [],
+      possible_future_work: '',
+      intent: 'NOTE',
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.add(entry);
+
+      request.onsuccess = () => resolve(entry.id);
+      request.onerror = () => reject(new Error('Failed to create entry from capture'));
     });
   }
 
@@ -427,6 +478,28 @@ export class DBService {
     });
   }
 
+  /** Find a local entry by its original creation timestamp */
+  async getEntryByCreatedAt(createdAt) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
+      const req = store.index('created_at').get(createdAt);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(new Error('Failed to query entry by created_at'));
+    });
+  }
+
+  /** Find a local entry by its originating Capture ID */
+  async getEntryByCaptureId(captureId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
+      const req = store.index('captureId').get(captureId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(new Error('Failed to query entry by captureId'));
+    });
+  }
+
   /** Add an entry fetched from the cloud into local IndexedDB as confirmed */
   async addCloudEntry(cloudJob) {
     const db = await this.ensureDb();
@@ -447,6 +520,7 @@ export class DBService {
       possible_future_work: cloudJob.possible_future_work || '',
       created_at: cloudJob.created_at,
       synced_at: cloudJob.synced_at,
+      captureId: cloudJob.capture_id || cloudJob.captureId || null,
     };
     return new Promise((resolve, reject) => {
       const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(entry);
@@ -657,7 +731,25 @@ export class DBService {
         const item = req.result;
         if (!item) { reject(new Error('Feedback item not found')); return; }
         item.transcript = transcript;
+        item.errorMessage = null;
         item.status = 'ready_for_review';
+        const put = store.put(item);
+        put.onsuccess = () => resolve(item);
+        put.onerror = () => reject(new Error('Failed to update feedback'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
+    });
+  }
+
+  async updateFeedback(id, updates) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { reject(new Error('Feedback item not found')); return; }
+        Object.assign(item, updates);
         const put = store.put(item);
         put.onsuccess = () => resolve(item);
         put.onerror = () => reject(new Error('Failed to update feedback'));

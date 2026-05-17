@@ -30,9 +30,8 @@ export function FeedbackScreen({ onBack }) {
           if (isAvailable) {
             processFeedback(item.id);
           } else {
-            await dbService.markFeedbackFailed(item.id, 'offline');
             setInProgress(prev => prev.map(f =>
-              f.id === item.id ? { ...f, status: 'failed', errorMessage: 'offline' } : f
+              f.id === item.id ? { ...f, errorMessage: 'offline' } : f
             ));
           }
         }
@@ -74,6 +73,13 @@ export function FeedbackScreen({ onBack }) {
     } catch (err) {
       console.error('Feedback processing error:', err);
       const kind = friendlyError(err);
+      if (kind === 'offline') {
+        const queued = await dbService.updateFeedback(id, { errorMessage: 'offline' });
+        setInProgress(prev => prev.map(f =>
+          f.id === id ? queued : f
+        ));
+        return;
+      }
       await dbService.markFeedbackFailed(id, kind);
       setInProgress(prev => prev.map(f =>
         f.id === id ? { ...f, status: 'failed', errorMessage: kind } : f
@@ -226,8 +232,18 @@ export function FeedbackScreen({ onBack }) {
                 {item.status === 'recording' && (
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-2 mb-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-                      <p className="text-sm text-gray-600">Processing...</p>
+                      <div
+                        className={`h-4 w-4 border-2 rounded-full ${
+                          item.errorMessage === 'offline'
+                            ? 'border-gray-300 border-t-transparent'
+                            : 'animate-spin border-blue-500 border-t-transparent'
+                        }`}
+                      />
+                      <p className="text-sm text-gray-600">
+                        {item.errorMessage === 'offline'
+                          ? 'There is an issue with Sync right now but carry on.'
+                          : 'Processing...'}
+                      </p>
                     </div>
                     <p className="text-xs text-gray-400">{item.audioDuration}s recording</p>
                   </div>
@@ -258,7 +274,7 @@ export function FeedbackScreen({ onBack }) {
                     <p className="text-sm text-gray-400 mb-1">{item.audioDuration}s recording</p>
                     <p className="text-sm text-gray-500 mb-4">
                       {item.errorMessage === 'offline'
-                        ? "Recording saved — tap Retry when you're back online."
+                        ? 'There is an issue with Sync right now but carry on.'
                         : 'Something went wrong. Tap Retry to try again.'}
                     </p>
                     <div className="flex gap-3">

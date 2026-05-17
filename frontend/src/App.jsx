@@ -3,6 +3,7 @@ import { HomeScreen } from './HomeScreen';
 import { FeedbackScreen } from './FeedbackScreen';
 import { InboxScreen } from './InboxScreen';
 import { LoginScreen } from './LoginScreen';
+import { ShareTargetScreen } from './ShareTargetScreen';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
@@ -11,7 +12,10 @@ import { queryHistoryService } from './services/queryHistoryService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
-  return ['feedback', 'inbox', 'login'].includes(hash) ? hash : 'home';
+  const pathname = window.location.pathname;
+  // Share target can be /share-target (SW-served) or #share-target (after redirect)
+  if (pathname === '/share-target') return 'share-target';
+  return ['feedback', 'inbox', 'login', 'share-target'].includes(hash) ? hash : 'home';
 }
 
 function App() {
@@ -60,7 +64,7 @@ function App() {
       window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
     } else if (newScreen === 'home' && screen !== 'home') {
       // Going back to home - replace state
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', '/');
     }
     setScreen(newScreen);
   };
@@ -87,8 +91,25 @@ function App() {
       // 2. Pull: fetch cloud entries and add any missing locally
       const cloudEntries = await apiService.getCloudEntries();
       for (const cloudEntry of cloudEntries) {
-        const exists = await dbService.getEntryByRemoteId(cloudEntry.id);
-        if (!exists) {
+        const existsByRemoteId = await dbService.getEntryByRemoteId(cloudEntry.id);
+        if (existsByRemoteId) continue;
+
+        const existingCaptureEntry = cloudEntry.capture_id
+          ? await dbService.getEntryByCaptureId(cloudEntry.capture_id)
+          : null;
+        if (existingCaptureEntry) {
+          if (!existingCaptureEntry.remoteId) {
+            await dbService.markEntrySynced(existingCaptureEntry.id, cloudEntry.id);
+          }
+          continue;
+        }
+
+        const existingByCreatedAt = await dbService.getEntryByCreatedAt(cloudEntry.created_at);
+        if (existingByCreatedAt) {
+          if (!existingByCreatedAt.remoteId) {
+            await dbService.markEntrySynced(existingByCreatedAt.id, cloudEntry.id);
+          }
+        } else {
           await dbService.addCloudEntry(cloudEntry);
         }
       }
@@ -105,7 +126,11 @@ function App() {
   }
 
   if (screen === 'inbox') {
-    return <InboxScreen onBack={() => navigateTo('home')} shareTargetError={new URLSearchParams(window.location.search).get('shareTargetError')} />;
+    return <InboxScreen onBack={() => navigateTo('home')} />;
+  }
+
+  if (screen === 'share-target') {
+    return <ShareTargetScreen onBack={() => navigateTo('home')} user={user} />;
   }
 
   if (screen === 'login') {

@@ -98,3 +98,4 @@ npm run dev
 - `/src/routes/audio.js` — API endpoints
 - `/src/services/transcription.js` — Whisper integration
 - `/src/services/summarization.js` — Claude integration
+- `docs/schema.sql` — Supabase schema used by sync

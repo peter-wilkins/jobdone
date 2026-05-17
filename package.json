@@ -1,0 +1,14 @@
+{
+  "name": "jobdone",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "npm --prefix backend test",
+    "vercel:build:backend": "vercel --cwd backend build --prod",
+    "vercel:build:frontend": "vercel --cwd frontend build --prod",
+    "deploy:backend": "npm run vercel:build:backend && vercel --cwd backend deploy --prebuilt --prod --yes",
+    "deploy:frontend": "npm run vercel:build:frontend && vercel --cwd frontend deploy --prebuilt --prod --yes",
+    "deploy:prod": "npm run deploy:backend && npm run deploy:frontend"
+  }
+}

@@ -2,6 +2,7 @@
   "name": "JobDone",
   "short_name": "JobDone",
   "description": "A mobile-first voice job log for tradespeople.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

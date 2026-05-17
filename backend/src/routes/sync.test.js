@@ -26,6 +26,7 @@ async function buildApp(deps = {}) {
   await registerSyncRoutes(app, {
     requireAuth: async () => ({ id: 'user-1' }),
     getEntries: async () => [],
+    getEntryByCreatedAt: async () => null,
     deleteUserData: async () => ({ success: true }),
     ...deps,
   });
@@ -88,5 +89,75 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 500);
     assert.equal(saveCalled, false);
     assert.match(JSON.parse(res.body).error, /embedding API down/);
+  });
+
+  test('returns existing entry for duplicate captureId without embedding or inserting', async () => {
+    let embedCalled = false;
+    let saveCalled = false;
+    const existing = { id: 'entry-existing', capture_id: 'capture-1', ...makeEntry() };
+
+    const app = await buildApp({
+      getEntryByCaptureId: async (userId, captureId) => {
+        assert.equal(userId, 'user-1');
+        assert.equal(captureId, 'capture-1');
+        return existing;
+      },
+      embeddingService: {
+        embedText: async () => {
+          embedCalled = true;
+          return makeVector();
+        },
+      },
+      saveEntry: async () => {
+        saveCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: makeEntry({ captureId: 'capture-1' }) }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(embedCalled, false);
+    assert.equal(saveCalled, false);
+    assert.deepEqual(JSON.parse(res.body).entry, existing);
+  });
+
+  test('falls back to created_at when no captureId is provided', async () => {
+    let embedCalled = false;
+    let saveCalled = false;
+    const existing = { id: 'entry-existing', ...makeEntry() };
+
+    const app = await buildApp({
+      getEntryByCreatedAt: async (userId, createdAt) => {
+        assert.equal(userId, 'user-1');
+        assert.equal(createdAt, existing.created_at);
+        return existing;
+      },
+      embeddingService: {
+        embedText: async () => {
+          embedCalled = true;
+          return makeVector();
+        },
+      },
+      saveEntry: async () => {
+        saveCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: makeEntry() }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(embedCalled, false);
+    assert.equal(saveCalled, false);
+    assert.deepEqual(JSON.parse(res.body).entry, existing);
   });
 });

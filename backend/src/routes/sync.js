@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -7,6 +7,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
   const db = {
     saveEntry: deps.saveEntry ?? saveEntry,
     getEntries: deps.getEntries ?? getEntries,
+    getEntryByCaptureId: deps.getEntryByCaptureId ?? getEntryByCaptureId,
+    getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
@@ -29,6 +31,18 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
       if (!entryData.summary || typeof entryData.summary !== 'string') {
         return reply.status(400).send({ error: 'entryData.summary required' });
+      }
+
+      if (!entryData.created_at && !entryData.captureId && !entryData.capture_id) {
+        return reply.status(400).send({ error: 'entryData.created_at or captureId required' });
+      }
+
+      const captureId = entryData.captureId || entryData.capture_id || null;
+      const existing = captureId
+        ? await db.getEntryByCaptureId(user.id, captureId)
+        : await db.getEntryByCreatedAt(user.id, entryData.created_at);
+      if (existing) {
+        return { success: true, entry: existing };
       }
 
       const embedding = await embeddingService.embedText(entryData.summary);
