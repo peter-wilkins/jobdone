@@ -13,6 +13,7 @@ const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
 export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const processingIdsRef = useRef(new Set());
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -64,7 +65,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
    */
   const friendlyError = (err) => {
     const msg = err?.message || '';
-    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
+    if (err?.name === 'AbortError' || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
       return 'offline';
     return 'server';
   };
@@ -73,7 +74,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
    * Process a recording: transcribe and extract
    */
   const processRecording = async (jobId) => {
+    if (processingIdsRef.current.has(jobId)) return;
+
     try {
+      processingIdsRef.current.add(jobId);
       setProcessingIds(prev => new Set([...prev, jobId]));
 
       // Get the entry with audio blob
@@ -100,19 +104,22 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       setEntries(prev =>
         prev.map(e => (e.id === jobId ? updated : e))
       );
-
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
+      setBackendAvailable(true);
     } catch (err) {
       console.error('Recording processing error:', err);
       const kind = friendlyError(err);
-      await dbService.markEntryFailed(jobId, kind);
-      setEntries(prev => prev.map(e =>
-        e.id === jobId ? { ...e, status: 'failed', errorMessage: kind } : e
-      ));
+      if (kind === 'offline') setBackendAvailable(false);
+      try {
+        await dbService.markEntryFailed(jobId, kind);
+        setEntries(prev => prev.map(e =>
+          e.id === jobId ? { ...e, status: 'failed', errorMessage: kind } : e
+        ));
+      } catch (dbErr) {
+        console.error('Failed to mark recording failed:', dbErr);
+        setError('Recording processing failed');
+      }
+    } finally {
+      processingIdsRef.current.delete(jobId);
       setProcessingIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(jobId);
@@ -150,6 +157,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           // Auto-trigger transcription if backend is available
           if (backendAvailable) {
             processRecording(jobId);
+          } else {
+            const failedEntry = await dbService.markEntryFailed(jobId, 'offline');
+            setEntries(prev => prev.map(e => e.id === jobId ? { ...failedEntry, audioBlob: undefined } : e));
           }
         }
       }
@@ -243,6 +253,35 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
   };
 
+  const retryPendingRecordings = async () => {
+    const [recordingEntries, failedEntries] = await Promise.all([
+      dbService.getEntries('recording'),
+      dbService.getEntries('failed'),
+    ]);
+    const retryableFailed = failedEntries.filter(entry =>
+      ['offline', 'Backend unavailable'].includes(entry.errorMessage)
+    );
+
+    for (const entry of [...recordingEntries, ...retryableFailed]) {
+      if (entry.status === 'failed') {
+        await dbService.resetEntryForRetry(entry.id);
+        setEntries(prev => prev.map(e =>
+          e.id === entry.id ? { ...e, status: 'recording', errorMessage: null } : e
+        ));
+      }
+      processRecording(entry.id);
+    }
+  };
+
+  const refreshBackendStatus = async () => {
+    const isAvailable = await apiService.checkHealth();
+    setBackendAvailable(isAvailable);
+    if (isAvailable) {
+      await retryPendingRecordings();
+    }
+    return isAvailable;
+  };
+
   /**
    * Execute a query: call recall, show results, save to history.
    * Used for both confirm-screen queries and re-runs from dropdown.
@@ -291,17 +330,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         setEntries([...allInProgress, ...sortedConfirmed]);
 
         // Check backend availability
-        const isAvailable = await apiService.checkHealth();
-        setBackendAvailable(isAvailable);
+        const isAvailable = await refreshBackendStatus();
 
         // Entries left in 'recording' state from a previous session — auto-retry or mark failed
         for (const entry of inProgressEntries) {
           if (isAvailable) {
             processRecording(entry.id);
           } else {
-            await dbService.markEntryFailed(entry.id, 'Backend unavailable');
+            await dbService.markEntryFailed(entry.id, 'offline');
             setEntries(prev => prev.map(e =>
-              e.id === entry.id ? { ...e, status: 'failed', errorMessage: 'Backend unavailable' } : e
+              e.id === entry.id ? { ...e, status: 'failed', errorMessage: 'offline' } : e
             ));
           }
         }
@@ -332,6 +370,28 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
+
+  useEffect(() => {
+    const handlePossibleReconnect = () => {
+      refreshBackendStatus().catch(err => {
+        console.warn('[Online] Backend refresh failed:', err);
+      });
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handlePossibleReconnect();
+    };
+
+    window.addEventListener('online', handlePossibleReconnect);
+    window.addEventListener('focus', handlePossibleReconnect);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('online', handlePossibleReconnect);
+      window.removeEventListener('focus', handlePossibleReconnect);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Update recording time display
   useEffect(() => {

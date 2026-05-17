@@ -8,10 +8,16 @@ function payloadLabel(payload) {
   return payload.title || payload.type || 'Payload';
 }
 
-export function InboxScreen({ onBack }) {
+function shareErrorMessage(error) {
+  if (error === 'unsupported') return 'That share type is not supported yet. Share text or a link.';
+  if (error === 'failed') return 'Share could not be saved. Try again.';
+  return null;
+}
+
+export function InboxScreen({ onBack, shareTargetError = null }) {
   const [captures, setCaptures] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(() => shareErrorMessage(shareTargetError));
 
   useEffect(() => {
     let cancelled = false;

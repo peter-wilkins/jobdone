@@ -1,4 +1,11 @@
 const CACHE_VERSION = 'jobdone-app-shell-v1';
+const DB_NAME = 'plumber-job-log';
+const DB_VERSION = 6;
+const ENTRIES_STORE = 'entries';
+const FEEDBACK_STORE = 'feedback';
+const QUERIES_STORE = 'queries';
+const CAPTURES_STORE = 'captures';
+const SHARE_TARGET_PATH = '/share-target';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -7,6 +14,120 @@ const APP_SHELL = [
   '/pwa-icon-192.png',
   '/pwa-icon-512.png'
 ];
+
+function ensureObjectStore(db, name, options, indexes) {
+  if (db.objectStoreNames.contains(name)) return;
+
+  const store = db.createObjectStore(name, options);
+  indexes.forEach(index => store.createIndex(index.name, index.keyPath, { unique: false }));
+}
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => reject(new Error(request.error?.message || 'Failed to open database'));
+    request.onblocked = () => reject(new Error('Database upgrade blocked'));
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    request.onupgradeneeded = event => {
+      const db = event.target.result;
+
+      if (db.objectStoreNames.contains('jobs')) {
+        db.deleteObjectStore('jobs');
+      }
+
+      ensureObjectStore(db, ENTRIES_STORE, { keyPath: 'id' }, [
+        { name: 'status', keyPath: 'status' },
+        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'sync_status', keyPath: 'syncStatus' },
+        { name: 'remoteId', keyPath: 'remoteId' },
+      ]);
+      ensureObjectStore(db, FEEDBACK_STORE, { keyPath: 'id' }, [
+        { name: 'status', keyPath: 'status' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, QUERIES_STORE, { keyPath: 'id' }, [
+        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'syncStatus', keyPath: 'syncStatus' },
+      ]);
+      ensureObjectStore(db, CAPTURES_STORE, { keyPath: 'id' }, [
+        { name: 'status', keyPath: 'status' },
+        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'source', keyPath: 'source' },
+      ]);
+    };
+  });
+}
+
+function addCapture(capture) {
+  return openDb().then(db => new Promise((resolve, reject) => {
+    const request = db
+      .transaction([CAPTURES_STORE], 'readwrite')
+      .objectStore(CAPTURES_STORE)
+      .add(capture);
+
+    request.onsuccess = () => resolve(capture.id);
+    request.onerror = () => reject(new Error('Failed to create capture'));
+  }));
+}
+
+function getFormValue(formData, field) {
+  const value = formData.get(field);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function buildShareCapture(formData) {
+  const title = getFormValue(formData, 'title');
+  const text = getFormValue(formData, 'text');
+  const url = getFormValue(formData, 'url');
+  const hasFiles = Array.from(formData.values()).some(value =>
+    typeof File !== 'undefined' && value instanceof File && value.size > 0
+  );
+
+  if (hasFiles || (!title && !text && !url)) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const payloadType = url ? 'link' : 'text';
+
+  return {
+    id: `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    source: 'share_target',
+    status: 'ready_for_review',
+    errorMessage: null,
+    payloads: [{
+      type: payloadType,
+      title,
+      text,
+      url,
+      received_at: now,
+    }],
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+async function handleShareTarget(request) {
+  try {
+    const formData = await request.formData();
+    const capture = buildShareCapture(formData);
+
+    if (!capture) {
+      return Response.redirect('/?shareTargetError=unsupported#inbox', 303);
+    }
+
+    await addCapture(capture);
+    return Response.redirect('/#inbox', 303);
+  } catch (error) {
+    console.warn('[PWA] Share target failed:', error);
+    return Response.redirect('/?shareTargetError=failed#inbox', 303);
+  }
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -47,6 +168,11 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
+
+  if (request.method === 'POST' && url.origin === self.location.origin && url.pathname === SHARE_TARGET_PATH) {
+    event.respondWith(handleShareTarget(request));
+    return;
+  }
 
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
     return;

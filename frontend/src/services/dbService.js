@@ -23,11 +23,19 @@ export class DBService {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
-        reject(new Error('Failed to open database'));
+        reject(new Error(request.error?.message || 'Failed to open database'));
+      };
+
+      request.onblocked = () => {
+        reject(new Error('Database upgrade blocked. Close other JobDone tabs and reload.'));
       };
 
       request.onsuccess = () => {
         this.db = request.result;
+        this.db.onversionchange = () => {
+          this.db.close();
+          this.db = null;
+        };
         resolve(this.db);
       };
 

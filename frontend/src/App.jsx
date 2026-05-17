@@ -9,8 +9,13 @@ import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
 import { queryHistoryService } from './services/queryHistoryService';
 
+function screenFromLocation() {
+  const hash = window.location.hash.replace('#', '').split('?')[0];
+  return ['feedback', 'inbox', 'login'].includes(hash) ? hash : 'home';
+}
+
 function App() {
-  const [screen, setScreen] = useState('home');
+  const [screen, setScreen] = useState(screenFromLocation);
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -42,7 +47,7 @@ function App() {
   // Handle browser back button
   useEffect(() => {
     const handlePopState = () => {
-      setScreen('home');
+      setScreen(screenFromLocation());
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -100,7 +105,7 @@ function App() {
   }
 
   if (screen === 'inbox') {
-    return <InboxScreen onBack={() => navigateTo('home')} />;
+    return <InboxScreen onBack={() => navigateTo('home')} shareTargetError={new URLSearchParams(window.location.search).get('shareTargetError')} />;
   }
 
   if (screen === 'login') {

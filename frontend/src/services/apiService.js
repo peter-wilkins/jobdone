@@ -5,6 +5,19 @@
 import { authService } from './authService.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const HEALTH_CHECK_TIMEOUT_MS = 3000;
+const AUDIO_UPLOAD_TIMEOUT_MS = 60000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = HEALTH_CHECK_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 function authHeader() {
   const token = authService.getToken();
@@ -17,7 +30,7 @@ export class APIService {
    */
   async checkHealth() {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`);
+      const response = await fetchWithTimeout(`${API_BASE_URL}/health`);
       return response.ok;
     } catch (error) {
       console.warn('Backend health check failed:', error);
@@ -46,10 +59,10 @@ export class APIService {
 
       console.log('[API] Sending to backend:', `${API_BASE_URL}/api/transcribe`);
 
-      const response = await fetch(`${API_BASE_URL}/api/transcribe`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/api/transcribe`, {
         method: 'POST',
         body: formData,
-      });
+      }, AUDIO_UPLOAD_TIMEOUT_MS);
 
       console.log('[API] Response status:', response.status);
 
