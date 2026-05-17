@@ -53,6 +53,46 @@ npm start
 
 Server runs at http://localhost:3000
 
+## Deploy to Vercel
+
+The backend is configured for Vercel serverless deployment from `backend/`.
+
+### 1. Create a Vercel project
+
+Create/import a Vercel project with `backend` as the root directory. Connect the Vercel project to this GitHub repo if you want Vercel to deploy automatically on push.
+
+### 2. Link local project
+
+Run this once locally from `backend/`:
+
+```bash
+vercel link
+```
+
+Do not commit `.vercel/project.json`.
+
+### 3. Add Vercel environment variables
+
+Add production env vars in Vercel project settings:
+
+```text
+DEEPGRAM_API_KEY
+ANTHROPIC_API_KEY
+VOYAGE_API_KEY
+SUPABASE_URL
+SUPABASE_KEY
+NODE_ENV=production
+USE_MOCK_APIS=false
+```
+
+### 4. Deploy
+
+Deploy from Vercel's Git integration, or run this from `backend/`:
+
+```bash
+vercel deploy --prod
+```
+
 ## API Endpoints
 
 ### GET /health
