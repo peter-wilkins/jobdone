@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const appUrl = import.meta.env.VITE_APP_URL;
 
 // Supabase client — null if env vars not set (auth disabled)
 export const supabase = supabaseUrl && supabaseAnonKey
@@ -35,9 +36,10 @@ class AuthService {
    */
   async sendMagicLink(email) {
     if (!supabase) throw new Error('Auth not configured');
+    const redirectTo = appUrl || window.location.origin;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: redirectTo },
     });
     if (error) throw error;
   }

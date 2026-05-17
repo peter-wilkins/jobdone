@@ -1,15 +1,23 @@
-import { saveEntry, getEntries, updateEntryEmbedding, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
-export async function registerSyncRoutes(fastify) {
+export async function registerSyncRoutes(fastify, deps = {}) {
+  const auth = deps.requireAuth ?? requireAuth;
+  const db = {
+    saveEntry: deps.saveEntry ?? saveEntry,
+    getEntries: deps.getEntries ?? getEntries,
+    deleteUserData: deps.deleteUserData ?? deleteUserData,
+  };
+  const embeddingService = deps.embeddingService ?? getEmbeddingService();
+
   /**
    * POST /api/sync/save
    * Save a confirmed entry to cloud.
    * userId is taken from the validated JWT — not from the request body.
    */
   fastify.post('/api/sync/save', async (request, reply) => {
-    const user = await requireAuth(request, reply);
+    const user = await auth(request, reply);
     if (!user) return;
 
     try {
@@ -19,20 +27,16 @@ export async function registerSyncRoutes(fastify) {
         return reply.status(400).send({ error: 'entryData required' });
       }
 
-      const saved = await saveEntry(user.id, entryData);
-
-      // Fire embedding in the background — failures must not block the response.
-      if (saved?.id && entryData.summary) {
-        (async () => {
-          try {
-            const svc = getEmbeddingService();
-            const vector = await svc.embedText(entryData.summary);
-            await updateEntryEmbedding(saved.id, vector, EMBEDDING_MODEL);
-          } catch (embErr) {
-            console.error('[Sync] Embedding failed (non-fatal):', embErr.message);
-          }
-        })();
+      if (!entryData.summary || typeof entryData.summary !== 'string') {
+        return reply.status(400).send({ error: 'entryData.summary required' });
       }
+
+      const embedding = await embeddingService.embedText(entryData.summary);
+      const saved = await db.saveEntry(user.id, {
+        ...entryData,
+        embedding,
+        embedding_model: EMBEDDING_MODEL,
+      });
 
       return { success: true, entry: saved };
     } catch (error) {
@@ -46,11 +50,11 @@ export async function registerSyncRoutes(fastify) {
    * Fetch all entries for the authenticated user.
    */
   fastify.get('/api/sync/entries', async (request, reply) => {
-    const user = await requireAuth(request, reply);
+    const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      const entries = await getEntries(user.id);
+      const entries = await db.getEntries(user.id);
       return { success: true, entries };
     } catch (error) {
       console.error('Sync fetch error:', error);
@@ -63,11 +67,11 @@ export async function registerSyncRoutes(fastify) {
    * GDPR right to erasure — deletes all entries, queries, and feedback for the user.
    */
   fastify.delete('/api/user/data', async (request, reply) => {
-    const user = await requireAuth(request, reply);
+    const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      await deleteUserData(user.id);
+      await db.deleteUserData(user.id);
       return { success: true };
     } catch (error) {
       console.error('Delete user data error:', error);

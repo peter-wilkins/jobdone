@@ -11,6 +11,11 @@ const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+function toVectorLiteral(embedding) {
+  if (!Array.isArray(embedding)) return embedding ?? null;
+  return `[${embedding.join(',')}]`;
+}
+
 /**
  * Save a confirmed entry to Supabase
  */
@@ -33,7 +38,7 @@ export async function saveEntry(userId, entryData) {
           follow_ups: entryData.follow_ups,
           possible_future_work: entryData.possible_future_work,
           created_at: new Date(entryData.created_at).toISOString(),
-          embedding: entryData.embedding ?? null,
+          embedding: toVectorLiteral(entryData.embedding),
           embedding_model: entryData.embedding_model ?? null,
         },
       ])
