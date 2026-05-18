@@ -137,65 +137,89 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     }
   };
 
-  const handleRecord = async () => {
+  const startRecording = async () => {
     if (isStartingRecording || isStoppingRecording) return;
 
     try {
       setError(null);
-
-      if (!isRecording) {
-        setIsStartingRecording(true);
-        await audioService.startRecording();
-        setIsRecording(true);
-        setRecordingTime(0);
-      } else {
-        if (audioService.getStatus().elapsedMs < MIN_STOP_AFTER_MS) {
-          return;
-        }
-
-        // Stop recording and save to DB
-        setIsStoppingRecording(true);
-        setIsRecording(false);
-        const audioData = await audioService.stopRecording();
-
-        if (audioData) {
-          if (audioData.duration < MIN_RECORDING_SECONDS || audioData.size === 0) {
-            setError('Recording was too short. Hold the mic a little longer.');
-            return;
-          }
-
-          const jobId = await dbService.createEntry(
-            {
-              duration: audioData.duration,
-            },
-            audioData.blob
-          );
-
-          // Add to entries list (at the top, as in-progress)
-          const newEntry = await dbService.getEntry(jobId);
-          setEntries(prev => [newEntry, ...prev]);
-
-          // Auto-trigger transcription if backend is available
-          if (backendAvailable) {
-            processRecording(jobId);
-          } else {
-            const queuedEntry = await dbService.updateEntry(jobId, {
-              errorMessage: 'offline',
-            });
-            setEntries(prev => prev.map(e => e.id === jobId ? queuedEntry : e));
-          }
-        }
-      }
+      setIsStartingRecording(true);
+      await audioService.startRecording();
+      setIsRecording(true);
+      setRecordingTime(0);
     } catch (err) {
-      console.error('Recording error:', err);
+      console.error('Recording start error:', err);
       setError(err.message);
       setIsRecording(false);
-      setIsStartingRecording(false);
-      setIsStoppingRecording(false);
       audioService.cancelRecording();
     } finally {
       setIsStartingRecording(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording || isStoppingRecording) return;
+
+    try {
+      setError(null);
+
+      if (audioService.getStatus().elapsedMs < MIN_STOP_AFTER_MS) {
+        return;
+      }
+
+      setIsStoppingRecording(true);
+      setIsRecording(false);
+      const audioData = await audioService.stopRecording();
+
+      if (!audioData) return;
+
+      if (audioData.duration < MIN_RECORDING_SECONDS || audioData.size === 0) {
+        setError('Recording was too short. Hold the mic a little longer.');
+        return;
+      }
+
+      const jobId = await dbService.createEntry(
+        {
+          duration: audioData.duration,
+        },
+        audioData.blob
+      );
+
+      // Add to entries list (at the top, as in-progress)
+      const newEntry = await dbService.getEntry(jobId);
+      setEntries(prev => [newEntry, ...prev]);
+
+      // Auto-trigger transcription if backend is available
+      if (backendAvailable) {
+        processRecording(jobId);
+      } else {
+        const queuedEntry = await dbService.updateEntry(jobId, {
+          errorMessage: 'offline',
+        });
+        setEntries(prev => prev.map(e => e.id === jobId ? queuedEntry : e));
+      }
+    } catch (err) {
+      console.error('Recording stop error:', err);
+      setError(err.message);
+      setIsRecording(false);
+      audioService.cancelRecording();
+    } finally {
       setIsStoppingRecording(false);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (!isRecording && !isStartingRecording) return;
+
+    try {
+      setError(null);
+      audioService.cancelRecording();
+    } catch (err) {
+      console.error('Recording cancel error:', err);
+    } finally {
+      setIsRecording(false);
+      setIsStartingRecording(false);
+      setIsStoppingRecording(false);
+      setRecordingTime(0);
     }
   };
 
@@ -853,25 +877,49 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         )}
       </div>
 
-      {/* Floating mic button - bottom right, 50% larger (w-15 h-15 = 60px) */}
-      <button
-        onClick={handleRecord}
-        className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
-        title={isStartingRecording ? 'Starting recording' : isStoppingRecording ? 'Stopping recording' : isRecording ? 'Stop recording' : 'Start recording'}
-        disabled={isLoading || isStartingRecording || isStoppingRecording}
-      >
-        {isStartingRecording || isStoppingRecording ? (
-          <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        ) : isRecording ? (
-          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-        ) : (
-          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
-          </svg>
-        )}
-      </button>
+      {isRecording ? (
+        <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
+          <button
+            onClick={cancelRecording}
+            className="w-12 h-12 flex items-center justify-center bg-gray-500 text-white rounded-full shadow-lg hover:opacity-90 transition"
+            title="Cancel recording"
+            disabled={isStoppingRecording}
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+          <button
+            onClick={stopRecording}
+            className="w-14 h-14 flex items-center justify-center bg-red-500 text-white rounded-full shadow-lg hover:opacity-90 transition disabled:opacity-70"
+            title="Stop and review"
+            disabled={isStoppingRecording}
+          >
+            {isStoppingRecording ? (
+              <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            )}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={startRecording}
+          className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
+          title={isStartingRecording ? 'Starting recording' : 'Start recording'}
+          disabled={isLoading || isStartingRecording || isStoppingRecording}
+        >
+          {isStartingRecording || isStoppingRecording ? (
+            <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+            </svg>
+          )}
+        </button>
+      )}
     </div>
   );
 }
