@@ -201,7 +201,7 @@ async function buildShareCapture(formData) {
     return {
       id: `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       source: 'share_target',
-      kind: 'person',
+      kind: 'contact',
       status: 'ready_for_review',
       errorMessage: null,
       payloads,

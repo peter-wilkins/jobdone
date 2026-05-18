@@ -5,7 +5,7 @@ A mobile-first voice log for self-employed tradespeople that externalises operat
 ## Language
 
 **Capture**:
-Raw inbound material awaiting review — voice, text, shared contact, photo, or link — that may become an Entry, Person update, or both after Confirmation.
+Raw inbound material awaiting review — voice, text, shared contact, photo, or link — that may become an Entry, Contact update, or both after Confirmation.
 _Avoid_: Draft, Item, Import, Upload
 
 **Entry**:
@@ -105,7 +105,7 @@ _Avoid_: Search bar, Input field, Record button
 - Captures are local-only before Confirmation; only confirmed outcomes sync
 - A **Capture** is created only after all required payloads are stored locally; partial Captures are not valid
 - Unsupported payloads cause the whole shared Capture to fail before creation in MVP
-- First PWA/share-target implementation slice is app-shell installability plus text/link shared Captures; Photos and vCard/People follow
+- First PWA/share-target implementation slice is app-shell installability plus text/link shared Captures; Photos and vCard/Contacts follow
 - A **Contact** can be referenced by Captures and Entries, but does not imply billing ownership or a Customer model
 - Sharing a contact creates or updates a deduplicated **Contact** and creates a **Capture** that references that Contact
 - vCard is the canonical shared contact payload; text-only contact shares are parsed best-effort and reviewed
@@ -130,7 +130,7 @@ _Avoid_: Search bar, Input field, Record button
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
 - Transcripts are excluded from MVP Share Packs because they may contain incidental personal data
-- A **Share Pack** never grants access to the Timeline, People, Queries, audio blobs, or future Entries
+- A **Share Pack** never grants access to the Timeline, Contacts, Queries, audio blobs, or future Entries
 - Share Packs are shared link-first in MVP so the user can send them through WhatsApp, SMS, email, or another native share channel
 - Creating a Share Pack requires login because the link is cloud-backed and must be owner-revocable
 - Visible Recall results enter Share Pack preview selected by default; the user removes sensitive Entries before creating the share link. Hidden, unloaded, or future matches are never auto-selected.

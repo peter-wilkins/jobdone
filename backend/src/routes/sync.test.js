@@ -163,13 +163,55 @@ describe('SyncRoute POST /api/sync/save', () => {
   });
 });
 
-describe('SyncRoute People sync', () => {
-  test('saves local-first people for authenticated user', async () => {
+describe('SyncRoute Contacts sync', () => {
+  test('saves local-first contacts for authenticated user', async () => {
     let savedArgs;
     const app = await buildApp({
-      savePerson: async (userId, person) => {
-        savedArgs = { userId, person };
-        return { id: 'person-cloud-1', user_id: userId, local_id: person.localId };
+      savePerson: async (userId, contact) => {
+        savedArgs = { userId, contact };
+        return { id: 'contact-cloud-1', user_id: userId, local_id: contact.localId };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contacts: [{ localId: 'contact-local-1', displayName: 'Ann Smith' }],
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(savedArgs.userId, 'user-1');
+    assert.equal(savedArgs.contact.displayName, 'Ann Smith');
+    assert.equal(JSON.parse(res.body).contacts[0].local_id, 'contact-local-1');
+  });
+
+  test('fetches cloud contacts for authenticated user', async () => {
+    const cloudContacts = [{ id: 'contact-cloud-1', display_name: 'Ann Smith' }];
+    const app = await buildApp({
+      getPeople: async (userId) => {
+        assert.equal(userId, 'user-1');
+        return cloudContacts;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sync/contacts',
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).contacts, cloudContacts);
+  });
+
+  test('keeps legacy people sync route compatible', async () => {
+    let savedArgs;
+    const app = await buildApp({
+      savePerson: async (userId, contact) => {
+        savedArgs = { userId, contact };
+        return { id: 'contact-cloud-1', user_id: userId, local_id: contact.localId };
       },
     });
 
@@ -178,31 +220,12 @@ describe('SyncRoute People sync', () => {
       url: '/api/sync/people',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        people: [{ localId: 'person-local-1', displayName: 'Ann Smith' }],
+        people: [{ localId: 'legacy-person-local-1', displayName: 'Ann Smith' }],
       }),
     });
 
     assert.equal(res.statusCode, 200);
-    assert.equal(savedArgs.userId, 'user-1');
-    assert.equal(savedArgs.person.displayName, 'Ann Smith');
-    assert.equal(JSON.parse(res.body).people[0].local_id, 'person-local-1');
-  });
-
-  test('fetches cloud people for authenticated user', async () => {
-    const cloudPeople = [{ id: 'person-cloud-1', display_name: 'Ann Smith' }];
-    const app = await buildApp({
-      getPeople: async (userId) => {
-        assert.equal(userId, 'user-1');
-        return cloudPeople;
-      },
-    });
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/sync/people',
-    });
-
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(JSON.parse(res.body).people, cloudPeople);
+    assert.equal(savedArgs.contact.displayName, 'Ann Smith');
+    assert.equal(JSON.parse(res.body).people[0].local_id, 'legacy-person-local-1');
   });
 });

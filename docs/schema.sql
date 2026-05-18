@@ -34,7 +34,8 @@ CREATE POLICY "backend_insert_entries" ON entries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_entries" ON entries FOR SELECT USING (TRUE);
 CREATE POLICY "backend_update_entries" ON entries FOR UPDATE USING (TRUE);
 
--- 4. people (local-first contacts created from confirmed Captures)
+-- 4. people (local-first Contacts created from confirmed Captures)
+-- The table name stays "people" for compatibility with deployed clients; product language is Contacts.
 CREATE TABLE people (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id            TEXT NOT NULL,

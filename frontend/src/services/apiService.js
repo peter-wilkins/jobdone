@@ -3,6 +3,7 @@
  */
 
 import { authService } from './authService.js';
+import { normalizeRecallEntry } from './entryMapper.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
@@ -150,30 +151,38 @@ export class APIService {
     }
   }
 
-  async syncPeople(people) {
-    const response = await fetch(`${API_BASE_URL}/api/sync/people`, {
+  async syncContacts(contacts) {
+    const response = await fetch(`${API_BASE_URL}/api/sync/contacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ people }),
+      body: JSON.stringify({ contacts }),
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'People sync failed');
+      throw new Error(error.error || 'Contacts sync failed');
     }
     return response.json();
   }
 
-  async getCloudPeople() {
+  async syncPeople(people) {
+    return this.syncContacts(people);
+  }
+
+  async getCloudContacts() {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sync/people`, {
+      const response = await fetch(`${API_BASE_URL}/api/sync/contacts`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
       const result = await response.json();
-      return result.people || [];
+      return result.contacts || result.people || [];
     } catch {
       return [];
     }
+  }
+
+  async getCloudPeople() {
+    return this.getCloudContacts();
   }
 
   /**
@@ -271,7 +280,7 @@ export class APIService {
 
       const result = await response.json();
       console.log('[API] Recall successful, entries:', result.entries?.length || 0);
-      return result.entries || [];
+      return (result.entries || []).map(normalizeRecallEntry);
     } catch (error) {
       console.error('Recall error:', error);
       throw error;

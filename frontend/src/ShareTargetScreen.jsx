@@ -52,7 +52,7 @@ async function loadContactDrafts(capture) {
       if (seen.has(identity)) continue;
       seen.add(identity);
 
-      const matches = await dbService.findPeopleByContactKeys(candidate);
+      const matches = await dbService.findContactsByContactKeys(candidate);
       const existing = matches[0] || null;
       drafts.push({
         ...candidate,
@@ -96,7 +96,7 @@ export function ShareTargetScreen({ onBack, user }) {
             setError('Capture not found');
           } else {
             setCapture(row);
-            if ((row.kind || inferCaptureKind(row)) === 'person') {
+            if (isContactCapture(row)) {
               const drafts = await loadContactDrafts(row);
               if (!cancelled) setContactDrafts(drafts);
             } else {
@@ -123,15 +123,14 @@ export function ShareTargetScreen({ onBack, user }) {
     setError(null);
 
     try {
-      const captureKind = capture.kind || inferCaptureKind(capture);
-      if (captureKind === 'person') {
+      if (isContactCapture(capture)) {
         const drafts = contactDrafts.length > 0 ? contactDrafts : await loadContactDrafts(capture);
         if (drafts.length === 0) {
           throw new Error('No contact payload in capture');
         }
 
         for (const draft of drafts) {
-          await dbService.upsertPerson({
+          await dbService.upsertContact({
             displayName: draft.displayName,
             givenName: draft.givenName,
             familyName: draft.familyName,
@@ -182,7 +181,7 @@ export function ShareTargetScreen({ onBack, user }) {
       goHome();
     } catch (err) {
       console.error('Failed to confirm capture:', err);
-      setError('Failed to save entry');
+      setError(isContactCapture(capture) ? 'Failed to save contact' : 'Failed to save entry');
       setIsProcessing(false);
     }
   };
@@ -253,9 +252,9 @@ export function ShareTargetScreen({ onBack, user }) {
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                 Review
               </span>
-              {(capture.kind || inferCaptureKind(capture)) === 'person' && (
+              {isContactCapture(capture) && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                  Person
+                  Contact
                 </span>
               )}
               <span className="text-xs text-gray-400">
@@ -263,7 +262,7 @@ export function ShareTargetScreen({ onBack, user }) {
               </span>
             </div>
 
-            {(capture.kind || inferCaptureKind(capture)) === 'person' && contactDrafts.some(draft => draft.conflicts.length > 0) && (
+            {isContactCapture(capture) && contactDrafts.some(draft => draft.conflicts.length > 0) && (
               <div className="rounded border border-amber-200 bg-amber-50 p-4">
                 <p className="text-sm font-medium text-amber-900 mb-2">Potential updates found</p>
                 <p className="text-sm text-amber-800">
@@ -273,7 +272,7 @@ export function ShareTargetScreen({ onBack, user }) {
             )}
 
             <div className="space-y-4">
-              {(capture.kind || inferCaptureKind(capture)) === 'person'
+              {isContactCapture(capture)
                 ? contactDrafts.map((draft, index) => (
                     <div key={`${capture.id}-${draft.identity}-${index}`} className="rounded border border-gray-200 p-4">
                       <div className="flex items-center justify-between gap-3 mb-2">
@@ -312,7 +311,7 @@ export function ShareTargetScreen({ onBack, user }) {
 
             <div className="pt-4">
               <p className="text-sm text-gray-500 mb-4">
-                {(capture.kind || inferCaptureKind(capture)) === 'person'
+                {isContactCapture(capture)
                   ? 'Save these contacts?'
                   : 'Save this to your Timeline?'}
               </p>
@@ -324,7 +323,7 @@ export function ShareTargetScreen({ onBack, user }) {
                 >
                   {isProcessing
                     ? 'Saving...'
-                    : (capture.kind || inferCaptureKind(capture)) === 'person'
+                    : isContactCapture(capture)
                       ? 'Save Contacts'
                       : 'Confirm'}
                 </button>
@@ -345,7 +344,7 @@ export function ShareTargetScreen({ onBack, user }) {
 }
 
 function shareErrorMessage(error) {
-  if (error === 'unsupported') return 'That share type is not supported yet. Share text or a link.';
+  if (error === 'unsupported') return 'That share type is not supported yet. Share text, a link, or a contact.';
   if (error === 'failed') return 'Share could not be saved. Try again.';
   return null;
 }
@@ -353,5 +352,10 @@ function shareErrorMessage(error) {
 function inferCaptureKind(capture) {
   return (capture.payloads || []).some(payload =>
     ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard'
-  ) ? 'person' : 'entry';
+  ) ? 'contact' : 'entry';
+}
+
+function isContactCapture(capture) {
+  const kind = capture?.kind || inferCaptureKind(capture);
+  return kind === 'contact' || kind === 'person';
 }

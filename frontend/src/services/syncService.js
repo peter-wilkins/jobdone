@@ -37,29 +37,33 @@ export class SyncService {
     }
   }
 
-  async syncPeople(people) {
-    if (!authService.isLoggedIn() || !people.length) return null;
+  async syncContacts(contacts) {
+    if (!authService.isLoggedIn() || !contacts.length) return null;
 
-    const response = await apiService.syncPeople(people.map(person => ({
-      id: person.id,
-      localId: person.id,
-      status: person.status,
-      displayName: person.displayName,
-      givenName: person.givenName,
-      familyName: person.familyName,
-      organization: person.organization,
-      title: person.title,
-      note: person.note,
-      phones: person.phones,
-      emails: person.emails,
-      normalizedPhones: person.normalizedPhones,
-      normalizedEmails: person.normalizedEmails,
-      primaryPhone: person.primaryPhone,
-      primaryEmail: person.primaryEmail,
-      sourceCaptureIds: person.sourceCaptureIds,
-      created_at: person.created_at,
+    const response = await apiService.syncContacts(contacts.map(contact => ({
+      id: contact.id,
+      localId: contact.id,
+      status: contact.status,
+      displayName: contact.displayName,
+      givenName: contact.givenName,
+      familyName: contact.familyName,
+      organization: contact.organization,
+      title: contact.title,
+      note: contact.note,
+      phones: contact.phones,
+      emails: contact.emails,
+      normalizedPhones: contact.normalizedPhones,
+      normalizedEmails: contact.normalizedEmails,
+      primaryPhone: contact.primaryPhone,
+      primaryEmail: contact.primaryEmail,
+      sourceCaptureIds: contact.sourceCaptureIds,
+      created_at: contact.created_at,
     })));
     return response;
+  }
+
+  async syncPeople(people) {
+    return this.syncContacts(people);
   }
 }
 

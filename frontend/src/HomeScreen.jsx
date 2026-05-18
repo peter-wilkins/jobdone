@@ -708,10 +708,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
                 )}
               </button>
               <button
-                onClick={() => { setMenuOpen(false); onNavigate('people'); }}
+                onClick={() => { setMenuOpen(false); onNavigate('contacts'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
-                People
+                Contacts
               </button>
               <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}

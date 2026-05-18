@@ -91,9 +91,9 @@ export function InboxScreen({ onBack }) {
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                         Review
                       </span>
-                      {(capture.kind === 'person' || (capture.payloads || []).some(payload => ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard')) && (
+                      {((capture.kind === 'contact' || capture.kind === 'person') || (capture.payloads || []).some(payload => ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard')) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                          Person
+                          Contact
                         </span>
                       )}
                       <span className="text-xs text-gray-400">

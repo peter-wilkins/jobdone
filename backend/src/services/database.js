@@ -214,7 +214,7 @@ export async function getEntries(userId) {
 
 export async function savePerson(userId, personData) {
   if (!supabase) {
-    console.warn('[DB] Supabase not configured, skipping person save');
+    console.warn('[DB] Supabase not configured, skipping contact save');
     return null;
   }
 
@@ -283,6 +283,10 @@ export async function savePerson(userId, personData) {
   return data;
 }
 
+export async function saveContact(userId, contactData) {
+  return savePerson(userId, contactData);
+}
+
 export async function getPeople(userId) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured');
@@ -297,6 +301,10 @@ export async function getPeople(userId) {
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return data || [];
+}
+
+export async function getContacts(userId) {
+  return getPeople(userId);
 }
 
 /**

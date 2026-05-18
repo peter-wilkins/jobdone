@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, savePerson, getPeople, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -9,8 +9,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getEntries: deps.getEntries ?? getEntries,
     getEntryByCaptureId: deps.getEntryByCaptureId ?? getEntryByCaptureId,
     getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
-    savePerson: deps.savePerson ?? savePerson,
-    getPeople: deps.getPeople ?? getPeople,
+    saveContact: deps.saveContact ?? deps.savePerson ?? saveContact,
+    getContacts: deps.getContacts ?? deps.getPeople ?? getContacts,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
@@ -78,35 +78,45 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.post('/api/sync/people', async (request, reply) => {
+  async function handleSaveContacts(request, reply) {
     const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      const people = Array.isArray(request.body?.people) ? request.body.people : [];
+      const contacts = Array.isArray(request.body?.contacts)
+        ? request.body.contacts
+        : Array.isArray(request.body?.people)
+          ? request.body.people
+          : [];
       const saved = [];
-      for (const person of people) {
-        saved.push(await db.savePerson(user.id, person));
+      for (const contact of contacts) {
+        saved.push(await db.saveContact(user.id, contact));
       }
-      return { success: true, people: saved.filter(Boolean) };
+      const rows = saved.filter(Boolean);
+      return { success: true, contacts: rows, people: rows };
     } catch (error) {
-      console.error('People sync save error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to save people' });
+      console.error('Contacts sync save error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to save contacts' });
     }
-  });
+  }
 
-  fastify.get('/api/sync/people', async (request, reply) => {
+  async function handleGetContacts(request, reply) {
     const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      const people = await db.getPeople(user.id);
-      return { success: true, people };
+      const contacts = await db.getContacts(user.id);
+      return { success: true, contacts, people: contacts };
     } catch (error) {
-      console.error('People sync fetch error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to fetch people' });
+      console.error('Contacts sync fetch error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to fetch contacts' });
     }
-  });
+  }
+
+  fastify.post('/api/sync/contacts', handleSaveContacts);
+  fastify.get('/api/sync/contacts', handleGetContacts);
+  fastify.post('/api/sync/people', handleSaveContacts);
+  fastify.get('/api/sync/people', handleGetContacts);
 
   /**
    * DELETE /api/user/data

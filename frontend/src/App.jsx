@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { HomeScreen } from './HomeScreen';
 import { FeedbackScreen } from './FeedbackScreen';
 import { InboxScreen } from './InboxScreen';
-import { PeopleScreen } from './PeopleScreen';
+import { ContactsScreen } from './ContactsScreen';
 import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { authService } from './services/authService';
@@ -16,7 +16,8 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
-  return ['feedback', 'inbox', 'people', 'login', 'share-target'].includes(hash) ? hash : 'home';
+  if (hash === 'people') return 'contacts';
+  return ['feedback', 'inbox', 'contacts', 'login', 'share-target'].includes(hash) ? hash : 'home';
 }
 
 function App() {
@@ -66,17 +67,18 @@ function App() {
         }
       }
 
-      const unsyncedPeople = await dbService.getPeopleUnsynced();
-      const peopleSyncResult = await syncService.syncPeople(unsyncedPeople);
-      if (peopleSyncResult?.people?.length) {
-        for (const cloudPerson of peopleSyncResult.people) {
-          await dbService.upsertCloudPerson(cloudPerson);
+      const unsyncedContacts = await dbService.getContactsUnsynced();
+      const contactSyncResult = await syncService.syncContacts(unsyncedContacts);
+      const syncedContacts = contactSyncResult?.contacts || contactSyncResult?.people || [];
+      if (syncedContacts.length) {
+        for (const cloudContact of syncedContacts) {
+          await dbService.upsertCloudContact(cloudContact);
         }
       }
 
-      const cloudPeople = await apiService.getCloudPeople();
-      for (const cloudPerson of cloudPeople) {
-        await dbService.upsertCloudPerson(cloudPerson);
+      const cloudContacts = await apiService.getCloudContacts();
+      for (const cloudContact of cloudContacts) {
+        await dbService.upsertCloudContact(cloudContact);
       }
     } catch (e) {
       console.error('[Sync] Confirmed data sync failed:', e);
@@ -141,8 +143,8 @@ function App() {
     return <InboxScreen onBack={() => navigateTo('home')} />;
   }
 
-  if (screen === 'people') {
-    return <PeopleScreen onBack={() => navigateTo('home')} />;
+  if (screen === 'contacts') {
+    return <ContactsScreen onBack={() => navigateTo('home')} />;
   }
 
   if (screen === 'share-target') {

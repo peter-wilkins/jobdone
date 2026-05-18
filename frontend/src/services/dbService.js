@@ -9,6 +9,7 @@ const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
+// Store name remains "people" so existing installed PWAs keep their local Contacts data.
 const PEOPLE_STORE = 'people';
 
 function normalizeSearchText(value) {
@@ -27,8 +28,8 @@ function containsExactPhrase(haystack, phrase) {
   return normalizedHaystack.includes(` ${normalizedPhrase} `);
 }
 
-export function entryMentionsPerson(entry, person) {
-  const displayName = normalizeSearchText(person?.displayName);
+export function entryMentionsContact(entry, contact) {
+  const displayName = normalizeSearchText(contact?.displayName);
   if (!displayName) return false;
 
   const searchableText = [
@@ -38,6 +39,8 @@ export function entryMentionsPerson(entry, person) {
 
   return containsExactPhrase(searchableText, displayName);
 }
+
+export const entryMentionsPerson = entryMentionsContact;
 
 export class DBService {
   constructor() {
@@ -118,7 +121,7 @@ export class DBService {
           capturesStore.createIndex('kind', 'kind', { unique: false });
         }
 
-        // v8: local-first People store
+        // v8: local-first Contacts store, backed by the legacy "people" object store.
         if (!db.objectStoreNames.contains(PEOPLE_STORE)) {
           const peopleStore = db.createObjectStore(PEOPLE_STORE, { keyPath: 'id' });
           peopleStore.createIndex('status', 'status', { unique: false });
@@ -617,8 +620,12 @@ export class DBService {
     return `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  generateContactId() {
+    return `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
   generatePersonId() {
-    return `person-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return this.generateContactId();
   }
 
   // ─── Captures ────────────────────────────────────────────────────────────
@@ -726,13 +733,13 @@ export class DBService {
     });
   }
 
-  // ─── People ─────────────────────────────────────────────────────────────
+  // ─── Contacts ───────────────────────────────────────────────────────────
 
-  async createPerson(personData) {
+  async createContact(contactData) {
     const db = await this.ensureDb();
     const now = new Date().toISOString();
-    const person = {
-      id: this.generatePersonId(),
+    const contact = {
+      id: this.generateContactId(),
       status: 'confirmed',
       displayName: '',
       givenName: '',
@@ -752,68 +759,84 @@ export class DBService {
       synced_at: null,
       created_at: now,
       updated_at: now,
-      ...personData,
+      ...contactData,
     };
 
     const tx = db.transaction([PEOPLE_STORE], 'readwrite');
-    const request = tx.objectStore(PEOPLE_STORE).add(person);
+    const request = tx.objectStore(PEOPLE_STORE).add(contact);
 
     return new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(person);
-      request.onerror = () => reject(new Error('Failed to create person'));
+      request.onsuccess = () => resolve(contact);
+      request.onerror = () => reject(new Error('Failed to create contact'));
+    });
+  }
+
+  async createPerson(personData) {
+    return this.createContact(personData);
+  }
+
+  async getContact(contactId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE).get(contactId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(new Error('Failed to fetch contact'));
     });
   }
 
   async getPerson(personId) {
-    const db = await this.ensureDb();
-    return new Promise((resolve, reject) => {
-      const request = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE).get(personId);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(new Error('Failed to fetch person'));
-    });
+    return this.getContact(personId);
   }
 
-  async deletePerson(personId) {
-    const linkedEntries = await this.getEntriesForPerson(personId);
+  async deleteContact(contactId) {
+    const linkedEntries = await this.getEntriesForContact(contactId);
     if (linkedEntries.length > 0) {
-      throw new Error('Cannot delete a person linked to entries');
+      throw new Error('Cannot delete a contact linked to entries');
     }
 
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).delete(personId);
+      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).delete(contactId);
       request.onsuccess = () => resolve();
-      request.onerror = () => reject(new Error('Failed to delete person'));
+      request.onerror = () => reject(new Error('Failed to delete contact'));
     });
   }
 
-  async getPeople(status = 'confirmed') {
+  async deletePerson(personId) {
+    return this.deleteContact(personId);
+  }
+
+  async getContacts(status = 'confirmed') {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
       const store = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE);
       const request = status ? store.index('status').getAll(status) : store.getAll();
       request.onsuccess = () => {
-        const people = (request.result || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
-        resolve(people);
+        const contacts = (request.result || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+        resolve(contacts);
       };
-      request.onerror = () => reject(new Error('Failed to fetch people'));
+      request.onerror = () => reject(new Error('Failed to fetch contacts'));
     });
   }
 
-  async searchPeople(query) {
-    const people = await this.getPeople('confirmed');
-    const needle = String(query || '').trim().toLowerCase();
-    if (!needle) return people;
+  async getPeople(status = 'confirmed') {
+    return this.getContacts(status);
+  }
 
-    return people.filter(person => {
+  async searchContacts(query) {
+    const contacts = await this.getContacts('confirmed');
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return contacts;
+
+    return contacts.filter(contact => {
       const haystack = [
-        person.displayName,
-        person.givenName,
-        person.familyName,
-        person.organization,
-        person.title,
-        ...(person.emails || []).map(email => email.value),
-        ...(person.phones || []).map(phone => phone.value),
+        contact.displayName,
+        contact.givenName,
+        contact.familyName,
+        contact.organization,
+        contact.title,
+        ...(contact.emails || []).map(email => email.value),
+        ...(contact.phones || []).map(phone => phone.value),
       ]
         .filter(Boolean)
         .join(' ')
@@ -822,43 +845,56 @@ export class DBService {
     });
   }
 
-  async getEntriesForPerson(personId) {
-    const person = await this.getPerson(personId);
-    if (!person) return [];
+  async searchPeople(query) {
+    return this.searchContacts(query);
+  }
 
-    const sourceCaptureIds = new Set((person.sourceCaptureIds || []).filter(Boolean));
+  async getEntriesForContact(contactId) {
+    const contact = await this.getContact(contactId);
+    if (!contact) return [];
+
+    const sourceCaptureIds = new Set((contact.sourceCaptureIds || []).filter(Boolean));
     const entries = await this.getEntries('confirmed');
     return entries.filter(entry =>
       (entry.captureId && sourceCaptureIds.has(entry.captureId)) ||
-      (Array.isArray(entry.personIds) && entry.personIds.includes(personId)) ||
-      entryMentionsPerson(entry, person)
+      (Array.isArray(entry.personIds) && entry.personIds.includes(contactId)) ||
+      (Array.isArray(entry.contactIds) && entry.contactIds.includes(contactId)) ||
+      entryMentionsContact(entry, contact)
     );
   }
 
-  async findPeopleByContactKeys({ normalizedEmails = [], normalizedPhones = [] } = {}) {
-    const people = await this.getPeople('confirmed');
+  async getEntriesForPerson(personId) {
+    return this.getEntriesForContact(personId);
+  }
+
+  async findContactsByContactKeys({ normalizedEmails = [], normalizedPhones = [] } = {}) {
+    const contacts = await this.getContacts('confirmed');
     const emailSet = new Set((normalizedEmails || []).filter(Boolean));
     const phoneSet = new Set((normalizedPhones || []).filter(Boolean));
 
-    return people.filter(person =>
-      (person.normalizedEmails || []).some(email => emailSet.has(email)) ||
-      (person.normalizedPhones || []).some(phone => phoneSet.has(phone))
+    return contacts.filter(contact =>
+      (contact.normalizedEmails || []).some(email => emailSet.has(email)) ||
+      (contact.normalizedPhones || []).some(phone => phoneSet.has(phone))
     );
   }
 
-  async upsertPerson(personData) {
+  async findPeopleByContactKeys(contactKeys) {
+    return this.findContactsByContactKeys(contactKeys);
+  }
+
+  async upsertContact(contactData) {
     const db = await this.ensureDb();
     const now = new Date().toISOString();
-    const normalizedEmails = Array.from(new Set((personData.normalizedEmails || []).filter(Boolean)));
-    const normalizedPhones = Array.from(new Set((personData.normalizedPhones || []).filter(Boolean)));
-    const matches = await this.findPeopleByContactKeys({ normalizedEmails, normalizedPhones });
+    const normalizedEmails = Array.from(new Set((contactData.normalizedEmails || []).filter(Boolean)));
+    const normalizedPhones = Array.from(new Set((contactData.normalizedPhones || []).filter(Boolean)));
+    const matches = await this.findContactsByContactKeys({ normalizedEmails, normalizedPhones });
     const existing = matches[0] || null;
     const primaryEmail = normalizedEmails[0] || null;
     const primaryPhone = normalizedPhones[0] || null;
 
     if (!existing) {
-      return this.createPerson({
-        ...personData,
+      return this.createContact({
+        ...contactData,
         normalizedEmails,
         normalizedPhones,
         primaryEmail,
@@ -868,19 +904,19 @@ export class DBService {
 
     const merged = {
       ...existing,
-      displayName: personData.displayName || existing.displayName,
-      givenName: personData.givenName || existing.givenName,
-      familyName: personData.familyName || existing.familyName,
-      organization: personData.organization || existing.organization,
-      title: personData.title || existing.title,
-      note: personData.note || existing.note,
-      phones: this.mergeContactValues(existing.phones, personData.phones),
-      emails: this.mergeContactValues(existing.emails, personData.emails),
+      displayName: contactData.displayName || existing.displayName,
+      givenName: contactData.givenName || existing.givenName,
+      familyName: contactData.familyName || existing.familyName,
+      organization: contactData.organization || existing.organization,
+      title: contactData.title || existing.title,
+      note: contactData.note || existing.note,
+      phones: this.mergeContactValues(existing.phones, contactData.phones),
+      emails: this.mergeContactValues(existing.emails, contactData.emails),
       normalizedPhones: Array.from(new Set([...(existing.normalizedPhones || []), ...normalizedPhones])),
       normalizedEmails: Array.from(new Set([...(existing.normalizedEmails || []), ...normalizedEmails])),
       primaryPhone: existing.primaryPhone || primaryPhone,
       primaryEmail: existing.primaryEmail || primaryEmail,
-      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...(personData.sourceCaptureIds || [])])),
+      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...(contactData.sourceCaptureIds || [])])),
       syncStatus: 'pending',
       updated_at: now,
     };
@@ -890,8 +926,12 @@ export class DBService {
       const store = tx.objectStore(PEOPLE_STORE);
       const req = store.put(merged);
       req.onsuccess = () => resolve(merged);
-      req.onerror = () => reject(new Error('Failed to update person'));
+      req.onerror = () => reject(new Error('Failed to update contact'));
     });
+  }
+
+  async upsertPerson(personData) {
+    return this.upsertContact(personData);
   }
 
   mergeContactValues(existingValues = [], incomingValues = []) {
@@ -906,87 +946,99 @@ export class DBService {
     return merged;
   }
 
-  async getPeopleUnsynced() {
-    const people = await this.getPeople('confirmed');
-    return people.filter(person => person.syncStatus !== 'synced' || !person.remoteId);
+  async getContactsUnsynced() {
+    const contacts = await this.getContacts('confirmed');
+    return contacts.filter(contact => contact.syncStatus !== 'synced' || !contact.remoteId);
   }
 
-  async markPersonSynced(personId, remoteId = null) {
+  async getPeopleUnsynced() {
+    return this.getContactsUnsynced();
+  }
+
+  async markContactSynced(contactId, remoteId = null) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
       const store = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE);
-      const request = store.get(personId);
+      const request = store.get(contactId);
 
       request.onsuccess = () => {
-        const person = request.result;
-        if (!person) { reject(new Error('Person not found')); return; }
+        const contact = request.result;
+        if (!contact) { reject(new Error('Contact not found')); return; }
 
         const synced = {
-          ...person,
-          remoteId: remoteId || person.remoteId,
+          ...contact,
+          remoteId: remoteId || contact.remoteId,
           syncStatus: 'synced',
           synced_at: new Date().toISOString(),
         };
         const updateRequest = store.put(synced);
         updateRequest.onsuccess = () => resolve(synced);
-        updateRequest.onerror = () => reject(new Error('Failed to mark person synced'));
+        updateRequest.onerror = () => reject(new Error('Failed to mark contact synced'));
       };
 
-      request.onerror = () => reject(new Error('Failed to fetch person'));
+      request.onerror = () => reject(new Error('Failed to fetch contact'));
     });
   }
 
-  async upsertCloudPerson(cloudPerson) {
-    const normalizedEmails = Array.from(new Set((cloudPerson.normalized_emails || []).filter(Boolean)));
-    const normalizedPhones = Array.from(new Set((cloudPerson.normalized_phones || []).filter(Boolean)));
-    const matches = await this.findPeopleByContactKeys({ normalizedEmails, normalizedPhones });
-    const existing = matches.find(person => person.remoteId === cloudPerson.id) || matches[0] || null;
-    const personData = {
-      displayName: cloudPerson.display_name || '',
-      givenName: cloudPerson.given_name || '',
-      familyName: cloudPerson.family_name || '',
-      organization: cloudPerson.organization || '',
-      title: cloudPerson.title || '',
-      note: cloudPerson.note || '',
-      phones: cloudPerson.phones || [],
-      emails: cloudPerson.emails || [],
+  async markPersonSynced(personId, remoteId = null) {
+    return this.markContactSynced(personId, remoteId);
+  }
+
+  async upsertCloudContact(cloudContact) {
+    const normalizedEmails = Array.from(new Set((cloudContact.normalized_emails || []).filter(Boolean)));
+    const normalizedPhones = Array.from(new Set((cloudContact.normalized_phones || []).filter(Boolean)));
+    const matches = await this.findContactsByContactKeys({ normalizedEmails, normalizedPhones });
+    const existing = matches.find(contact => contact.remoteId === cloudContact.id) || matches[0] || null;
+    const contactData = {
+      displayName: cloudContact.display_name || '',
+      givenName: cloudContact.given_name || '',
+      familyName: cloudContact.family_name || '',
+      organization: cloudContact.organization || '',
+      title: cloudContact.title || '',
+      note: cloudContact.note || '',
+      phones: cloudContact.phones || [],
+      emails: cloudContact.emails || [],
       normalizedPhones,
       normalizedEmails,
-      primaryPhone: cloudPerson.primary_phone || normalizedPhones[0] || null,
-      primaryEmail: cloudPerson.primary_email || normalizedEmails[0] || null,
-      sourceCaptureIds: cloudPerson.source_capture_ids || [],
-      remoteId: cloudPerson.id,
+      primaryPhone: cloudContact.primary_phone || normalizedPhones[0] || null,
+      primaryEmail: cloudContact.primary_email || normalizedEmails[0] || null,
+      sourceCaptureIds: cloudContact.source_capture_ids || [],
+      remoteId: cloudContact.id,
       syncStatus: 'synced',
       synced_at: new Date().toISOString(),
     };
 
     if (!existing) {
-      return this.createPerson({
-        ...personData,
-        id: cloudPerson.local_id || this.generatePersonId(),
-        created_at: cloudPerson.created_at || new Date().toISOString(),
-        updated_at: cloudPerson.updated_at || cloudPerson.created_at || new Date().toISOString(),
+      return this.createContact({
+        ...contactData,
+        id: cloudContact.local_id || this.generateContactId(),
+        created_at: cloudContact.created_at || new Date().toISOString(),
+        updated_at: cloudContact.updated_at || cloudContact.created_at || new Date().toISOString(),
       });
     }
 
     const db = await this.ensureDb();
     const merged = {
       ...existing,
-      ...personData,
-      displayName: personData.displayName || existing.displayName,
-      phones: this.mergeContactValues(existing.phones, personData.phones),
-      emails: this.mergeContactValues(existing.emails, personData.emails),
+      ...contactData,
+      displayName: contactData.displayName || existing.displayName,
+      phones: this.mergeContactValues(existing.phones, contactData.phones),
+      emails: this.mergeContactValues(existing.emails, contactData.emails),
       normalizedPhones: Array.from(new Set([...(existing.normalizedPhones || []), ...normalizedPhones])),
       normalizedEmails: Array.from(new Set([...(existing.normalizedEmails || []), ...normalizedEmails])),
-      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...personData.sourceCaptureIds])),
-      updated_at: cloudPerson.updated_at || existing.updated_at,
+      sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...contactData.sourceCaptureIds])),
+      updated_at: cloudContact.updated_at || existing.updated_at,
     };
 
     return new Promise((resolve, reject) => {
       const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).put(merged);
       request.onsuccess = () => resolve(merged);
-      request.onerror = () => reject(new Error('Failed to save cloud person'));
+      request.onerror = () => reject(new Error('Failed to save cloud contact'));
     });
+  }
+
+  async upsertCloudPerson(cloudPerson) {
+    return this.upsertCloudContact(cloudPerson);
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────
