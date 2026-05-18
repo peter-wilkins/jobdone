@@ -33,7 +33,7 @@ Status: pending user confirmation.
 
 ## 2026-05-18 - Confirm-time sync indicator regression
 
-Status: pending user confirmation.
+Status: passed by user on 2026-05-18.
 
 1. On production build for this fix or newer, create and confirm a normal Entry while logged in.
 2. Confirm the Timeline card changes to the cloud icon immediately after confirm without requiring a reload.
