@@ -48,3 +48,11 @@ Status: pending user confirmation.
 3. Try an unsafe Tag such as `<script>` or a multi-line value and confirm the app blocks it before Confirmation.
 4. Create a normal note with Tags left blank, confirm it, and check the Entry still appears and syncs normally.
 5. While logged in, create an Entry with Tags on one device, then open another logged-in device and confirm the Entry and Tag pills appear after sync.
+
+## 2026-05-18 - Tag prompt-injection validation
+
+Status: pending user confirmation.
+
+1. On production build for this fix or newer, try to confirm an Entry with an unsafe Tag such as `<script>` and confirm the UI blocks it.
+2. Try a multi-line Tag and confirm the UI blocks it.
+3. Confirm a normal safe Tag such as `Boiler Service` still saves and syncs.

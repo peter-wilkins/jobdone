@@ -2,6 +2,31 @@ import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveCo
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
+function validateTagLabel(value) {
+  if (/[\p{C}]/u.test(String(value || ''))) {
+    return { valid: false, error: 'Tag label contains unsafe characters' };
+  }
+  const label = String(value || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!label) return { valid: false, error: 'Tag label required' };
+  if (label.length > 40) return { valid: false, error: 'Tag label too long' };
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u.test(label)) {
+    return { valid: false, error: 'Tag label contains unsafe characters' };
+  }
+  return { valid: true, label };
+}
+
+function validateEntryTags(tags = []) {
+  if (!Array.isArray(tags)) return { valid: false, error: 'entryData.tags must be an array' };
+  for (const tag of tags) {
+    const result = validateTagLabel(tag?.label || tag?.name || tag?.displayName || tag);
+    if (!result.valid) return result;
+  }
+  return { valid: true };
+}
+
 export async function registerSyncRoutes(fastify, deps = {}) {
   const auth = deps.requireAuth ?? requireAuth;
   const db = {
@@ -41,6 +66,11 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
       if (!entryData.created_at && !entryData.captureId && !entryData.capture_id) {
         return reply.status(400).send({ error: 'entryData.created_at or captureId required' });
+      }
+
+      const tagValidation = validateEntryTags(entryData.tags || entryData.tagSnapshots || []);
+      if (!tagValidation.valid) {
+        return reply.status(400).send({ error: tagValidation.error });
       }
 
       const captureId = entryData.captureId || entryData.capture_id || null;

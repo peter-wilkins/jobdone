@@ -97,6 +97,9 @@ function safeLocalKey(value) {
 }
 
 export function validateTagLabel(value) {
+  if (/[\p{C}]/u.test(String(value || ''))) {
+    return { valid: false, label: String(value || ''), error: 'Tags can use letters, numbers, spaces, hyphens, and underscores' };
+  }
   const label = normalizeTagLabel(value);
   if (!label) return { valid: false, label, error: 'Tag is required' };
   if (label.length > 40) return { valid: false, label, error: 'Tags must be 40 characters or fewer' };

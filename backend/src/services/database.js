@@ -78,6 +78,7 @@ function safeSlug(value) {
 }
 
 function validateTagLabel(value) {
+  if (/[\p{C}]/u.test(String(value || ''))) return null;
   const label = normalizeTagLabel(value);
   if (!label || label.length > 40) return null;
   if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u.test(label)) return null;
