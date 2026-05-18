@@ -905,8 +905,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                   className="mt-0.5 h-4 w-4"
                 />
                 <span>
-                  <span className="block font-medium">Fast Capture</span>
-                  <span className="block text-xs text-gray-400 mt-0.5">Start recording when app opens</span>
+                  <span className="block font-medium">Fast Capture on this device</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">Start recording when this device opens JobDone or returns to it</span>
                 </span>
               </label>
               <button
