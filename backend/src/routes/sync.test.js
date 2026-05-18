@@ -23,7 +23,7 @@ async function buildApp(deps = {}) {
   await registerSyncRoutes(app, {
     requireAuth: async () => ({ id: 'user-1' }),
     getEntries: async () => [],
-    getPeople: async () => [],
+    getContacts: async () => [],
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
     saveEntryLocations: async () => [],
@@ -475,7 +475,7 @@ describe('SyncRoute Contacts sync', () => {
   test('saves local-first contacts for authenticated user', async () => {
     let savedArgs;
     const app = await buildApp({
-      savePerson: async (userId, contact) => {
+      saveContact: async (userId, contact) => {
         savedArgs = { userId, contact };
         return { id: 'contact-cloud-1', user_id: userId, local_id: contact.localId };
       },
@@ -499,7 +499,7 @@ describe('SyncRoute Contacts sync', () => {
   test('fetches cloud contacts for authenticated user', async () => {
     const cloudContacts = [{ id: 'contact-cloud-1', display_name: 'Ann Smith' }];
     const app = await buildApp({
-      getPeople: async (userId) => {
+      getContacts: async (userId) => {
         assert.equal(userId, 'user-1');
         return cloudContacts;
       },
@@ -512,29 +512,6 @@ describe('SyncRoute Contacts sync', () => {
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body).contacts, cloudContacts);
-  });
-
-  test('keeps legacy people sync route compatible', async () => {
-    let savedArgs;
-    const app = await buildApp({
-      savePerson: async (userId, contact) => {
-        savedArgs = { userId, contact };
-        return { id: 'contact-cloud-1', user_id: userId, local_id: contact.localId };
-      },
-    });
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/sync/people',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        people: [{ localId: 'legacy-person-local-1', displayName: 'Ann Smith' }],
-      }),
-    });
-
-    assert.equal(res.statusCode, 200);
-    assert.equal(savedArgs.contact.displayName, 'Ann Smith');
-    assert.equal(JSON.parse(res.body).people[0].local_id, 'legacy-person-local-1');
   });
 });
 

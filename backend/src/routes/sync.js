@@ -34,8 +34,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getEntries: deps.getEntries ?? getEntries,
     getEntryByCaptureId: deps.getEntryByCaptureId ?? getEntryByCaptureId,
     getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
-    saveContact: deps.saveContact ?? deps.savePerson ?? saveContact,
-    getContacts: deps.getContacts ?? deps.getPeople ?? getContacts,
+    saveContact: deps.saveContact ?? saveContact,
+    getContacts: deps.getContacts ?? getContacts,
     saveContextClues: deps.saveContextClues ?? saveContextClues,
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
     saveEntryContacts: deps.saveEntryContacts ?? saveEntryContacts,
@@ -126,17 +126,13 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const contacts = Array.isArray(request.body?.contacts)
-        ? request.body.contacts
-        : Array.isArray(request.body?.people)
-          ? request.body.people
-          : [];
+      const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
       const saved = [];
       for (const contact of contacts) {
         saved.push(await db.saveContact(user.id, contact));
       }
       const rows = saved.filter(Boolean);
-      return { success: true, contacts: rows, people: rows };
+      return { success: true, contacts: rows };
     } catch (error) {
       console.error('Contacts sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save contacts' });
@@ -149,7 +145,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const contacts = await db.getContacts(user.id);
-      return { success: true, contacts, people: contacts };
+      return { success: true, contacts };
     } catch (error) {
       console.error('Contacts sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch contacts' });
@@ -158,8 +154,6 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
   fastify.post('/api/sync/contacts', handleSaveContacts);
   fastify.get('/api/sync/contacts', handleGetContacts);
-  fastify.post('/api/sync/people', handleSaveContacts);
-  fastify.get('/api/sync/people', handleGetContacts);
 
   fastify.get('/api/sync/locations', async (request, reply) => {
     const user = await auth(request, reply);

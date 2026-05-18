@@ -75,9 +75,6 @@ export class SyncService {
     return response;
   }
 
-  async syncPeople(people) {
-    return this.syncContacts(people);
-  }
 }
 
 export const syncService = new SyncService();

@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS entry_locations CASCADE;
 DROP TABLE IF EXISTS locations CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
 DROP TABLE IF EXISTS people CASCADE;
+DROP TABLE IF EXISTS contacts CASCADE;
 DROP TABLE IF EXISTS feedback CASCADE;
 DROP TABLE IF EXISTS queries CASCADE;
 
@@ -216,9 +217,8 @@ BEGIN
 END;
 $$;
 
--- 8. people (local-first Contacts created from confirmed Captures)
--- The table name stays "people" for compatibility with deployed clients; product language is Contacts.
-CREATE TABLE people (
+-- 8. contacts (local-first Contacts created from confirmed Captures)
+CREATE TABLE contacts (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id            TEXT NOT NULL,
   local_id           TEXT,
@@ -240,31 +240,31 @@ CREATE TABLE people (
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX people_user_id_idx           ON people(user_id);
-CREATE INDEX people_updated_at_idx        ON people(updated_at DESC);
-CREATE INDEX people_normalized_phones_idx ON people USING GIN (normalized_phones);
-CREATE INDEX people_normalized_emails_idx ON people USING GIN (normalized_emails);
-CREATE UNIQUE INDEX people_user_id_local_id_uidx ON people(user_id, local_id) WHERE local_id IS NOT NULL;
+CREATE INDEX contacts_user_id_idx           ON contacts(user_id);
+CREATE INDEX contacts_updated_at_idx        ON contacts(updated_at DESC);
+CREATE INDEX contacts_normalized_phones_idx ON contacts USING GIN (normalized_phones);
+CREATE INDEX contacts_normalized_emails_idx ON contacts USING GIN (normalized_emails);
+CREATE UNIQUE INDEX contacts_user_id_local_id_uidx ON contacts(user_id, local_id) WHERE local_id IS NOT NULL;
 
-ALTER TABLE people ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_people" ON people FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_people" ON people FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_people" ON people FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_people" ON people FOR DELETE USING (TRUE);
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_contacts" ON contacts FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_contacts" ON contacts FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_contacts" ON contacts FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_contacts" ON contacts FOR DELETE USING (TRUE);
 
 -- 9. entry_contacts (immutable MVP Entry-to-Contact associations)
 CREATE TABLE entry_contacts (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id   TEXT NOT NULL,
   entry_id  UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-  person_id UUID NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX entry_contacts_user_id_idx  ON entry_contacts(user_id);
 CREATE INDEX entry_contacts_entry_id_idx ON entry_contacts(entry_id);
-CREATE INDEX entry_contacts_person_id_idx ON entry_contacts(person_id);
-CREATE UNIQUE INDEX entry_contacts_user_entry_person_uidx ON entry_contacts(user_id, entry_id, person_id);
+CREATE INDEX entry_contacts_contact_id_idx ON entry_contacts(contact_id);
+CREATE UNIQUE INDEX entry_contacts_user_entry_contact_uidx ON entry_contacts(user_id, entry_id, contact_id);
 
 ALTER TABLE entry_contacts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_entry_contacts" ON entry_contacts FOR INSERT WITH CHECK (TRUE);

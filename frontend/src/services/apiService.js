@@ -168,10 +168,6 @@ export class APIService {
     return response.json();
   }
 
-  async syncPeople(people) {
-    return this.syncContacts(people);
-  }
-
   async getCloudContacts() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/sync/contacts`, {
@@ -179,14 +175,10 @@ export class APIService {
       });
       if (!response.ok) return [];
       const result = await response.json();
-      return result.contacts || result.people || [];
+      return result.contacts || [];
     } catch {
       return [];
     }
-  }
-
-  async getCloudPeople() {
-    return this.getCloudContacts();
   }
 
   async getCloudLocations() {

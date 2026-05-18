@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 11;
+const DB_VERSION = 12;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -16,8 +16,7 @@ const TAG_CATEGORIES_STORE = 'tagCategories';
 const TAGS_STORE = 'tags';
 const TAG_VOCABULARY_STORE = 'tagVocabulary';
 const ENTRY_TAGS_STORE = 'entryTags';
-// Store name remains "people" so existing installed PWAs keep their local Contacts data.
-const PEOPLE_STORE = 'people';
+const CONTACTS_STORE = 'contacts';
 const DEFAULT_TAG_CATEGORY = {
   id: 'tag-category-general',
   name: 'General',
@@ -202,14 +201,14 @@ export class DBService {
           capturesStore.createIndex('kind', 'kind', { unique: false });
         }
 
-        // v8: local-first Contacts store, backed by the legacy "people" object store.
-        if (!db.objectStoreNames.contains(PEOPLE_STORE)) {
-          const peopleStore = db.createObjectStore(PEOPLE_STORE, { keyPath: 'id' });
-          peopleStore.createIndex('status', 'status', { unique: false });
-          peopleStore.createIndex('created_at', 'created_at', { unique: false });
-          peopleStore.createIndex('updated_at', 'updated_at', { unique: false });
-          peopleStore.createIndex('primaryEmail', 'primaryEmail', { unique: false });
-          peopleStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
+        // v8: local-first Contacts store.
+        if (!db.objectStoreNames.contains(CONTACTS_STORE)) {
+          const contactStore = db.createObjectStore(CONTACTS_STORE, { keyPath: 'id' });
+          contactStore.createIndex('status', 'status', { unique: false });
+          contactStore.createIndex('created_at', 'created_at', { unique: false });
+          contactStore.createIndex('updated_at', 'updated_at', { unique: false });
+          contactStore.createIndex('primaryEmail', 'primaryEmail', { unique: false });
+          contactStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
         }
 
         // v9: local Context Clue snapshots. Capture-linked clues stay local until Confirmation.
@@ -1403,8 +1402,8 @@ export class DBService {
       ...contactData,
     };
 
-    const tx = db.transaction([PEOPLE_STORE], 'readwrite');
-    const request = tx.objectStore(PEOPLE_STORE).add(contact);
+    const tx = db.transaction([CONTACTS_STORE], 'readwrite');
+    const request = tx.objectStore(CONTACTS_STORE).add(contact);
 
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(contact);
@@ -1419,7 +1418,7 @@ export class DBService {
   async getContact(contactId) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      const request = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE).get(contactId);
+      const request = db.transaction([CONTACTS_STORE], 'readonly').objectStore(CONTACTS_STORE).get(contactId);
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(new Error('Failed to fetch contact'));
     });
@@ -1437,7 +1436,7 @@ export class DBService {
 
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).delete(contactId);
+      const request = db.transaction([CONTACTS_STORE], 'readwrite').objectStore(CONTACTS_STORE).delete(contactId);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error('Failed to delete contact'));
     });
@@ -1450,7 +1449,7 @@ export class DBService {
   async getContacts(status = 'confirmed') {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      const store = db.transaction([PEOPLE_STORE], 'readonly').objectStore(PEOPLE_STORE);
+      const store = db.transaction([CONTACTS_STORE], 'readonly').objectStore(CONTACTS_STORE);
       const request = status ? store.index('status').getAll(status) : store.getAll();
       request.onsuccess = () => {
         const contacts = (request.result || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
@@ -1458,10 +1457,6 @@ export class DBService {
       };
       request.onerror = () => reject(new Error('Failed to fetch contacts'));
     });
-  }
-
-  async getPeople(status = 'confirmed') {
-    return this.getContacts(status);
   }
 
   async searchContacts(query) {
@@ -1486,10 +1481,6 @@ export class DBService {
     });
   }
 
-  async searchPeople(query) {
-    return this.searchContacts(query);
-  }
-
   async getEntriesForContact(contactId) {
     const contact = await this.getContact(contactId);
     if (!contact) return [];
@@ -1498,14 +1489,9 @@ export class DBService {
     const entries = await this.getEntries('confirmed');
     return entries.filter(entry =>
       (entry.captureId && sourceCaptureIds.has(entry.captureId)) ||
-      (Array.isArray(entry.personIds) && entry.personIds.includes(contactId)) ||
       (Array.isArray(entry.contactIds) && entry.contactIds.includes(contactId)) ||
       entryMentionsContact(entry, contact)
     );
-  }
-
-  async getEntriesForPerson(personId) {
-    return this.getEntriesForContact(personId);
   }
 
   async findContactsByContactKeys({ normalizedEmails = [], normalizedPhones = [] } = {}) {
@@ -1517,10 +1503,6 @@ export class DBService {
       (contact.normalizedEmails || []).some(email => emailSet.has(email)) ||
       (contact.normalizedPhones || []).some(phone => phoneSet.has(phone))
     );
-  }
-
-  async findPeopleByContactKeys(contactKeys) {
-    return this.findContactsByContactKeys(contactKeys);
   }
 
   async upsertContact(contactData) {
@@ -1563,16 +1545,12 @@ export class DBService {
     };
 
     return new Promise((resolve, reject) => {
-      const tx = db.transaction([PEOPLE_STORE], 'readwrite');
-      const store = tx.objectStore(PEOPLE_STORE);
+      const tx = db.transaction([CONTACTS_STORE], 'readwrite');
+      const store = tx.objectStore(CONTACTS_STORE);
       const req = store.put(merged);
       req.onsuccess = () => resolve(merged);
       req.onerror = () => reject(new Error('Failed to update contact'));
     });
-  }
-
-  async upsertPerson(personData) {
-    return this.upsertContact(personData);
   }
 
   mergeContactValues(existingValues = [], incomingValues = []) {
@@ -1592,14 +1570,10 @@ export class DBService {
     return contacts.filter(contact => contact.syncStatus !== 'synced' || !contact.remoteId);
   }
 
-  async getPeopleUnsynced() {
-    return this.getContactsUnsynced();
-  }
-
   async markContactSynced(contactId, remoteId = null) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      const store = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE);
+      const store = db.transaction([CONTACTS_STORE], 'readwrite').objectStore(CONTACTS_STORE);
       const request = store.get(contactId);
 
       request.onsuccess = () => {
@@ -1674,7 +1648,7 @@ export class DBService {
     };
 
     return new Promise((resolve, reject) => {
-      const request = db.transaction([PEOPLE_STORE], 'readwrite').objectStore(PEOPLE_STORE).put(merged);
+      const request = db.transaction([CONTACTS_STORE], 'readwrite').objectStore(CONTACTS_STORE).put(merged);
       request.onsuccess = () => resolve(merged);
       request.onerror = () => reject(new Error('Failed to save cloud contact'));
     });
@@ -2153,12 +2127,12 @@ export class DBService {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE, PEOPLE_STORE], 'readwrite');
+      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE, CONTACTS_STORE], 'readwrite');
       transaction.objectStore(STORE_NAME).clear();
       transaction.objectStore(QUERIES_STORE).clear();
       transaction.objectStore(FEEDBACK_STORE).clear();
       transaction.objectStore(CAPTURES_STORE).clear();
-      transaction.objectStore(PEOPLE_STORE).clear();
+      transaction.objectStore(CONTACTS_STORE).clear();
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(new Error('Failed to clear database'));

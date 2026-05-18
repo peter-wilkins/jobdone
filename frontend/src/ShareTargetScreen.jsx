@@ -190,7 +190,7 @@ export function ShareTargetScreen({ onBack, user }) {
         if (user && savedContacts.length) {
           try {
             const result = await syncService.syncContacts(savedContacts);
-            const syncedContacts = result?.contacts || result?.people || [];
+            const syncedContacts = result?.contacts || [];
             for (const cloudContact of syncedContacts) {
               await dbService.upsertCloudContact(cloudContact);
             }

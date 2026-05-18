@@ -17,7 +17,6 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
-  if (hash === 'people') return 'contacts';
   return ['feedback', 'inbox', 'contacts', 'login', 'share-target'].includes(hash) ? hash : 'home';
 }
 
@@ -77,7 +76,7 @@ function App() {
 
       const unsyncedContacts = await dbService.getContactsUnsynced();
       const contactSyncResult = await syncService.syncContacts(unsyncedContacts);
-      const syncedContacts = contactSyncResult?.contacts || contactSyncResult?.people || [];
+      const syncedContacts = contactSyncResult?.contacts || [];
       if (syncedContacts.length) {
         for (const cloudContact of syncedContacts) {
           await dbService.upsertCloudContact(cloudContact);

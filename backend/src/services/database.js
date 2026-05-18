@@ -33,7 +33,7 @@ function mergeByKey(existingValues = [], incomingValues = []) {
   return merged;
 }
 
-function peopleMatch(existing, incoming) {
+function contactsMatch(existing, incoming) {
   if (existing.local_id && incoming.localId && existing.local_id === incoming.localId) return true;
 
   const existingEmails = new Set(existing.normalized_emails || []);
@@ -254,11 +254,11 @@ export async function deleteUserData(userId) {
       .eq('user_id', userId);
     if (entriesErr) throw entriesErr;
 
-    const { error: peopleErr } = await supabase
-      .from('people')
+    const { error: contactsErr } = await supabase
+      .from('contacts')
       .delete()
       .eq('user_id', userId);
-    if (peopleErr) throw peopleErr;
+    if (contactsErr) throw contactsErr;
 
     const { error: locationsErr } = await supabase
       .from('locations')
@@ -368,13 +368,13 @@ export async function getEntries(userId) {
 
     const { data: contactLinks, error: contactsError } = await supabase
       .from('entry_contacts')
-      .select('entry_id, created_at, people(*)')
+      .select('entry_id, created_at, contacts(*)')
       .eq('user_id', userId)
       .in('entry_id', entryIds)
       .order('created_at', { ascending: true });
 
     if (contactsError) {
-      if (contactsError.code === '42P01' || /people|entry_contacts/i.test(contactsError.message || '')) {
+      if (contactsError.code === '42P01' || /contacts|entry_contacts/i.test(contactsError.message || '')) {
         console.warn('[DB] contact association tables not found; returning entries without contacts');
       } else {
         console.error('[DB] Contact fetch error:', contactsError);
@@ -410,9 +410,9 @@ export async function getEntries(userId) {
 
     const contactsByEntry = new Map();
     for (const link of contactLinks || []) {
-      if (!link.people) continue;
+      if (!link.contacts) continue;
       const list = contactsByEntry.get(link.entry_id) || [];
-      list.push(link.people);
+      list.push(link.contacts);
       contactsByEntry.set(link.entry_id, list);
     }
 
@@ -557,12 +557,12 @@ export async function saveEntryContacts(userId, entryId, contacts = []) {
   const rows = savedContacts.map(contact => ({
     user_id: userId,
     entry_id: entryId,
-    person_id: contact.id,
+    contact_id: contact.id,
   }));
 
   const { error } = await supabase
     .from('entry_contacts')
-    .upsert(rows, { onConflict: 'user_id,entry_id,person_id' });
+    .upsert(rows, { onConflict: 'user_id,entry_id,contact_id' });
 
   if (error) {
     if (error.code === '42P01' || /entry_contacts/i.test(error.message || '')) {
@@ -706,45 +706,45 @@ export async function saveEntryTags(userId, entryId, tags = []) {
   return saved;
 }
 
-export async function savePerson(userId, personData) {
+export async function saveContact(userId, contactData) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured, skipping contact save');
     return null;
   }
 
-  const normalizedEmails = unique(personData.normalizedEmails || personData.normalized_emails);
-  const normalizedPhones = unique(personData.normalizedPhones || personData.normalized_phones);
-  const existingPeople = await getPeople(userId);
-  const existing = existingPeople.find(person => peopleMatch(person, {
-    localId: personData.localId || personData.local_id || personData.id,
+  const normalizedEmails = unique(contactData.normalizedEmails || contactData.normalized_emails);
+  const normalizedPhones = unique(contactData.normalizedPhones || contactData.normalized_phones);
+  const existingContacts = await getContacts(userId);
+  const existing = existingContacts.find(contact => contactsMatch(contact, {
+    localId: contactData.localId || contactData.local_id || contactData.id,
     normalizedEmails,
     normalizedPhones,
   }));
 
   const payload = {
     user_id: userId,
-    local_id: personData.localId || personData.local_id || personData.id || null,
-    status: personData.status || 'confirmed',
-    display_name: personData.displayName || personData.display_name || '',
-    given_name: personData.givenName || personData.given_name || '',
-    family_name: personData.familyName || personData.family_name || '',
-    organization: personData.organization || '',
-    title: personData.title || '',
-    note: personData.note || '',
-    phones: personData.phones || [],
-    emails: personData.emails || [],
+    local_id: contactData.localId || contactData.local_id || contactData.id || null,
+    status: contactData.status || 'confirmed',
+    display_name: contactData.displayName || contactData.display_name || '',
+    given_name: contactData.givenName || contactData.given_name || '',
+    family_name: contactData.familyName || contactData.family_name || '',
+    organization: contactData.organization || '',
+    title: contactData.title || '',
+    note: contactData.note || '',
+    phones: contactData.phones || [],
+    emails: contactData.emails || [],
     normalized_phones: normalizedPhones,
     normalized_emails: normalizedEmails,
-    primary_phone: personData.primaryPhone || personData.primary_phone || normalizedPhones[0] || null,
-    primary_email: personData.primaryEmail || personData.primary_email || normalizedEmails[0] || null,
-    source_capture_ids: unique(personData.sourceCaptureIds || personData.source_capture_ids),
+    primary_phone: contactData.primaryPhone || contactData.primary_phone || normalizedPhones[0] || null,
+    primary_email: contactData.primaryEmail || contactData.primary_email || normalizedEmails[0] || null,
+    source_capture_ids: unique(contactData.sourceCaptureIds || contactData.source_capture_ids),
     updated_at: new Date().toISOString(),
   };
 
   if (!existing) {
     const { data, error } = await supabase
-      .from('people')
-      .insert([{ ...payload, created_at: new Date(personData.created_at || Date.now()).toISOString() }])
+      .from('contacts')
+      .insert([{ ...payload, created_at: new Date(contactData.created_at || Date.now()).toISOString() }])
       .select()
       .single();
     if (error) throw error;
@@ -768,7 +768,7 @@ export async function savePerson(userId, personData) {
   };
 
   const { data, error } = await supabase
-    .from('people')
+    .from('contacts')
     .update(merged)
     .eq('id', existing.id)
     .select()
@@ -777,28 +777,20 @@ export async function savePerson(userId, personData) {
   return data;
 }
 
-export async function saveContact(userId, contactData) {
-  return savePerson(userId, contactData);
-}
-
-export async function getPeople(userId) {
+export async function getContacts(userId) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   const { data, error } = await supabase
-    .from('people')
+    .from('contacts')
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'confirmed')
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return data || [];
-}
-
-export async function getContacts(userId) {
-  return getPeople(userId);
 }
 
 export async function getLocations(userId) {
@@ -965,13 +957,13 @@ async function attachEntryStructure(userId, entries = []) {
 
   const { data: contactsData, error: contactsError } = await supabase
     .from('entry_contacts')
-    .select('entry_id, created_at, people(*)')
+    .select('entry_id, created_at, contacts(*)')
     .eq('user_id', userId)
     .in('entry_id', entryIds)
     .order('created_at', { ascending: true });
 
   if (contactsError) {
-    if (contactsError.code === '42P01' || /people|entry_contacts/i.test(contactsError.message || '')) {
+    if (contactsError.code === '42P01' || /contacts|entry_contacts/i.test(contactsError.message || '')) {
       console.warn('[DB] Contact association tables not available; returning recall results without contacts');
     } else {
       throw contactsError;
@@ -1015,7 +1007,7 @@ async function attachEntryStructure(userId, entries = []) {
 
   const contactsByEntryId = new Map();
   for (const link of contactLinks) {
-    const contact = link.people;
+    const contact = link.contacts;
     if (!contact) continue;
     if (!contactsByEntryId.has(link.entry_id)) contactsByEntryId.set(link.entry_id, []);
     contactsByEntryId.get(link.entry_id).push(contact);
