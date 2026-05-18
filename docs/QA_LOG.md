@@ -5,7 +5,7 @@ confirmed so this file can later seed automated tests and pre-launch audit work.
 
 ## 2026-05-18 - Issue #39 / commit `a3b164d`
 
-Status: pending user confirmation.
+Status: passed by user on 2026-05-18.
 
 1. On production build `a3b164d` or newer, record silence or a very quiet clip and confirm the failed card says `No speech detected. Try recording again.` with `Dismiss`, not `Retry processing`.
 2. Record a normal spoken Entry in production and confirm it still processes to review.
@@ -13,7 +13,7 @@ Status: pending user confirmation.
 
 ## 2026-05-18 - Issue #37 / report issue diagnostics
 
-Status: pending user confirmation.
+Status: passed by user on 2026-05-18.
 
 1. Run the updated `docs/schema.sql` in Supabase before relying on cloud persistence of diagnostic bundles.
 2. Open production on the latest build, use Menu -> `Report issue`, type a short issue, and confirm the report preview shows build, screen, backend status, device, recent app events, and excluded private data.
