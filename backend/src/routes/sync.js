@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -11,6 +11,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
     saveContact: deps.saveContact ?? deps.savePerson ?? saveContact,
     getContacts: deps.getContacts ?? deps.getPeople ?? getContacts,
+    saveContextClues: deps.saveContextClues ?? saveContextClues,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
@@ -44,7 +45,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         ? await db.getEntryByCaptureId(user.id, captureId)
         : await db.getEntryByCreatedAt(user.id, entryData.created_at);
       if (existing) {
-        return { success: true, entry: existing };
+        const contextClues = await db.saveContextClues(user.id, existing.id, entryData.contextClues || entryData.context_clues || []);
+        return { success: true, entry: { ...existing, context_clues: contextClues } };
       }
 
       const embedding = await embeddingService.embedText(entryData.summary);
@@ -53,8 +55,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         embedding,
         embedding_model: EMBEDDING_MODEL,
       });
+      const contextClues = await db.saveContextClues(user.id, saved.id, entryData.contextClues || entryData.context_clues || []);
 
-      return { success: true, entry: saved };
+      return { success: true, entry: { ...saved, context_clues: contextClues } };
     } catch (error) {
       console.error('Sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save entry' });

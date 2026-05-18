@@ -1,5 +1,6 @@
 import { apiService } from './apiService.js';
 import { authService } from './authService.js';
+import { dbService } from './dbService.js';
 
 export class SyncService {
   getUserId() {
@@ -19,6 +20,7 @@ export class SyncService {
 
     try {
       console.log('[Sync] Syncing entry:', entryData.id);
+      const contextClues = await dbService.getContextCluesForEntry(entryData.id);
 
       const response = await apiService.syncSave({
         entryData: {
@@ -26,6 +28,7 @@ export class SyncService {
           summary: entryData.summary,
           created_at: entryData.created_at,
           captureId: entryData.captureId || entryData.capture_id || null,
+          contextClues,
         },
       });
 

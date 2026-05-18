@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { registerSyncRoutes } from './sync.js';
 import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from '../services/embedding.js';
+import { normalizeContextClue } from '../services/database.js';
 
 function makeEntry(overrides = {}) {
   return {
@@ -24,6 +25,7 @@ async function buildApp(deps = {}) {
     getEntries: async () => [],
     getPeople: async () => [],
     getEntryByCreatedAt: async () => null,
+    saveContextClues: async () => [],
     deleteUserData: async () => ({ success: true }),
     ...deps,
   });
@@ -32,6 +34,37 @@ async function buildApp(deps = {}) {
 }
 
 describe('SyncRoute POST /api/sync/save', () => {
+  test('normalizes calendar context clues without excessive private payload fields', () => {
+    const normalized = normalizeContextClue({
+      id: 'context-clue-local-1',
+      kind: 'calendar_event',
+      source: 'calendar',
+      summary: 'Calendar event: Boiler service',
+      payload: {
+        title: 'Boiler service',
+        start: '2026-05-18T09:00:00.000Z',
+        end: '2026-05-18T10:00:00.000Z',
+        locationText: '14 Bell Street',
+        description: 'Private calendar body should not be stored',
+        body: 'Private body should not be stored',
+        transcript: 'Entry transcript should not be stored in clues',
+      },
+      metadata: {
+        source: 'calendar',
+        rawPayload: { secret: true },
+      },
+      created_at: '2026-05-18T08:00:00.000Z',
+    });
+
+    assert.equal(normalized.local_id, 'context-clue-local-1');
+    assert.equal(normalized.kind, 'calendar_event');
+    assert.equal(normalized.payload.title, 'Boiler service');
+    assert.equal('description' in normalized.payload, false);
+    assert.equal('body' in normalized.payload, false);
+    assert.equal('transcript' in normalized.payload, false);
+    assert.equal('rawPayload' in normalized.metadata, false);
+  });
+
   test('embeds before saving and stores embedding on inserted entry', async () => {
     const vector = makeVector();
     let savedArgs;
@@ -64,6 +97,82 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal('labour_minutes' in savedArgs.entryData, false);
     assert.equal('follow_ups' in savedArgs.entryData, false);
     assert.equal('possible_future_work' in savedArgs.entryData, false);
+  });
+
+  test('stores compact context clue snapshots after saving an entry', async () => {
+    const vector = makeVector();
+    let contextArgs;
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => vector,
+      },
+      saveEntry: async (userId, entryData) => ({ id: 'entry-1', ...entryData }),
+      saveContextClues: async (userId, entryId, clues) => {
+        contextArgs = { userId, entryId, clues };
+        return clues.map((clue, index) => ({ id: `clue-${index}`, ...clue }));
+      },
+    });
+
+    const contextClue = {
+      id: 'context-clue-local-1',
+      kind: 'calendar_event',
+      source: 'calendar',
+      summary: 'Calendar event: Boiler service',
+      payload: {
+        title: 'Boiler service',
+        start: '2026-05-18T09:00:00.000Z',
+        end: '2026-05-18T10:00:00.000Z',
+        locationText: '14 Bell Street',
+      },
+      confidence: 0.8,
+      metadata: { provider: 'calendar' },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: makeEntry({ contextClues: [contextClue] }) }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(contextArgs.userId, 'user-1');
+    assert.equal(contextArgs.entryId, 'entry-1');
+    assert.deepEqual(contextArgs.clues, [contextClue]);
+    assert.equal(JSON.parse(res.body).entry.context_clues.length, 1);
+  });
+
+  test('does not save context clues when embedding fails', async () => {
+    let contextCalled = false;
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => {
+          throw new Error('embedding API down');
+        },
+      },
+      saveEntry: async () => {
+        throw new Error('should not save entry');
+      },
+      saveContextClues: async () => {
+        contextCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          contextClues: [{ kind: 'calendar_event', source: 'calendar', payload: { title: 'Visit' } }],
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 500);
+    assert.equal(contextCalled, false);
   });
 
   test('does not create an entry when embedding fails', async () => {
@@ -124,7 +233,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, existing);
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [] });
   });
 
   test('falls back to created_at when no captureId is provided', async () => {
@@ -159,7 +268,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, existing);
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [] });
   });
 });
 

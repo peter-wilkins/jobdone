@@ -4,11 +4,12 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
+const CONTEXT_CLUES_STORE = 'contextClues';
 // Store name remains "people" so existing installed PWAs keep their local Contacts data.
 const PEOPLE_STORE = 'people';
 
@@ -26,6 +27,33 @@ function containsExactPhrase(haystack, phrase) {
   const normalizedPhrase = normalizeSearchText(phrase);
   if (!normalizedPhrase) return false;
   return normalizedHaystack.includes(` ${normalizedPhrase} `);
+}
+
+const RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS = new Set([
+  'body',
+  'description',
+  'transcript',
+  'contactDetails',
+  'rawPayload',
+]);
+
+function compactPayload(payload = {}) {
+  return Object.fromEntries(
+    Object.entries(payload || {}).filter(([key, value]) =>
+      !RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS.has(key) && value !== undefined
+    )
+  );
+}
+
+function compactCalendarPayload(event = {}) {
+  return compactPayload({
+    title: event.title || '',
+    start: event.start || event.start_at || null,
+    end: event.end || event.end_at || null,
+    locationText: event.locationText || event.location || '',
+    attendeeHints: Array.isArray(event.attendeeHints) ? event.attendeeHints : [],
+    providerIdHash: event.providerIdHash || event.sourceIdHash || null,
+  });
 }
 
 export function entryMentionsContact(entry, contact) {
@@ -130,6 +158,16 @@ export class DBService {
           peopleStore.createIndex('primaryEmail', 'primaryEmail', { unique: false });
           peopleStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
         }
+
+        // v9: local Context Clue snapshots. Capture-linked clues stay local until Confirmation.
+        if (!db.objectStoreNames.contains(CONTEXT_CLUES_STORE)) {
+          const contextCluesStore = db.createObjectStore(CONTEXT_CLUES_STORE, { keyPath: 'id' });
+          contextCluesStore.createIndex('captureId', 'captureId', { unique: false });
+          contextCluesStore.createIndex('entryId', 'entryId', { unique: false });
+          contextCluesStore.createIndex('remoteEntryId', 'remoteEntryId', { unique: false });
+          contextCluesStore.createIndex('kind', 'kind', { unique: false });
+          contextCluesStore.createIndex('created_at', 'created_at', { unique: false });
+        }
       };
     });
 
@@ -220,7 +258,9 @@ export class DBService {
         const updateRequest = store.put(entry);
 
         updateRequest.onsuccess = () => {
-          resolve(entry);
+          this.promoteContextCluesFromCapture(entry.captureId, entry.id)
+            .then(() => resolve(entry))
+            .catch(reject);
         };
 
         updateRequest.onerror = () => {
@@ -349,7 +389,11 @@ export class DBService {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.add(entry);
 
-      request.onsuccess = () => resolve(entry.id);
+      request.onsuccess = () => {
+        this.promoteContextCluesFromCapture(captureId, entry.id)
+          .then(() => resolve(entry.id))
+          .catch(reject);
+      };
       request.onerror = () => reject(new Error('Failed to create entry from capture'));
     });
   }
@@ -574,7 +618,11 @@ export class DBService {
     };
     return new Promise((resolve, reject) => {
       const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(entry);
-      req.onsuccess = () => resolve(entry);
+      req.onsuccess = () => {
+        this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || [])
+          .then(() => resolve(entry))
+          .catch(reject);
+      };
       req.onerror = () => reject(new Error('Failed to add cloud entry'));
     });
   }
@@ -622,6 +670,10 @@ export class DBService {
 
   generateContactId() {
     return `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  generateContextClueId() {
+    return `context-clue-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   generatePersonId() {
@@ -730,6 +782,141 @@ export class DBService {
 
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error('Failed to reject capture'));
+    });
+  }
+
+  // ─── Context Clues ─────────────────────────────────────────────────────
+
+  async createContextClue({
+    captureId = null,
+    entryId = null,
+    remoteEntryId = null,
+    kind,
+    source,
+    summary = '',
+    payload = {},
+    confidence = null,
+    metadata = {},
+    created_at = null,
+  }) {
+    if (!kind || !source) {
+      throw new Error('Context clue kind and source are required');
+    }
+    if (!captureId && !entryId && !remoteEntryId) {
+      throw new Error('Context clue must be linked to a Capture or Entry');
+    }
+
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const clue = {
+      id: this.generateContextClueId(),
+      captureId,
+      entryId,
+      remoteEntryId,
+      kind,
+      source,
+      summary,
+      payload: compactPayload(payload),
+      confidence,
+      metadata: compactPayload(metadata),
+      created_at: created_at || now,
+      updated_at: now,
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = db
+        .transaction([CONTEXT_CLUES_STORE], 'readwrite')
+        .objectStore(CONTEXT_CLUES_STORE)
+        .add(clue);
+
+      request.onsuccess = () => resolve(clue);
+      request.onerror = () => reject(new Error('Failed to create context clue'));
+    });
+  }
+
+  async createCalendarEventContextClue({ captureId = null, entryId = null, event, confidence = null, metadata = {} }) {
+    const payload = compactCalendarPayload(event);
+    return this.createContextClue({
+      captureId,
+      entryId,
+      kind: 'calendar_event',
+      source: 'calendar',
+      summary: payload.title ? `Calendar event: ${payload.title}` : 'Calendar event',
+      payload,
+      confidence,
+      metadata,
+    });
+  }
+
+  async getContextCluesForCapture(captureId) {
+    return this.getContextCluesByIndex('captureId', captureId);
+  }
+
+  async getContextCluesForEntry(entryId) {
+    return this.getContextCluesByIndex('entryId', entryId);
+  }
+
+  async getContextCluesByIndex(indexName, value) {
+    if (!value) return [];
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([CONTEXT_CLUES_STORE], 'readonly').objectStore(CONTEXT_CLUES_STORE);
+      const request = store.index(indexName).getAll(value);
+      request.onsuccess = () => {
+        const clues = (request.result || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        resolve(clues);
+      };
+      request.onerror = () => reject(new Error('Failed to fetch context clues'));
+    });
+  }
+
+  async promoteContextCluesFromCapture(captureId, entryId) {
+    if (!captureId || !entryId) return [];
+    const db = await this.ensureDb();
+    const clues = await this.getContextCluesForCapture(captureId);
+    if (!clues.length) return [];
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([CONTEXT_CLUES_STORE], 'readwrite');
+      const store = tx.objectStore(CONTEXT_CLUES_STORE);
+      for (const clue of clues) {
+        store.put({
+          ...clue,
+          entryId,
+          updated_at: new Date().toISOString(),
+        });
+      }
+      tx.oncomplete = () => resolve(clues.map(clue => ({ ...clue, entryId })));
+      tx.onerror = () => reject(new Error('Failed to promote context clues'));
+    });
+  }
+
+  async upsertCloudContextClues(entryId, remoteEntryId, cloudClues = []) {
+    if (!entryId || !Array.isArray(cloudClues) || cloudClues.length === 0) return [];
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const clues = cloudClues.map(clue => ({
+      id: clue.local_id || clue.id || this.generateContextClueId(),
+      remoteId: clue.id || null,
+      entryId,
+      captureId: null,
+      remoteEntryId,
+      kind: clue.kind,
+      source: clue.source,
+      summary: clue.summary || '',
+      payload: compactPayload(clue.payload || {}),
+      confidence: clue.confidence ?? null,
+      metadata: compactPayload(clue.metadata || {}),
+      created_at: clue.created_at || now,
+      updated_at: now,
+    }));
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([CONTEXT_CLUES_STORE], 'readwrite');
+      const store = tx.objectStore(CONTEXT_CLUES_STORE);
+      for (const clue of clues) store.put(clue);
+      tx.oncomplete = () => resolve(clues);
+      tx.onerror = () => reject(new Error('Failed to save cloud context clues'));
     });
   }
 

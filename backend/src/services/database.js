@@ -41,6 +41,39 @@ function peopleMatch(existing, incoming) {
     (incoming.normalizedPhones || []).some(phone => existingPhones.has(phone));
 }
 
+const RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS = new Set([
+  'body',
+  'description',
+  'transcript',
+  'contactDetails',
+  'rawPayload',
+]);
+
+function compactPayload(payload = {}) {
+  return Object.fromEntries(
+    Object.entries(payload || {}).filter(([key, value]) =>
+      !RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS.has(key) && value !== undefined
+    )
+  );
+}
+
+export function normalizeContextClue(clue = {}) {
+  const kind = clue.kind || clue.type;
+  const source = clue.source;
+  if (!kind || !source) return null;
+
+  return {
+    local_id: clue.id || clue.localId || clue.local_id || null,
+    kind,
+    source,
+    summary: clue.summary || '',
+    payload: compactPayload(clue.payload || {}),
+    confidence: clue.confidence ?? null,
+    metadata: compactPayload(clue.metadata || {}),
+    created_at: new Date(clue.created_at || Date.now()).toISOString(),
+  };
+}
+
 /**
  * Save a confirmed entry to Supabase
  */
@@ -205,11 +238,83 @@ export async function getEntries(userId) {
       throw error;
     }
 
-    return data || [];
+    const entries = data || [];
+    if (entries.length === 0) return entries;
+
+    const { data: clues, error: cluesError } = await supabase
+      .from('context_clues')
+      .select('*')
+      .eq('user_id', userId)
+      .in('entry_id', entries.map(entry => entry.id))
+      .order('created_at', { ascending: false });
+
+    if (cluesError) {
+      if (cluesError.code === '42P01' || /context_clues/i.test(cluesError.message || '')) {
+        console.warn('[DB] context_clues table not found; returning entries without context clues');
+        return entries.map(entry => ({ ...entry, context_clues: [] }));
+      }
+      console.error('[DB] Context clue fetch error:', cluesError);
+      throw cluesError;
+    }
+
+    const cluesByEntry = new Map();
+    for (const clue of clues || []) {
+      const list = cluesByEntry.get(clue.entry_id) || [];
+      list.push(clue);
+      cluesByEntry.set(clue.entry_id, list);
+    }
+
+    return entries.map(entry => ({
+      ...entry,
+      context_clues: cluesByEntry.get(entry.id) || [],
+    }));
   } catch (error) {
     console.error('[DB] Failed to fetch entries:', error.message);
     throw error;
   }
+}
+
+export async function saveContextClues(userId, entryId, clues = []) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping context clues save');
+    return [];
+  }
+  if (!entryId || !Array.isArray(clues) || clues.length === 0) return [];
+
+  const rows = clues
+    .map(normalizeContextClue)
+    .filter(Boolean)
+    .map(clue => ({
+      user_id: userId,
+      entry_id: entryId,
+      ...clue,
+    }));
+
+  if (rows.length === 0) return [];
+
+  const rowsWithLocalId = rows.filter(row => row.local_id);
+  const rowsWithoutLocalId = rows.filter(row => !row.local_id);
+  const saved = [];
+
+  if (rowsWithLocalId.length) {
+    const { data, error } = await supabase
+      .from('context_clues')
+      .upsert(rowsWithLocalId, { onConflict: 'user_id,local_id' })
+      .select();
+    if (error) throw error;
+    saved.push(...(data || []));
+  }
+
+  if (rowsWithoutLocalId.length) {
+    const { data, error } = await supabase
+      .from('context_clues')
+      .insert(rowsWithoutLocalId)
+      .select();
+    if (error) throw error;
+    saved.push(...(data || []));
+  }
+
+  return saved;
 }
 
 export async function savePerson(userId, personData) {

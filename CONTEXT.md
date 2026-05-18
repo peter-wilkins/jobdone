@@ -76,6 +76,10 @@ _Avoid_: Search term, Filter
 A user-curated subset of Recall-returned Entries, optionally with a short user-written message, prepared as a revocable share link for an external recipient. The user selects each Entry explicitly; a Share Pack is not the Query itself, not all Recall results, and not an AI-generated answer. It is a snapshot of selected Entry content at send time, not a live view into the Timeline.
 _Avoid_: Report, Export, Search Result
 
+**Feedback Report**:
+A user-submitted report that something was confusing, broken, or worth improving. A Feedback Report can contain the user's voice/text description, optional attachments, and privacy-bounded Context Clues such as route, build id, device/browser state, recent app events, and recent errors.
+_Avoid_: Telemetry, Bug Video, Debug Dump
+
 **Confirmation**:
 The user gesture that commits a ready-for-review Entry into the Timeline. Irreversible.
 _Avoid_: Save, Approve
@@ -141,6 +145,8 @@ _Avoid_: Search bar, Input field, Record button
 - Recipient-facing Share Pack pages avoid third-party embeds and unnecessary tracking
 - Share Pack access does not create recipient-facing read receipts in MVP; operational access metadata is only for abuse/debug if needed
 - Share Pack recipients are arbitrary external recipients for MVP; sharing a link does not automatically create a Contact
+- A **Feedback Report** contains user-submitted feedback content plus optional attachments and Context Clues; it is not a background telemetry stream
+- Feedback Report Context Clues exclude private Entry content, transcripts, Contact details, and shared payload bodies by default unless the user explicitly includes them
 - A Contact-only Confirmation updates Contacts and removes the Capture from the Inbox without creating a Timeline Entry
 - A minimal Contacts surface lists, searches, and displays Contacts; merge and full editing are deferred
 - A Contact with no linked Entries can be deleted; a Contact linked to Entries cannot be deleted while immutable Entry snapshots remain
