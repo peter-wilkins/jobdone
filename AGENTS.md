@@ -27,10 +27,13 @@ smoke tests that cannot be fully verified by automated checks.
 
 When there are QA actions for the user, make them hard to miss: trigger a local
 terminal bell if available and clearly label the final section `QA actions`.
-Do not save QA queue state to the repo or GitHub. Send QA actions to ntfy
-instead, using `NTFY_TOPIC` or `NTFY_URL` from the local environment. Only say
-the notification was sent if the ntfy request actually succeeded. If ntfy is not
-configured or fails, say so and include the QA actions in the final response.
+Append every QA action set to `docs/QA_LOG.md` with the date, related issue or
+commit, status, and concrete checks. This is a complete historical QA log for
+future automated test generation and pre-launch audit work, not a short-lived
+queue. For active back-and-forth notifications, prefer an external notification
+channel configured in the local environment. Only say a notification was sent if
+the request actually succeeded. If notification delivery is not configured or
+fails, say so and include the QA actions in the final response.
 
 ### Triage labels
 
