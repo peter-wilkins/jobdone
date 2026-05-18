@@ -31,6 +31,22 @@ A mobile-first voice job log for self-employed plumbers. Record what you did aft
 - security audit
 - captcha 
 
+## Deployment
+
+Use the root deployment scripts for production:
+
+```bash
+npm run deploy:prod
+npm run deploy:frontend
+npm run deploy:backend
+```
+
+These scripts run `vercel build --prod` before `vercel deploy --prebuilt --prod`.
+Do not run `vercel deploy --prebuilt` directly unless `.vercel/output` has just been
+regenerated. `--prebuilt` uploads `.vercel/output`; if that directory is stale,
+production can deploy an old frontend even when `npm run build` created fresh `dist`
+files.
+
 ## Tech Stack
 
 **Frontend**
