@@ -901,7 +901,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
-                Leave feedback
+                Report issue
               </button>
               <label className="flex items-start gap-3 px-4 py-3 border-t border-gray-100 text-sm text-gray-700 hover:bg-gray-50 transition cursor-pointer">
                 <input

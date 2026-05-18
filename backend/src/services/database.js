@@ -421,23 +421,36 @@ export function createAnonymousSession() {
 }
 
 /**
- * Save a feedback note to Supabase
+ * Save an issue report to Supabase
  */
-export async function saveFeedback(userId, { transcript, created_at }) {
+export async function saveFeedback(userId, { transcript, created_at, diagnostic_bundle }) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured, skipping feedback save');
     return null;
   }
 
   try {
-    const { data, error } = await supabase
+    const row = {
+      user_id: userId,
+      transcript,
+      diagnostic_bundle: diagnostic_bundle || {},
+      created_at: new Date(created_at).toISOString(),
+    };
+
+    let { data, error } = await supabase
       .from('feedback')
-      .insert([{
-        user_id: userId,
-        transcript,
-        created_at: new Date(created_at).toISOString(),
-      }])
+      .insert([row])
       .select();
+
+    if (error && String(error.message || '').includes('diagnostic_bundle')) {
+      console.warn('[DB] feedback.diagnostic_bundle missing; saving report without diagnostics');
+      const retry = await supabase
+        .from('feedback')
+        .insert([{ user_id: row.user_id, transcript: row.transcript, created_at: row.created_at }])
+        .select();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) throw error;
 

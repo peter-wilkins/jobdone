@@ -191,7 +191,7 @@ export class APIService {
 
   /**
    * Save confirmed feedback to cloud
-   * @param {{ userId: string, transcript: string, created_at: string }} payload
+   * @param {{ userId: string, transcript: string, created_at: string, diagnostic_bundle?: Object }} payload
    */
   async saveFeedback(payload) {
     try {

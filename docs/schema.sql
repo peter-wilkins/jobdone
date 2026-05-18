@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS context_clues CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
 DROP TABLE IF EXISTS people CASCADE;
+DROP TABLE IF EXISTS feedback CASCADE;
 DROP TABLE IF EXISTS queries CASCADE;
 
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
@@ -113,7 +114,24 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 7. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 7. feedback (user-submitted issue reports with compact diagnostics)
+CREATE TABLE feedback (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL,
+  transcript        TEXT NOT NULL,
+  diagnostic_bundle JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX feedback_user_id_idx    ON feedback(user_id);
+CREATE INDEX feedback_created_at_idx ON feedback(created_at DESC);
+
+ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_feedback" ON feedback FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_feedback" ON feedback FOR SELECT USING (TRUE);
+CREATE POLICY "backend_delete_feedback" ON feedback FOR DELETE USING (TRUE);
+
+-- 8. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  vector(1024),

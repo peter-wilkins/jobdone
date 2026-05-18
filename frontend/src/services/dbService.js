@@ -1237,10 +1237,33 @@ export class DBService {
       audioBlob,
       audioSize: audioBlob.size,
       audioDuration: meta.duration,
+      diagnosticBundle: meta.diagnosticBundle || null,
       status: 'recording',
       syncStatus: 'pending',
       errorMessage: null,
       transcript: null,
+      created_at: new Date().toISOString(),
+      synced_at: null,
+    };
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([FEEDBACK_STORE], 'readwrite');
+      tx.objectStore(FEEDBACK_STORE).add(item).onsuccess = () => resolve(item.id);
+      tx.onerror = () => reject(new Error('Failed to create feedback'));
+    });
+  }
+
+  async createFeedbackTextReport({ transcript, diagnosticBundle }) {
+    const db = await this.ensureDb();
+    const item = {
+      id: `fb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      audioBlob: null,
+      audioSize: 0,
+      audioDuration: 0,
+      diagnosticBundle: diagnosticBundle || null,
+      status: 'ready_for_review',
+      syncStatus: 'pending',
+      errorMessage: null,
+      transcript,
       created_at: new Date().toISOString(),
       synced_at: null,
     };

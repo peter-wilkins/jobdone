@@ -10,6 +10,7 @@ import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
 import { queryHistoryService } from './services/queryHistoryService';
+import { diagnosticService } from './services/diagnosticService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -122,7 +123,9 @@ function App() {
   // Handle browser back button
   useEffect(() => {
     const handlePopState = () => {
-      setScreen(screenFromLocation());
+      const nextScreen = screenFromLocation();
+      diagnosticService.record('screen_open', { screen: nextScreen, source: 'history' });
+      setScreen(nextScreen);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -130,6 +133,7 @@ function App() {
 
   // Navigate with history support
   const navigateTo = (newScreen) => {
+    diagnosticService.record('screen_open', { screen: newScreen, source: 'app_navigation' });
     if (newScreen !== 'home' && screen === 'home') {
       // Push state when leaving home
       window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
