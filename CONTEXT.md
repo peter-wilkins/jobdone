@@ -80,6 +80,10 @@ _Avoid_: Report, Export, Search Result
 A user-submitted report that something was confusing, broken, or worth improving. A Feedback Report can contain the user's voice/text description, optional attachments, and privacy-bounded Context Clues such as route, build id, device/browser state, recent app events, and recent errors.
 _Avoid_: Telemetry, Bug Video, Debug Dump
 
+**Native Integration Shell**:
+A thin platform app whose purpose is to bridge OS capabilities such as sharing, install presence, notifications, and permissions into JobDone while the web app remains the product surface and source of domain behavior.
+_Avoid_: Native Rewrite, Wrapper App, Second App
+
 **Confirmation**:
 The user gesture that commits a ready-for-review Entry into the Timeline. Irreversible.
 _Avoid_: Save, Approve
@@ -157,6 +161,10 @@ _Avoid_: Search bar, Input field, Record button
 - The PWA caches the app shell and static assets for offline opening; API responses are not the source of truth
 - Foreground app-open retry is the canonical sync mechanism; browser Background Sync is only an optional optimization
 - Android Chrome is the primary platform for Web Share Target; iOS and desktop PWA support are best-effort
+- A **Native Integration Shell** is only worth prototyping if native OS integration solves concrete PWA pain such as unreliable share targets; App Store / Play Store discoverability alone is not enough justification for MVP
+- JobDone should have one recommended installed surface per platform. If an Android Native Integration Shell becomes viable, it should be the recommended Android install path; the browser-installed PWA remains the desktop/default web path
+- Chrome's Add to Home Screen install route may feel unfamiliar or less trustworthy than an app-store install flow for some users, but that is an adoption concern rather than a reason to build a second product surface
+- Share Target is an install-gated value proposition: users generally need JobDone installed before it appears as an Android share option, so install promotion should happen near login/onboarding or in the app menu, not after a successful share
 - Web Share Target uses one POST endpoint for all inbound shares so text, links, contacts, and files follow the same Capture path
 - Shared Captures open through a dedicated `/share-target` review route
 - The service worker stores raw shared payloads and creates the Capture shell; app code parses and enriches payloads during review
