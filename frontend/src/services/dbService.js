@@ -1628,8 +1628,10 @@ export class DBService {
   async upsertCloudContact(cloudContact) {
     const normalizedEmails = Array.from(new Set((cloudContact.normalized_emails || []).filter(Boolean)));
     const normalizedPhones = Array.from(new Set((cloudContact.normalized_phones || []).filter(Boolean)));
+    const localId = cloudContact.local_id || null;
+    const existingByLocalId = localId ? await this.getContact(localId) : null;
     const matches = await this.findContactsByContactKeys({ normalizedEmails, normalizedPhones });
-    const existing = matches.find(contact => contact.remoteId === cloudContact.id) || matches[0] || null;
+    const existing = existingByLocalId || matches.find(contact => contact.remoteId === cloudContact.id) || matches[0] || null;
     const contactData = {
       displayName: cloudContact.display_name || '',
       givenName: cloudContact.given_name || '',
@@ -1652,7 +1654,7 @@ export class DBService {
     if (!existing) {
       return this.createContact({
         ...contactData,
-        id: cloudContact.local_id || this.generateContactId(),
+        id: localId || this.generateContactId(),
         created_at: cloudContact.created_at || new Date().toISOString(),
         updated_at: cloudContact.updated_at || cloudContact.created_at || new Date().toISOString(),
       });

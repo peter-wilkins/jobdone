@@ -90,3 +90,12 @@ Status: pending user confirmation.
 1. On production build for this fix or newer, create or reuse a local Contact with a full display name.
 2. Record a note that says the Contact's complete name and confirm the Contact pill is preselected on the review screen.
 3. Remove the Contact pill and confirm the Entry can still be saved without a Contact.
+
+## 2026-05-18 - Contact sync regression
+
+Status: pending user confirmation.
+
+1. On production build for this fix or newer, share a Contact from Android to JobDone while logged in and approve it.
+2. Confirm the Contact remains in local Contacts after approval.
+3. Reload or open JobDone on a second logged-in device and confirm the Contact appears after sync.
+4. Confirm approving a Contact without phone/email details does not create duplicate local Contact rows or break subsequent sync.

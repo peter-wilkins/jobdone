@@ -169,8 +169,9 @@ export function ShareTargetScreen({ onBack, user }) {
           throw new Error('No contact payload in capture');
         }
 
+        const savedContacts = [];
         for (const draft of drafts) {
-          await dbService.upsertContact({
+          const savedContact = await dbService.upsertContact({
             displayName: draft.displayName,
             givenName: draft.givenName,
             familyName: draft.familyName,
@@ -183,6 +184,19 @@ export function ShareTargetScreen({ onBack, user }) {
             normalizedEmails: draft.normalizedEmails,
             sourceCaptureIds: [capture.id],
           });
+          savedContacts.push(savedContact);
+        }
+
+        if (user && savedContacts.length) {
+          try {
+            const result = await syncService.syncContacts(savedContacts);
+            const syncedContacts = result?.contacts || result?.people || [];
+            for (const cloudContact of syncedContacts) {
+              await dbService.upsertCloudContact(cloudContact);
+            }
+          } catch (syncErr) {
+            console.warn('[ShareTarget] Contact sync failed, contact saved locally:', syncErr);
+          }
         }
       } else {
         // Create Entry from Capture payloads
