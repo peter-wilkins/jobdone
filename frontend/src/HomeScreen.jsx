@@ -12,6 +12,7 @@ const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
 const MIN_STOP_AFTER_MS = 1000;
 const MIN_RECORDING_SECONDS = 1;
+const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
 let fastCaptureAttemptedThisRun = false;
 
 export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false }) {
@@ -743,7 +744,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     <div className="h-screen bg-white flex flex-col">
       {/* Header */}
       <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-light text-gray-900">JobDone</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-light text-gray-900 leading-5">JobDone</h1>
+          <p className="text-[10px] leading-4 text-gray-400 font-mono">build {BUILD_ID}</p>
+        </div>
         
         {/* Recording timer in header */}
         {(isRecording || isStartingRecording) && (
