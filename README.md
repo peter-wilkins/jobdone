@@ -1,117 +1,117 @@
 # JobDone
 
-A mobile-first voice job log for self-employed plumbers. Record what you did after each job, get it transcribed and summarized automatically. Mental closure before you drive off.
+JobDone is a mobile-first, local-first voice log for self-employed tradespeople.
+It captures what happened on a job, turns it into a confirmed Timeline Entry,
+and uses Locations, Contacts, Tags, and Recall to surface operational memory
+when it is needed.
 
-## What it does
+## Source Of Truth
 
-- **Voice-first capture**: Giant record button, no forms
-- **Automatic transcription**: Powered by Whisper
-- **Smart extraction**: Materials, labour time, follow-ups, future work — all extracted by Claude
-- **Lightweight**: Calm, dependable, no AI hype
-- **Offline-capable**: Record even without signal, sync when online
-- **Local-first**: Your data stays on your device, optional cloud backup
+- [CONTEXT.md](./CONTEXT.md) — product language, domain model, current behaviour, and platform decisions.
+- [docs/adr](./docs/adr) — architectural decisions and tradeoffs.
+- [docs/schema.sql](./docs/schema.sql) — clean Supabase schema for the current cloud sync model.
+- [AGENTS.md](./AGENTS.md) — repo-specific agent workflow rules.
+- [docs/agents](./docs/agents) — issue tracker, triage labels, and domain-doc conventions for agents.
 
-## Status
+Keep the README short. If product behaviour, data ownership, platform strategy,
+or domain language changes, update `CONTEXT.md` or an ADR first and link from
+here only when needed.
 
-**✓ Complete**
-- Voice recording (Web Audio API)
-- Local storage (IndexedDB)
-- Minimal calm UI
-- Backend transcription (Whisper)
-- Smart extraction (Claude)
-- Auto-sync from recording → transcription → review
+## Current Shape
 
-**TODO**
-- Auth + cloud sync (Supabase)
-- Smart recall timeline
-- Native mobile app (iOS/Android)
+- Frontend: React + Vite PWA in [frontend](./frontend).
+- Backend: Fastify API in [backend](./backend).
+- Local data: IndexedDB is the current-device source of truth.
+- Cloud sync: Supabase is the cross-device sync replica.
+- Audio: Deepgram transcription and Claude summarisation/classification support.
+- Recall: Entry summaries are embedded with Voyage AI and searched through Supabase/pgvector.
+- Deploy target: Vercel frontend and backend projects.
 
-**DEPLOYMENT TODO**
-- check cors on login flow
-- security audit
-- captcha 
+For the exact domain rules, see [CONTEXT.md](./CONTEXT.md). In particular:
 
-## Deployment
-
-Use the root deployment scripts for production:
-
-```bash
-npm run deploy:prod
-npm run deploy:frontend
-npm run deploy:backend
-```
-
-These scripts run `vercel build --prod` before `vercel deploy --prebuilt --prod`.
-Do not run `vercel deploy --prebuilt` directly unless `.vercel/output` has just been
-regenerated. `--prebuilt` uploads `.vercel/output`; if that directory is stale,
-production can deploy an old frontend even when `npm run build` created fresh `dist`
-files.
-
-## Tech Stack
-
-**Frontend**
-- React + Vite
-- Tailwind CSS
-- IndexedDB (local persistence)
-- Web Audio API (recording)
-
-**Backend**
-- Fastify (server)
-- OpenAI Whisper (transcription)
-- Claude (summarization + extraction)
-- Multipart form handling for audio uploads
-
-## Getting started
-
-### 1. Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-✓ UI runs at http://localhost:5173
-✓ Recording works (audio stored locally)
-✓ Can review & save jobs offline
-
-### 2. Backend (for transcription)
-
-```bash
-cd backend
-npm install
-cp .env.example .env
-
-# Add these API keys to .env:
-# OPENAI_API_KEY=sk_...
-# ANTHROPIC_API_KEY=sk-ant-...
-
-npm run dev
-```
-
-✓ Server runs at http://localhost:3000
-✓ Frontend auto-detects it
-✓ Recordings auto-transcribe
-
-### Get API keys
-
-- **OpenAI (Whisper)**: https://platform.openai.com/api-keys
-- **Anthropic (Claude)**: https://console.anthropic.com
+- Captures stay local until Confirmation.
+- Confirmed Entries are immutable.
+- Locations, Contacts, and Tags are first-class Entry structure.
+- Foreground app-open retry is the canonical sync mechanism.
+- Android Chrome is the primary PWA/share-target platform for now.
 
 ## Development
 
-**Product**
-- `/CONTEXT.md` — product definition, philosophy, features
-- `/PROTOTYPE.md` — UI design decision & variant analysis
+Install dependencies per workspace:
 
-**Frontend** (`/frontend`)
-- `/src/HomeScreen.jsx` — main UI
-- `/src/services/audioService.js` — Web Audio API
-- `/src/services/dbService.js` — IndexedDB persistence
-- `/src/services/apiService.js` — backend communication
+```bash
+npm --prefix frontend install
+npm --prefix backend install
+```
 
-**Backend** (`/backend`)
-- `/src/routes/audio.js` — API endpoints
-- `/src/services/transcription.js` — Whisper integration
-- `/src/services/summarization.js` — Claude integration
-- `docs/schema.sql` — Supabase schema used by sync
+Run the frontend:
+
+```bash
+npm --prefix frontend run dev
+```
+
+Run the backend:
+
+```bash
+npm --prefix backend run dev
+```
+
+The frontend defaults to `http://localhost:3000` for the backend. Set
+`VITE_API_URL` in `frontend/.env.local` if needed.
+
+Backend environment variables for real API usage:
+
+```text
+DEEPGRAM_API_KEY
+ANTHROPIC_API_KEY
+VOYAGE_API_KEY
+SUPABASE_URL
+SUPABASE_KEY
+```
+
+Use `USE_MOCK_APIS=true` in `backend/.env` for mock transcription,
+summarisation, and embeddings during local development.
+
+## Common Commands
+
+```bash
+npm run build:frontend
+npm run test:backend
+npm --prefix frontend run lint
+npm --prefix frontend run build
+npm --prefix backend test
+npm run logs:backend -- --level error --since 2h
+```
+
+## Deployment
+
+Production deploy scripts live at the repo root:
+
+```bash
+npm run deploy:backend
+npm run deploy:frontend
+npm run deploy:prod
+```
+
+These scripts run `vercel build --prod` before
+`vercel deploy --prebuilt --prod --yes`. Do not run a prebuilt deploy from stale
+`.vercel/output`.
+
+Frontend changes should be deployed with:
+
+```bash
+vercel --cwd frontend build --prod
+vercel --cwd frontend deploy --prod --prebuilt --yes
+```
+
+Then verify the live build id at:
+
+```bash
+curl -L https://frontend-jobdone1.vercel.app/
+```
+
+Backend health:
+
+```bash
+curl -L https://jobdone-gamma.vercel.app/health
+```
