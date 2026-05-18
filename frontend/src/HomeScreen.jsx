@@ -37,7 +37,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
+  const [reviewContacts, setReviewContacts] = useState({});
   const [reviewTags, setReviewTags] = useState({});
+  const [reviewStructure, setReviewStructure] = useState({});
+  const [reviewSelectedTags, setReviewSelectedTags] = useState({});
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
@@ -50,6 +53,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
   const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
   const handledForegroundReturnRef = useRef(0);
+  const structurePredictionRequestedRef = useRef(new Set());
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -65,6 +69,26 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   useEffect(() => {
     queryHistoryService.getRecent().then(setRecentQueries);
   }, []);
+
+  const selectedPredictionCandidates = (entryId) => {
+    const structure = reviewStructure[entryId] || {};
+    const candidateSet = structure.candidateSet || {};
+    const prediction = structure.prediction || {};
+    const location = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
+    const contact = (candidateSet.contacts || []).find(candidate => candidate.id === reviewContacts[entryId]);
+    const selectedTagIds = new Set(reviewSelectedTags[entryId] || []);
+    const tags = (candidateSet.tags || []).filter(candidate => selectedTagIds.has(candidate.id));
+    return { structure, candidateSet, prediction, location, contact, tags };
+  };
+
+  const togglePredictedTag = (entryId, tagId) => {
+    setReviewSelectedTags(prev => {
+      const selected = new Set(prev[entryId] || []);
+      if (selected.has(tagId)) selected.delete(tagId);
+      else selected.add(tagId);
+      return { ...prev, [entryId]: Array.from(selected) };
+    });
+  };
 
   useEffect(() => {
     return onServiceWorkerUpdate((registration) => {
@@ -95,6 +119,56 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       return 'offline';
     return 'server';
   };
+
+  useEffect(() => {
+    if (!user || !backendAvailable) return;
+
+    const readyNotes = entries.filter(entry =>
+      entry.status === 'ready_for_review' &&
+      entry.intent !== 'QUERY' &&
+      entry.summary &&
+      !structurePredictionRequestedRef.current.has(entry.id)
+    );
+
+    for (const entry of readyNotes) {
+      structurePredictionRequestedRef.current.add(entry.id);
+      (async () => {
+        try {
+          const contextClues = entry.captureId
+            ? await dbService.getContextCluesForCapture(entry.captureId)
+            : await dbService.getContextCluesForEntry(entry.id);
+          const result = await apiService.predictStructure({
+            entryData: {
+              summary: entry.summary,
+              transcript: entry.transcript,
+            },
+            contextClues,
+          });
+          const candidateSet = result.candidateSet || {};
+          const prediction = result.prediction || {};
+          const predictedLocation = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
+          const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
+
+          setReviewStructure(prev => ({ ...prev, [entry.id]: { candidateSet, prediction } }));
+          if (predictedLocation) {
+            setReviewLocations(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: predictedLocation.label });
+          }
+          if (predictedContact) {
+            setReviewContacts(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: predictedContact.id });
+          }
+          if (Array.isArray(prediction.tagIds) && prediction.tagIds.length) {
+            setReviewSelectedTags(prev => prev[entry.id]?.length ? prev : { ...prev, [entry.id]: prediction.tagIds });
+          }
+        } catch (err) {
+          console.warn('[Structure] Prediction unavailable:', err);
+          setReviewStructure(prev => ({
+            ...prev,
+            [entry.id]: { error: true, candidateSet: { locations: [], contacts: [], tags: [] }, prediction: {} },
+          }));
+        }
+      })();
+    }
+  }, [entries, user, backendAvailable]);
 
   /**
    * Process a recording: transcribe and extract
@@ -328,22 +402,31 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       // Delete audio and move to confirmed locally
       const locationText = (reviewLocations[id] || '').trim();
       const locations = locationText ? [{ displayName: locationText, placeText: locationText }] : [];
-      const tagInputs = Array.from(
-        (reviewTags[id] || '')
-          .split(',')
-          .map(tag => tag.trim())
-          .filter(Boolean)
-          .reduce((map, tag) => map.set(tag.toLowerCase(), tag), new Map())
-          .values()
-      );
-      const tagValidations = tagInputs.map(validateTagLabel);
+      const { contact, tags: selectedPredictedTags } = selectedPredictionCandidates(id);
+      const contacts = contact ? [{
+        id: contact.id,
+        displayName: contact.label,
+        primaryPhone: contact.primaryPhone,
+        primaryEmail: contact.primaryEmail,
+      }] : [];
+      const tagDrafts = [
+        ...selectedPredictedTags.map(tag => ({ label: tag.label, categoryName: tag.categoryName || 'General' })),
+        ...(reviewTags[id] || '').split(',').map(label => ({ label, categoryName: 'General' })),
+      ]
+        .map(tag => ({ ...tag, label: tag.label.trim() }))
+        .filter(tag => tag.label)
+        .reduce((map, tag) => map.set(tag.label.toLowerCase(), tag), new Map());
+      const tagValidations = Array.from(tagDrafts.values()).map(tag => ({
+        ...validateTagLabel(tag.label),
+        categoryName: tag.categoryName,
+      }));
       const invalidTag = tagValidations.find(result => !result.valid);
       if (invalidTag) {
         setError(invalidTag.error);
         return;
       }
-      const tags = tagValidations.map(result => ({ label: result.label, categoryName: 'General' }));
-      const confirmedEntry = await dbService.confirmEntry(id, { locations, tags });
+      const tags = tagValidations.map(result => ({ label: result.label, categoryName: result.categoryName || 'General' }));
+      const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags });
       let timelineEntry = { ...entry, ...confirmedEntry };
 
       // Try to sync to cloud (optional - don't block if it fails)
@@ -723,6 +806,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
       ? entry.locationSnapshots[0]
       : null;
+    const primaryContact = Array.isArray(entry.contactSnapshots) && entry.contactSnapshots.length > 0
+      ? entry.contactSnapshots[0]
+      : null;
     const entryTags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
       ? entry.tagSnapshots
       : [];
@@ -793,6 +879,17 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         await dbService.updateEntry(entry.id, { intent: newIntent });
         setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, intent: newIntent } : e));
       };
+      const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
+      const locationCandidates = candidateSet.locations || [];
+      const contactCandidates = candidateSet.contacts || [];
+      const tagCandidates = candidateSet.tags || [];
+      const selectedTagIds = new Set(reviewSelectedTags[entry.id] || []);
+      const tagGroups = tagCandidates.reduce((groups, tag) => {
+        const category = tag.categoryName || 'General';
+        groups[category] = groups[category] || [];
+        groups[category].push(tag);
+        return groups;
+      }, {});
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -817,6 +914,37 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {reviewLocations[entry.id] ? (
+                  <button
+                    type="button"
+                    onClick={() => setReviewLocations(prev => ({ ...prev, [entry.id]: '' }))}
+                    className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-700"
+                  >
+                    <span className="truncate">{reviewLocations[entry.id]}</span>
+                    <span className="ml-1 text-emerald-500">x</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center rounded border border-dashed border-emerald-300 px-2.5 py-1 text-sm text-emerald-700">
+                    + Location
+                  </span>
+                )}
+                {selectedContact ? (
+                  <button
+                    type="button"
+                    onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: null }))}
+                    className="inline-flex max-w-full items-center rounded bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-700"
+                  >
+                    <span className="truncate">{selectedContact.label}</span>
+                    <span className="ml-1 text-violet-500">x</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center rounded border border-dashed border-violet-300 px-2.5 py-1 text-sm text-violet-700">
+                    + Contact
+                  </span>
+                )}
+              </div>
+
               <label className="block">
                 <span className="text-sm text-gray-500">Location</span>
                 <input
@@ -827,16 +955,79 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                   className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
               </label>
-              <label className="mt-3 block">
+              {locationCandidates.length > 0 && (
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {locationCandidates.map(candidate => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }))}
+                      className="shrink-0 rounded border border-emerald-200 px-2.5 py-1 text-sm text-emerald-700"
+                    >
+                      {candidate.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-3">
+                <span className="text-sm text-gray-500">Contact</span>
+                {contactCandidates.length > 0 ? (
+                  <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+                    {contactCandidates.map(candidate => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }))}
+                        className={`shrink-0 rounded border px-2.5 py-1 text-sm ${
+                          reviewContacts[entry.id] === candidate.id
+                            ? 'border-violet-300 bg-violet-50 text-violet-700'
+                            : 'border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        {candidate.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-400">+ Contact</p>
+                )}
+              </div>
+
+              <div className="mt-3">
                 <span className="text-sm text-gray-500">Tags</span>
+                {structure.error && (
+                  <p className="mt-1 text-xs text-gray-400">Suggestions unavailable.</p>
+                )}
+                {Object.entries(tagGroups).map(([category, tags]) => (
+                  <div key={category} className="mt-2">
+                    <p className="mb-1 text-xs font-medium text-gray-400">{category}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map(tag => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => togglePredictedTag(entry.id, tag.id)}
+                          className={`rounded px-2.5 py-1 text-sm ${
+                            selectedTagIds.has(tag.id)
+                              ? 'bg-sky-50 text-sky-700'
+                              : 'border border-gray-200 text-gray-700'
+                          }`}
+                        >
+                          {tag.label}{selectedTagIds.has(tag.id) ? ' x' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
                 <input
                   type="text"
                   value={reviewTags[entry.id] || ''}
                   onChange={(event) => setReviewTags(prev => ({ ...prev, [entry.id]: event.target.value }))}
-                  placeholder="+ Tags, comma separated"
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                  placeholder="+ Custom Tag"
+                  className="mt-2 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
-              </label>
+              </div>
             </div>
           )}
           
@@ -880,6 +1071,13 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           <div className="mt-2">
             <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
               <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
+            </span>
+          </div>
+        )}
+        {primaryContact && (
+          <div className="mt-2">
+            <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+              <span className="truncate">{primaryContact.displayName}</span>
             </span>
           </div>
         )}

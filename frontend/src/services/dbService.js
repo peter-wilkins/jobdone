@@ -419,7 +419,7 @@ export class DBService {
   /**
    * Confirm an entry (delete audio, move to saved)
    */
-  async confirmEntry(entryId, { locations = [], tags = [] } = {}) {
+  async confirmEntry(entryId, { locations = [], contacts = [], tags = [] } = {}) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -454,6 +454,8 @@ export class DBService {
         entry.syncStatus = 'pending';
         entry.locationIds = [];
         entry.locationSnapshots = [];
+        entry.contactIds = [];
+        entry.contactSnapshots = [];
         entry.tagIds = [];
         entry.tagSnapshots = [];
 
@@ -490,6 +492,20 @@ export class DBService {
           });
           entry.locationIds.push(locationId);
           entry.locationSnapshots.push(snapshot);
+        }
+
+        const normalizedContacts = contacts
+          .map(contact => ({
+            id: contact.id || contact.localId || contact.local_id || null,
+            displayName: normalizeLocationText(contact.displayName || contact.display_name || contact.label || ''),
+            primaryPhone: contact.primaryPhone || contact.primary_phone || null,
+            primaryEmail: contact.primaryEmail || contact.primary_email || null,
+          }))
+          .filter(contact => contact.id && contact.displayName);
+
+        for (const contact of normalizedContacts) {
+          entry.contactIds.push(contact.id);
+          entry.contactSnapshots.push(contact);
         }
 
         const normalizedTags = tags

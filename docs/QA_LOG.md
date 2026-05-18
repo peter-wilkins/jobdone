@@ -64,3 +64,13 @@ Status: pending user confirmation.
 1. Create or reuse a production account with at least one confirmed Location, Contact, and Tag.
 2. Confirm backend health is OK at `https://jobdone-gamma.vercel.app/health`.
 3. After the next prediction-review UI slice, confirm review suggestions are bounded and separated into Location, Contact, and Tags rather than showing the whole vocabulary.
+
+## 2026-05-18 - Issue #33 / Predicted structure review UX
+
+Status: pending user confirmation.
+
+1. On production build for this issue or newer, create a ready-for-review note while logged in and confirm Location and Contact appear as primary pills above Tags.
+2. Confirm `+ Location` and `+ Contact` are visible when no prediction is selected, and that removing a selected pill does not block Confirmation.
+3. Confirm predicted Tags appear grouped by category and the `+ Custom Tag` input is always visible without horizontal scrolling.
+4. Confirm an Entry with no Location and no Contact still confirms successfully.
+5. Confirm selected Location, Contact, and Tags display on the confirmed Timeline card and are not editable there.

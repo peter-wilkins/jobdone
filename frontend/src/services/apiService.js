@@ -202,6 +202,19 @@ export class APIService {
     }
   }
 
+  async predictStructure({ entryData, contextClues = [] }) {
+    const response = await fetch(`${API_BASE_URL}/api/structure/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ entryData, contextClues }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Structure prediction failed`);
+    }
+    return response.json();
+  }
+
   /**
    * Save confirmed feedback to cloud
    * @param {{ userId: string, transcript: string, created_at: string, diagnostic_bundle?: Object }} payload
