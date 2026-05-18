@@ -6,6 +6,12 @@ Always check `git status --short` before starting implementation work. If the
 tree is dirty, stop and confirm with the user before changing files. The user
 prefers everything committed before new implementation work starts.
 
+### Scope control
+
+If the user starts a side quest while a feature is in progress, challenge the
+scope shift. Prefer capturing the side quest as one or more GitHub issues, then
+return to the current feature unless the user explicitly reprioritizes.
+
 ### Issue tracker
 
 Issues live in GitHub Issues (`peter-wilkins/jobdone`). See `docs/agents/issue-tracker.md`.
