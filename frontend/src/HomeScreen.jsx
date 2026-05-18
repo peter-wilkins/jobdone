@@ -328,20 +328,24 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       const locationText = (reviewLocations[id] || '').trim();
       const locations = locationText ? [{ displayName: locationText, placeText: locationText }] : [];
       const confirmedEntry = await dbService.confirmEntry(id, { locations });
+      let timelineEntry = { ...entry, ...confirmedEntry };
 
       // Try to sync to cloud (optional - don't block if it fails)
-      const entryForSync = { ...entry, ...confirmedEntry };
-      if (entryForSync && entryForSync.transcript && entryForSync.summary) {
+      if (timelineEntry && timelineEntry.transcript && timelineEntry.summary) {
         if (!user) {
           // Not logged in — entry saved locally, will sync when user logs in
           console.log('[Sync] Skipped — not logged in. Will retry on login.');
         } else {
           try {
-            const result = await syncService.syncEntry(entryForSync);
+            const result = await syncService.syncEntry(timelineEntry);
             if (result !== null) {
               await dbService.markEntrySynced(id, result?.entry?.id);
               await dbService.upsertCloudEntryLocations(id, result?.entry?.id, result?.entry?.locations || []);
-              entryForSync.syncStatus = 'synced';
+              timelineEntry = {
+                ...timelineEntry,
+                syncStatus: 'synced',
+                remoteId: result?.entry?.id || timelineEntry.remoteId,
+              };
             }
           } catch (syncErr) {
             console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
@@ -352,7 +356,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
       // Update UI: move to confirmed section (re-sort)
       setEntries(prev => {
-        const updated = prev.map(e => e.id === id ? { ...e, ...confirmedEntry, status: 'confirmed' } : e);
+        const updated = prev.map(e => e.id === id ? { ...e, ...timelineEntry, status: 'confirmed' } : e);
         const inProgress = updated.filter(e => e.status !== 'confirmed');
         const confirmed = updated.filter(e => e.status === 'confirmed').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         return [...inProgress, ...confirmed];

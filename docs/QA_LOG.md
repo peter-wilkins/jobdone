@@ -30,3 +30,11 @@ Status: pending user confirmation.
 3. Create a normal note with the Location field left blank, confirm it, and check the Entry still appears and syncs normally.
 4. While logged in, create an Entry with a Location on one device, then open another logged-in device and confirm the Entry and Location pill appear after sync.
 5. Confirm existing Entries created before Locations still appear in Timeline and Recall without errors.
+
+## 2026-05-18 - Confirm-time sync indicator regression
+
+Status: pending user confirmation.
+
+1. On production build for this fix or newer, create and confirm a normal Entry while logged in.
+2. Confirm the Timeline card changes to the cloud icon immediately after confirm without requiring a reload.
+3. Refresh the app and confirm the same Entry still shows the cloud icon.
