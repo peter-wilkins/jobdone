@@ -5,6 +5,7 @@ import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
+import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -40,6 +41,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled, setFastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
+  const [updateRegistration, setUpdateRegistration] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState(null);
   const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
 
   // Query/Recall state
@@ -55,6 +58,13 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   // Load query history on mount
   useEffect(() => {
     queryHistoryService.getRecent().then(setRecentQueries);
+  }, []);
+
+  useEffect(() => {
+    return onServiceWorkerUpdate((registration) => {
+      setUpdateRegistration(registration);
+      setUpdateStatus(null);
+    });
   }, []);
 
   // Close dropdown on outside click
@@ -180,6 +190,30 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const handleFastCaptureChange = (enabled) => {
     preferencesService.setFastCaptureEnabled(enabled);
     setFastCaptureEnabled(enabled);
+  };
+
+  const handleApplyUpdate = async () => {
+    if (updateRegistration) {
+      await applyServiceWorkerUpdate(updateRegistration);
+      return;
+    }
+    window.location.reload();
+  };
+
+  const handleCheckForUpdate = async () => {
+    setUpdateStatus('checking');
+    try {
+      const hasUpdate = await checkForAppUpdate();
+      if (hasUpdate) {
+        setUpdateStatus('available');
+        window.location.reload();
+      } else {
+        setUpdateStatus('current');
+      }
+    } catch (err) {
+      console.warn('[PWA] Update check failed:', err);
+      setUpdateStatus('failed');
+    }
   };
 
   const stopRecording = async () => {
@@ -821,6 +855,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                   <span className="block text-xs text-gray-400 mt-0.5">Start recording when app opens</span>
                 </span>
               </label>
+              <button
+                onClick={() => { setMenuOpen(false); handleCheckForUpdate(); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Check for update
+              </button>
               {user && (
                 <button
                   onClick={() => { setMenuOpen(false); onNavigate('login'); }}
@@ -855,6 +895,28 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           <p className="text-sm text-gray-500">
             There is an issue with Sync right now but carry on.
           </p>
+        </div>
+      )}
+
+      {(updateRegistration || updateStatus) && (
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-800">
+            {updateRegistration || updateStatus === 'available'
+              ? 'Update available.'
+              : updateStatus === 'checking'
+                ? 'Checking for update...'
+                : updateStatus === 'failed'
+                  ? 'Could not check for update.'
+                  : 'App is up to date.'}
+          </p>
+          {(updateRegistration || updateStatus === 'available') && (
+            <button
+              onClick={handleApplyUpdate}
+              className="text-sm font-medium text-amber-900 underline shrink-0"
+            >
+              Reload
+            </button>
+          )}
         </div>
       )}
 

@@ -1,3 +1,8 @@
+const updateListeners = new Set();
+
+let registrationPromise = null;
+let updateRegistration = null;
+
 function getLoadedAssetUrls() {
   const sameOrigin = new URL(window.location.href).origin;
   const wantedTypes = new Set(['script', 'link', 'img', 'css', 'font']);
@@ -22,25 +27,90 @@ async function cacheLoadedAssets(registration) {
 
   worker.postMessage({
     type: 'CACHE_URLS',
-    urls: ['/', '/index.html', ...getLoadedAssetUrls()],
+    urls: getLoadedAssetUrls(),
   });
+}
+
+function notifyUpdateAvailable(registration) {
+  updateRegistration = registration;
+  updateListeners.forEach(listener => listener(registration));
+}
+
+function watchRegistration(registration) {
+  if (registration.waiting) {
+    notifyUpdateAvailable(registration);
+  }
+
+  registration.addEventListener('updatefound', () => {
+    const worker = registration.installing;
+    if (!worker) return;
+
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+        notifyUpdateAvailable(registration);
+      }
+    });
+  });
+}
+
+export function onServiceWorkerUpdate(listener) {
+  updateListeners.add(listener);
+  if (updateRegistration) listener(updateRegistration);
+  return () => updateListeners.delete(listener);
+}
+
+export async function applyServiceWorkerUpdate(registration = updateRegistration) {
+  if (!registration?.waiting) return false;
+  registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+  return true;
+}
+
+export async function checkForAppUpdate() {
+  const registration = await registrationPromise;
+  if (!registration) return false;
+
+  await registration.update();
+  if (registration.waiting) {
+    notifyUpdateAvailable(registration);
+    return true;
+  }
+
+  const response = await fetch(`/index.html?update-check=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache' },
+  });
+  const html = await response.text();
+  const currentBuild = import.meta.env.VITE_BUILD_ID || 'dev';
+  const remoteBuild = html.match(/<meta name="jobdone-build" content="([^"]+)"/)?.[1];
+  return Boolean(remoteBuild && remoteBuild !== currentBuild);
 }
 
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    await navigator.serviceWorker.register('/sw.js');
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
+    registrationPromise = navigator.serviceWorker.register('/sw.js', {
+      updateViaCache: 'none',
+    });
+    const registration = await registrationPromise;
+    watchRegistration(registration);
 
     if (document.readyState === 'complete') {
-      const registration = await navigator.serviceWorker.ready;
-      await cacheLoadedAssets(registration);
+      const readyRegistration = await navigator.serviceWorker.ready;
+      await cacheLoadedAssets(readyRegistration);
       return;
     }
 
     window.addEventListener('load', async () => {
-      const registration = await navigator.serviceWorker.ready;
-      cacheLoadedAssets(registration);
+      const readyRegistration = await navigator.serviceWorker.ready;
+      cacheLoadedAssets(readyRegistration);
     }, { once: true });
   } catch (error) {
     console.warn('[PWA] Service worker registration failed:', error);

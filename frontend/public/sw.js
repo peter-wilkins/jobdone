@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'jobdone-app-shell-v3';
+const CACHE_VERSION = 'jobdone-app-shell-v4';
 const DB_NAME = 'plumber-job-log';
 const DB_VERSION = 8;
 const ENTRIES_STORE = 'entries';
@@ -8,8 +8,6 @@ const CAPTURES_STORE = 'captures';
 const PEOPLE_STORE = 'people';
 const SHARE_TARGET_PATH = '/share-target';
 const APP_SHELL = [
-  '/',
-  '/index.html',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/pwa-icon-192.png',
@@ -252,11 +250,25 @@ async function handleShareTarget(request) {
   }
 }
 
+async function fetchAppShell(request) {
+  try {
+    const response = await fetch(new Request(request, { cache: 'no-store' }));
+    if (response.ok) {
+      const copy = response.clone();
+      const cache = await caches.open(CACHE_VERSION);
+      await cache.put('/index.html', copy);
+    }
+    return response;
+  } catch {
+    const cached = await caches.match('/index.html');
+    return cached || Response.error();
+  }
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
       .then(cache => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
   );
 });
 
@@ -273,6 +285,11 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
+
   if (event.data?.type !== 'CACHE_URLS' || !Array.isArray(event.data.urls)) return;
 
   event.waitUntil(
@@ -300,7 +317,7 @@ self.addEventListener('fetch', event => {
 
   // Share target GET handling - serve app shell so URL appears valid
   if (request.method === 'GET' && url.pathname === SHARE_TARGET_PATH) {
-    event.respondWith(caches.match('/index.html'));
+    event.respondWith(fetchAppShell(request));
     return;
   }
 
@@ -309,15 +326,7 @@ self.addEventListener('fetch', event => {
   }
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_VERSION).then(cache => cache.put('/index.html', copy));
-          return response;
-        })
-        .catch(() => caches.match('/index.html'))
-    );
+    event.respondWith(fetchAppShell(request));
     return;
   }
 
