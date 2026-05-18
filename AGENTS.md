@@ -30,6 +30,11 @@ terminal bell if available and clearly label the final section `QA actions`.
 Do not claim to send WhatsApp or external notifications unless a real project
 integration exists and the message was actually sent.
 
+Maintain `docs/QA_QUEUE.md` as the queue of user QA tasks that are not yet
+complete. Add new QA tasks after issue work, remove or check off tasks only when
+the user confirms they are done, and show the current open queue at the end of
+every final response.
+
 ### Triage labels
 
 Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
