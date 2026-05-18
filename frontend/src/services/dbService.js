@@ -2127,12 +2127,11 @@ export class DBService {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, QUERIES_STORE, FEEDBACK_STORE, CAPTURES_STORE, CONTACTS_STORE], 'readwrite');
-      transaction.objectStore(STORE_NAME).clear();
-      transaction.objectStore(QUERIES_STORE).clear();
-      transaction.objectStore(FEEDBACK_STORE).clear();
-      transaction.objectStore(CAPTURES_STORE).clear();
-      transaction.objectStore(CONTACTS_STORE).clear();
+      const storeNames = Array.from(db.objectStoreNames);
+      const transaction = db.transaction(storeNames, 'readwrite');
+      for (const storeName of storeNames) {
+        transaction.objectStore(storeName).clear();
+      }
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(new Error('Failed to clear database'));

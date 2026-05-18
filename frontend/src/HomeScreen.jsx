@@ -602,6 +602,31 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     return isAvailable;
   };
 
+  const handleClearLocalDatabase = async () => {
+    setMenuOpen(false);
+    const confirmed = window.confirm('Clear all local JobDone data on this device? This removes local entries, captures, contacts, tags, feedback, and query history.');
+    if (!confirmed) return;
+
+    try {
+      await dbService.clearAll();
+      setEntries([]);
+      setCaptureCount(0);
+      setRecentQueries([]);
+      setActiveQuery(null);
+      setQueryResults(null);
+      setReviewLocations({});
+      setReviewContacts({});
+      setReviewTags({});
+      setReviewStructure({});
+      setReviewSelectedTags({});
+      setError(null);
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to clear local database:', err);
+      setError('Failed to clear local database');
+    }
+  };
+
   /**
    * Execute a query: call recall, show results, save to history.
    * Used for both confirm-screen queries and re-runs from dropdown.
@@ -1350,10 +1375,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
               >
                 Check for update
               </button>
+              <button
+                onClick={handleClearLocalDatabase}
+                className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50 transition border-t border-gray-100"
+              >
+                Clear local database
+              </button>
               {user && (
                 <button
                   onClick={() => { setMenuOpen(false); onNavigate('login'); }}
-                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition border-t border-gray-100"
+                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
                 >
                   Account
                 </button>
