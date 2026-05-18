@@ -74,3 +74,11 @@ Status: pending user confirmation.
 3. Confirm predicted Tags appear grouped by category and the `+ Custom Tag` input is always visible without horizontal scrolling.
 4. Confirm an Entry with no Location and no Contact still confirms successfully.
 5. Confirm selected Location, Contact, and Tags display on the confirmed Timeline card and are not editable there.
+
+## 2026-05-18 - Share Target direct route 404
+
+Status: pending user confirmation.
+
+1. On production build for this fix or newer, share a Contact from Android to JobDone and confirm the app opens the share review screen instead of browser 404.
+2. Confirm the shared Contact can still be approved or rejected from the review screen.
+3. Confirm opening `https://frontend-jobdone1.vercel.app/share-target?id=capture-test` returns the JobDone app shell, not a Vercel 404.
