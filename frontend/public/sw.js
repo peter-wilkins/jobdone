@@ -7,6 +7,8 @@ const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
 const PEOPLE_STORE = 'people';
 const SHARE_TARGET_PATH = '/share-target';
+const MAX_SHARE_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_SHARE_TOTAL_BYTES = 50 * 1024 * 1024;
 const APP_SHELL = [
   '/manifest.webmanifest',
   '/favicon.svg',
@@ -125,6 +127,62 @@ async function readFileText(file) {
   return typeof file.text === 'function' ? file.text() : '';
 }
 
+function describeFileType(file) {
+  const mime = file.type || '';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime === 'application/pdf' || /\.pdf$/i.test(file.name || '')) return 'pdf';
+  if (/word|document/i.test(mime) || /\.docx?$/i.test(file.name || '')) return 'document';
+  if (/excel|spreadsheet/i.test(mime) || /\.xlsx?$/i.test(file.name || '')) return 'spreadsheet';
+  if (mime === 'text/calendar' || /\.ics$/i.test(file.name || '')) return 'calendar';
+  if (mime.startsWith('text/') || /\.(txt|csv)$/i.test(file.name || '')) return 'text_file';
+  return 'file';
+}
+
+function buildUnsupportedFileCapture({ files, title, text, url, combinedText }) {
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const oversizedFile = files.find(file => file.size > MAX_SHARE_FILE_BYTES);
+
+  if (oversizedFile || totalSize > MAX_SHARE_TOTAL_BYTES) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  return {
+    id: `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    source: 'share_target',
+    kind: 'unsupported_file',
+    status: 'ready_for_review',
+    errorMessage: 'unsupported_file',
+    payloads: files.map((file, index) => ({
+      type: 'unsupported_file',
+      fileKind: describeFileType(file),
+      title: file.name || title || `Shared file ${index + 1}`,
+      text: combinedText,
+      url,
+      filename: file.name || '',
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+      blob: file,
+      received_at: now,
+      sourceIndex: String(index),
+    })),
+    devSignal: {
+      type: 'unsupported_share_target_file',
+      fileCount: files.length,
+      totalSize,
+      mimeTypes: Array.from(new Set(files.map(file => file.type || 'unknown'))),
+      extensions: Array.from(new Set(files.map(file => (file.name || '').split('.').pop() || '').filter(Boolean))),
+      titlePresent: Boolean(title),
+      textPresent: Boolean(text),
+      urlPresent: Boolean(url),
+    },
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 async function buildShareCapture(formData) {
   const title = getFormValue(formData, 'title');
   const text = getFormValue(formData, 'text');
@@ -141,7 +199,7 @@ async function buildShareCapture(formData) {
   const contactLikeText = !hasFiles && looksLikeContactText(combinedText);
 
   if (hasFiles && !contactLikeFiles) {
-    return null;
+    return buildUnsupportedFileCapture({ files, title, text, url, combinedText });
   }
 
   if (!hasFiles && !title && !text && !url) {
@@ -239,7 +297,11 @@ async function handleShareTarget(request) {
     const capture = await buildShareCapture(formData);
 
     if (!capture) {
-      return Response.redirect('/share-target?shareTargetError=unsupported', 303);
+      return Response.redirect('/share-target?shareTargetError=too_large', 303);
+    }
+
+    if (capture.devSignal) {
+      console.warn('[PWA] Unsupported share target captured for future handling:', capture.devSignal);
     }
 
     await addCapture(capture);

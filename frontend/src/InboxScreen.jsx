@@ -6,11 +6,24 @@ import { parseContactPayload, buildContactSummary } from './services/contactPars
 function payloadLabel(payload) {
   if (payload.type === 'link') return payload.url || payload.title || 'Link';
   if (payload.type === 'text') return payload.text || payload.title || 'Text';
+  if (payload.type === 'unsupported_file') {
+    return [payload.filename || payload.title || 'Shared file', payload.mimeType, formatBytes(payload.size)]
+      .filter(Boolean)
+      .join(' • ');
+  }
   if (payload.type === 'vcard' || payload.type === 'contact_text' || payload.format === 'vcard') {
     const drafts = parseContactPayload(payload);
     return drafts.length > 0 ? buildContactSummary(drafts[0]) : payload.title || 'Contact';
   }
   return payload.title || payload.type || 'Payload';
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function InboxScreen({ onBack }) {
@@ -94,6 +107,11 @@ export function InboxScreen({ onBack }) {
                       {((capture.kind === 'contact' || capture.kind === 'person') || (capture.payloads || []).some(payload => ['vcard', 'contact_text', 'contact'].includes(payload.type) || payload.format === 'vcard')) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
                           Contact
+                        </span>
+                      )}
+                      {(capture.kind === 'unsupported_file' || (capture.payloads || []).some(payload => payload.type === 'unsupported_file')) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          Unsupported file
                         </span>
                       )}
                       <span className="text-xs text-gray-400">

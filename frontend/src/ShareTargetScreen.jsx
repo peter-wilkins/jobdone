@@ -4,6 +4,16 @@ import { syncService } from './services/syncService';
 import { parseContactPayload, buildContactSummary, summarizeContactConflicts, getContactIdentity } from './services/contactParser';
 
 function payloadPreview(payload) {
+  if (payload.type === 'unsupported_file') {
+    return {
+      title: payload.title || payload.filename || 'Shared File',
+      body: [
+        payload.filename,
+        payload.mimeType,
+        payload.size ? formatBytes(payload.size) : null,
+      ].filter(Boolean).join(' • '),
+    };
+  }
   if (payload.type === 'link') {
     return {
       title: payload.title || 'Shared Link',
@@ -20,6 +30,19 @@ function payloadPreview(payload) {
     title: payload.title || 'Shared Text',
     body: payload.text,
   };
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isUnsupportedCapture(capture) {
+  return capture?.kind === 'unsupported_file' ||
+    (capture?.payloads || []).some(payload => payload.type === 'unsupported_file');
 }
 
 async function loadContactDrafts(capture) {
@@ -123,6 +146,23 @@ export function ShareTargetScreen({ onBack, user }) {
     setError(null);
 
     try {
+      if (isUnsupportedCapture(capture)) {
+        console.warn('[ShareTarget] Unsupported shared file kept for future handling:', {
+          captureId: capture.id,
+          devSignal: capture.devSignal,
+          payloads: (capture.payloads || []).map(payload => ({
+            type: payload.type,
+            fileKind: payload.fileKind,
+            filename: payload.filename,
+            mimeType: payload.mimeType,
+            size: payload.size,
+          })),
+        });
+        setError('This share type has been saved locally, but JobDone cannot turn it into an Entry yet.');
+        setIsProcessing(false);
+        return;
+      }
+
       if (isContactCapture(capture)) {
         const drafts = contactDrafts.length > 0 ? contactDrafts : await loadContactDrafts(capture);
         if (drafts.length === 0) {
@@ -271,6 +311,15 @@ export function ShareTargetScreen({ onBack, user }) {
               </div>
             )}
 
+            {isUnsupportedCapture(capture) && (
+              <div className="rounded border border-blue-200 bg-blue-50 p-4">
+                <p className="text-sm font-medium text-blue-900 mb-2">Not supported yet</p>
+                <p className="text-sm text-blue-800">
+                  JobDone captured this shared file locally so we can see what users are trying to share, but it cannot be saved to the Timeline yet.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-4">
               {isContactCapture(capture)
                 ? contactDrafts.map((draft, index) => (
@@ -318,12 +367,14 @@ export function ShareTargetScreen({ onBack, user }) {
               <div className="flex gap-3">
                 <button
                   onClick={handleConfirm}
-                  disabled={isProcessing}
+                  disabled={isProcessing || isUnsupportedCapture(capture)}
                   className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isProcessing
                     ? 'Saving...'
-                    : isContactCapture(capture)
+                    : isUnsupportedCapture(capture)
+                      ? 'Not supported yet'
+                      : isContactCapture(capture)
                       ? 'Save Contacts'
                       : 'Confirm'}
                 </button>
@@ -345,6 +396,7 @@ export function ShareTargetScreen({ onBack, user }) {
 
 function shareErrorMessage(error) {
   if (error === 'unsupported') return 'That share type is not supported yet. Share text, a link, or a contact.';
+  if (error === 'too_large') return 'That share is too large for JobDone to capture right now.';
   if (error === 'failed') return 'Share could not be saved. Try again.';
   return null;
 }
