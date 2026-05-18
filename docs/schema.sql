@@ -5,6 +5,8 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 2. Drop old tables if present (clean rewrite)
+DROP FUNCTION IF EXISTS match_entries(TEXT, vector(1024), INT, FLOAT);
+DROP FUNCTION IF EXISTS match_entries(TEXT, vector, INT, DOUBLE PRECISION);
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS context_clues CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
