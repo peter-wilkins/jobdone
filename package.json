@@ -9,6 +9,7 @@
     "vercel:build:frontend": "vercel --cwd frontend build --prod",
     "deploy:backend": "npm run vercel:build:backend && vercel --cwd backend deploy --prebuilt --prod --yes",
     "deploy:frontend": "npm run vercel:build:frontend && vercel --cwd frontend deploy --prebuilt --prod --yes",
-    "deploy:prod": "npm run deploy:backend && npm run deploy:frontend"
+    "deploy:prod": "npm run deploy:backend && npm run deploy:frontend",
+    "logs:backend": "bash scripts/tail-backend-prod-logs.sh"
   }
 }
