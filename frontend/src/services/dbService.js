@@ -173,10 +173,6 @@ export class DBService {
       captureId: null,
       transcript: null,
       summary: null,
-      materials: [],
-      labour_minutes: null,
-      follow_ups: [],
-      possible_future_work: '',
     };
 
     return new Promise((resolve, reject) => {
@@ -197,7 +193,7 @@ export class DBService {
   /**
    * Update entry with transcription + summary data
    */
-  async updateEntryWithTranscription(entryId, { transcript, summary, materials, labour_minutes, follow_ups, possible_future_work, intent }) {
+  async updateEntryWithTranscription(entryId, { transcript, summary, intent }) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
@@ -214,10 +210,6 @@ export class DBService {
 
         entry.transcript = transcript;
         entry.summary = summary;
-        entry.materials = materials || [];
-        entry.labour_minutes = labour_minutes;
-        entry.follow_ups = follow_ups || [];
-        entry.possible_future_work = possible_future_work || '';
         if (intent) entry.intent = intent;
         entry.errorMessage = null;
         entry.status = 'ready_for_review';
@@ -346,10 +338,6 @@ export class DBService {
       remoteId: null,
       created_at: created_at || new Date().toISOString(),
       synced_at: null,
-      materials: [],
-      labour_minutes: null,
-      follow_ups: [],
-      possible_future_work: '',
       intent: 'NOTE',
     };
 
@@ -577,10 +565,6 @@ export class DBService {
       errorMessage: null,
       transcript: cloudJob.transcript,
       summary: cloudJob.summary,
-      materials: cloudJob.materials || [],
-      labour_minutes: cloudJob.labour_minutes,
-      follow_ups: cloudJob.follow_ups || [],
-      possible_future_work: cloudJob.possible_future_work || '',
       created_at: cloudJob.created_at,
       synced_at: cloudJob.synced_at,
       captureId: cloudJob.capture_id || cloudJob.captureId || null,

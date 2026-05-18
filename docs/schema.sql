@@ -19,10 +19,6 @@ CREATE TABLE entries (
   summary              TEXT NOT NULL,
   embedding            vector(1024),
   embedding_model      TEXT,
-  materials            TEXT[]    DEFAULT '{}',
-  labour_minutes       INTEGER,
-  follow_ups           TEXT[]    DEFAULT '{}',
-  possible_future_work TEXT      DEFAULT '',
   created_at           TIMESTAMPTZ NOT NULL,
   synced_at            TIMESTAMPTZ DEFAULT NOW()
 );
@@ -99,10 +95,6 @@ RETURNS TABLE (
   user_id              TEXT,
   transcript           TEXT,
   summary              TEXT,
-  materials            TEXT[],
-  labour_minutes       INTEGER,
-  follow_ups           TEXT[],
-  possible_future_work TEXT,
   created_at           TIMESTAMPTZ,
   similarity           FLOAT
 )
@@ -113,10 +105,6 @@ AS $$
     e.user_id,
     e.transcript,
     e.summary,
-    e.materials,
-    e.labour_minutes,
-    e.follow_ups,
-    e.possible_future_work,
     e.created_at,
     1 - (e.embedding <=> p_query_embedding) AS similarity
   FROM entries e

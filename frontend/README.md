@@ -37,10 +37,10 @@ UI runs at http://localhost:5173
 ### Processing
 - Auto-transcribes with backend (if available)
 - Shows "Processing..." while waiting
-- Claude extracts materials, labour time, follow-ups
+- Backend creates a narrative summary
 
 ### Reviewing
-- See transcript and extracted data
+- See transcript and summary
 - Confirm to save (deletes audio blob)
 - Reject to discard
 

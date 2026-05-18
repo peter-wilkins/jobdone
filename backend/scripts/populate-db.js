@@ -214,12 +214,12 @@ const customers = [
 
 const jobTemplates = [
   {
-    verb: 'Fixed',     
+    verb: 'Fixed',
     object: (ct) => `${ct.jobTypes[Math.floor(Math.random() * ct.jobTypes.length)]}`,
     context: (ct) => `at ${ct.addressVariants[Math.floor(Math.random() * ct.addressVariants.length)]}`,
     details: [
       'took 30 minutes',
-      'took 45 minutes', 
+      'took 45 minutes',
       'took about an hour',
       'quick 15-minute job',
       'took 90 minutes including testing',
@@ -227,7 +227,7 @@ const jobTemplates = [
       'took most of the afternoon',
       'took around 20 minutes',
     ],
-    materials: [
+    notes: [
       'used compression fittings',
       'used silicone sealant',
       'installed new valve',
@@ -250,7 +250,7 @@ const jobTemplates = [
       'fitted new unit',
       'installed improved model',
     ],
-    materials: [
+    notes: [
       '15mm compression fitting',
       'mixing valve assembly',
       'new ballcock valve',
@@ -269,7 +269,7 @@ const jobTemplates = [
       'advised on prevention',
       'customer satisfied with work',
     ],
-    materials: [
+    notes: [
       'epoxy putty',
       'temporary tape',
       'compression joint',
@@ -288,7 +288,7 @@ const jobTemplates = [
       'pressure tested',
       'safety check passed',
     ],
-    materials: [
+    notes: [
       'cleaning solution',
       'lubricating oil',
       'replacement filter',
@@ -296,27 +296,6 @@ const jobTemplates = [
       'scale remover',
     ],
   },
-];
-
-const followUpTemplates = [
-  'Customer to call next week for follow-up',
-  'Advised on preventative maintenance',
-  'Bathroom inspection needed',
-  'Full system overhaul recommended',
-  'Permanent repair needed after temporary patch',
-  'Customer to arrange next visit',
-  'Waiting for parts delivery',
-];
-
-const futureWorkTemplates = [
-  'Full kitchen refit discussion',
-  'Replace main line due to rust',
-  'Upgrade to modern pressure system',
-  'Consider bidet installation',
-  'Wall repiping recommended',
-  'Boiler efficiency upgrade',
-  '',
-  '',
 ];
 
 // ---------------------------------------------------------------------------
@@ -328,22 +307,15 @@ function generateEntry(customer, userId, entryIndex) {
   const object = template.object(customer);
   const context = template.context(customer);
   const detail = template.details[Math.floor(Math.random() * template.details.length)];
-  const material = template.materials[Math.floor(Math.random() * template.materials.length)];
+  const note = template.notes[Math.floor(Math.random() * template.notes.length)];
 
-  const transcript = `${template.verb} the ${object} ${context}, ${material}, ${detail}`;
+  const transcript = `${template.verb} the ${object} ${context}, ${note}, ${detail}`;
   const summary = transcript + (Math.random() > 0.5 ? '.' : '');
-
-  const hasFollowUp = Math.random() > 0.6;
-  const hasFutureWork = Math.random() > 0.7;
 
   return {
     user_id: userId,
     transcript,
     summary,
-    materials: template.materials.slice(0, Math.floor(Math.random() * 3) + 1),
-    labour_minutes: 15 + Math.floor(Math.random() * 105),
-    follow_ups: hasFollowUp ? [followUpTemplates[Math.floor(Math.random() * followUpTemplates.length)]] : [],
-    possible_future_work: hasFutureWork ? futureWorkTemplates[Math.floor(Math.random() * futureWorkTemplates.length)] : '',
     created_at: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(), // Last 90 days
   };
 }
@@ -423,10 +395,6 @@ async function main() {
       summary: e.summary,
       embedding: e.embedding,
       embedding_model: e.embedding_model,
-      materials: e.materials,
-      labour_minutes: e.labour_minutes,
-      follow_ups: e.follow_ups,
-      possible_future_work: e.possible_future_work,
       created_at: e.created_at,
     }));
 

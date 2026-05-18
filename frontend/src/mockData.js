@@ -4,9 +4,6 @@ export const mockInProgressEntries = [
     status: 'ready_for_review',
     transcript: "Fixed the leaky tap under the sink. Replaced the valve cartridge. Took about 30 minutes. Customer asked about the bathroom radiator while I was there.",
     summary: "Replaced tap valve cartridge under kitchen sink.",
-    materials: ['valve cartridge', 'plumber\'s tape'],
-    labour_minutes: 30,
-    follow_ups: ['bathroom radiator inspection'],
     created_at: new Date(Date.now() - 5 * 60000),
   }
 ];
@@ -17,10 +14,6 @@ export const mockSavedEntries = [
     status: 'confirmed',
     transcript: "Attended the Henderson property. Their kitchen tap has been dripping for weeks. Replaced the entire mixing valve assembly. Used compression fittings and silicone grease. Took about an hour and a half. They mentioned wanting to redo the whole kitchen eventually.",
     summary: "Replaced kitchen mixing valve at Henderson's. Full assembly replacement.",
-    materials: ['mixing valve assembly', 'compression fittings', '15mm connectors', 'silicone grease'],
-    labour_minutes: 90,
-    follow_ups: [],
-    possible_future_work: 'Full kitchen refit discussion',
     created_at: new Date(Date.now() - 24 * 60 * 60000),
   },
   {
@@ -28,10 +21,6 @@ export const mockSavedEntries = [
     status: 'confirmed',
     transcript: "Quick callout to the Smiths. Their toilet cistern wasn't filling properly. Replaced the fill valve with a new ballcock. Very straightforward job, maybe 15 minutes including cleanup.",
     summary: "Replaced toilet cistern fill valve.",
-    materials: ['ballcock valve'],
-    labour_minutes: 15,
-    follow_ups: [],
-    possible_future_work: '',
     created_at: new Date(Date.now() - 48 * 60 * 60000),
   },
   {
@@ -39,10 +28,6 @@ export const mockSavedEntries = [
     status: 'confirmed',
     transcript: "Emergency call at the office building. Burst pipe in the second floor bathroom. Patched it temporarily with epoxy putty and shutoff valve. Advised them to call for permanent fix next week. Also spotted rust on the main line, should replace.",
     summary: "Temporary burst pipe repair at office. Permanent replacement recommended.",
-    materials: ['epoxy putty', 'shutoff valve'],
-    labour_minutes: 45,
-    follow_ups: ['Permanent pipe replacement next week'],
-    possible_future_work: 'Replace main line due to rust',
     created_at: new Date(Date.now() - 72 * 60 * 60000),
   },
 ];

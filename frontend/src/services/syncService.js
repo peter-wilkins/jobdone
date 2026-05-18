@@ -24,10 +24,6 @@ export class SyncService {
         entryData: {
           transcript: entryData.transcript,
           summary: entryData.summary,
-          materials: entryData.materials,
-          labour_minutes: entryData.labour_minutes,
-          follow_ups: entryData.follow_ups,
-          possible_future_work: entryData.possible_future_work,
           created_at: entryData.created_at,
           captureId: entryData.captureId || entryData.capture_id || null,
         },

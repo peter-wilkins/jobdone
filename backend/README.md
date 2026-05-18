@@ -6,7 +6,6 @@ Audio transcription and summarization service for JobDone.
 
 - **Transcription**: Converts audio to text using Deepgram (nova-3)
 - **Summarization**: Creates clean summaries using Claude
-- **Extraction**: Pulls out materials, labour time, follow-ups, and future work
 
 ## Setup
 
@@ -103,7 +102,7 @@ curl http://localhost:3000/health
 ```
 
 ### POST /api/transcribe
-Upload audio and get transcription + summary + extracted fields.
+Upload audio and get transcription + summary.
 
 ```bash
 curl -X POST http://localhost:3000/api/transcribe \
@@ -115,11 +114,7 @@ curl -X POST http://localhost:3000/api/transcribe \
 {
   "transcript": "Fixed the kitchen tap...",
   "intent": "NOTE",
-  "summary": "Replaced tap valve at Henderson's.",
-  "materials": ["valve cartridge", "plumber's tape"],
-  "labour_minutes": 30,
-  "follow_ups": ["bathroom inspection"],
-  "possible_future_work": "Full kitchen refit"
+  "summary": "Replaced tap valve at Henderson's."
 }
 ```
 

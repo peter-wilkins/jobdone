@@ -93,10 +93,6 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary,
-        materials: result.materials,
-        labour_minutes: result.labour_minutes,
-        follow_ups: result.follow_ups,
-        possible_future_work: result.possible_future_work,
         intent: result.intent || 'NOTE',
       });
 
@@ -610,13 +606,6 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>• Materials: {entry.materials?.join(', ') || 'None'}</p>
-                <p>• Labour: {entry.labour_minutes || '—'} mins</p>
-                {entry.follow_ups?.length > 0 && (
-                  <p>• Follow-ups: {entry.follow_ups.join(', ')}</p>
-                )}
-              </div>
             </div>
           )}
           

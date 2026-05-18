@@ -61,80 +61,36 @@ const entryTranscripts = [
 const entrySummaries = {
   0: {
     summary: "Fixed kitchen tap at Mrs Smith's on 42 Oak Street, Croydon. 15mm fitting, 45 minutes. Bathroom inspection follow-up.",
-    materials: ["15mm compression fitting"],
-    labour_minutes: 45,
-    follow_ups: ["Bathroom inspection needed"],
-    possible_future_work: "",
   },
   1: {
     summary: "Emergency burst pipe repair at Jones & Co office. Temporary epoxy patch, permanent replacement advised.",
-    materials: ["epoxy putty", "shutoff valve"],
-    labour_minutes: 45,
-    follow_ups: ["Permanent pipe replacement next week"],
-    possible_future_work: "Replace main line due to rust",
   },
   2: {
     summary: "Replaced toilet cistern fill valve at Henderson's on Ivy Lane. 15-minute job, new ballcock valve installed.",
-    materials: ["ballcock valve"],
-    labour_minutes: 15,
-    follow_ups: [],
-    possible_future_work: "",
   },
   3: {
     summary: "Kitchen tap replacement at Henderson's. Full mixing valve assembly swap with compression fittings, 90 minutes.",
-    materials: ["mixing valve assembly", "compression fittings", "15mm connectors", "silicone grease"],
-    labour_minutes: 90,
-    follow_ups: [],
-    possible_future_work: "Full kitchen refit discussion",
   },
   4: {
     summary: "Emergency main line repair at London Tower Building. Temporary epoxy patch, pressure tested and commissioned.",
-    materials: ["epoxy putty", "compression joint"],
-    labour_minutes: 35,
-    follow_ups: ["Permanent repair coordination"],
-    possible_future_work: "Permanent pipe replacement",
   },
   5: {
     summary: "Preventative maintenance at Park View Estate. System flush, valve check, washers replaced, 45 minutes.",
-    materials: ["replacement washers", "O-rings", "lubricating oil"],
-    labour_minutes: 45,
-    follow_ups: [],
-    possible_future_work: "",
   },
   6: {
     summary: "Guest room plumbing at Riverside Hotel. Leaking tap fixed, new mixing valve installed, 30 minutes.",
-    materials: ["mixing valve", "compression fitting", "silicone sealant"],
-    labour_minutes: 30,
-    follow_ups: [],
-    possible_future_work: "Check other guest bathrooms",
   },
   7: {
     summary: "Restroom maintenance at Parkside Retail Centre. Waste pipe blockage cleared, system tested.",
-    materials: ["pipe cleaner", "new seal"],
-    labour_minutes: 25,
-    follow_ups: [],
-    possible_future_work: "Regular maintenance schedule",
   },
   8: {
     summary: "School bathroom maintenance at Crown School. Shower block upgrade with thermostatic valve, 60 minutes.",
-    materials: ["thermostatic valve", "mixing cartridge", "compression fittings"],
-    labour_minutes: 60,
-    follow_ups: [],
-    possible_future_work: "Staff training on temperature control",
   },
   9: {
     summary: "Dental surgery plumbing at Medway Dental. Hand basin upgrade, water quality issue fixed.",
-    materials: ["basin mixer", "filter cartridge", "new inlet hose"],
-    labour_minutes: 40,
-    follow_ups: ["Permanent water supply arrangement"],
-    possible_future_work: "Permanent sterilisation system upgrade",
   },
   10: {
     summary: "Farm plumbing at Greenfield Farm. Main line repair, water tank service, feeding system checked, 120 minutes.",
-    materials: ["pipe sections", "compression fittings", "epoxy putty"],
-    labour_minutes: 120,
-    follow_ups: [],
-    possible_future_work: "Pressure regulator upgrade discussion",
   },
 };
 
@@ -177,10 +133,6 @@ export async function mockSummarizeAndExtract(transcript) {
   
   return {
     summary: transcript,
-    materials: [],
-    labour_minutes: null,
-    follow_ups: [],
-    possible_future_work: '',
   };
 }
 

@@ -15,7 +15,7 @@ export async function registerAudioRoutes(fastify) {
 
   /**
    * POST /api/transcribe
-   * Transcribe, classify intent, and (if NOTE) summarize and extract
+   * Transcribe, classify intent, and (if NOTE) summarize
    *
    * Expects multipart form data:
    * - audio: audio file blob
@@ -24,11 +24,7 @@ export async function registerAudioRoutes(fastify) {
    * {
    *   transcript: string,
    *   intent: 'QUERY' | 'NOTE',
-   *   summary?: string,              // Only if intent='NOTE'
-   *   materials?: string[],          // Only if intent='NOTE'
-   *   labour_minutes?: number | null,// Only if intent='NOTE'
-   *   follow_ups?: string[],         // Only if intent='NOTE'
-   *   possible_future_work?: string  // Only if intent='NOTE'
+   *   summary?: string               // Only if intent='NOTE'
    * }
    */
   fastify.post('/api/transcribe', async (request, reply) => {
@@ -70,7 +66,7 @@ export async function registerAudioRoutes(fastify) {
       const intent = classify(transcript);
       console.log(`[Transcribe] Intent: ${intent}`);
 
-      // If NOTE, summarize and extract
+      // If NOTE, summarize
       const response = { transcript, intent };
       
       if (intent === 'NOTE') {
@@ -79,10 +75,6 @@ export async function registerAudioRoutes(fastify) {
         console.log('[Transcribe] Summarization complete');
         
         response.summary = result.summary;
-        response.materials = result.materials;
-        response.labour_minutes = result.labour_minutes;
-        response.follow_ups = result.follow_ups;
-        response.possible_future_work = result.possible_future_work;
       }
 
       return response;
@@ -96,7 +88,7 @@ export async function registerAudioRoutes(fastify) {
 
   /**
    * POST /api/summarize
-   * Classify intent and (if NOTE) summarize and extract from transcript
+   * Classify intent and (if NOTE) summarize from transcript
    *
    * Expects JSON:
    * { transcript: string }
@@ -104,11 +96,7 @@ export async function registerAudioRoutes(fastify) {
    * Returns:
    * {
    *   intent: 'QUERY' | 'NOTE',
-   *   summary?: string,              // Only if intent='NOTE'
-   *   materials?: string[],          // Only if intent='NOTE'
-   *   labour_minutes?: number | null,// Only if intent='NOTE'
-   *   follow_ups?: string[],         // Only if intent='NOTE'
-   *   possible_future_work?: string  // Only if intent='NOTE'
+   *   summary?: string               // Only if intent='NOTE'
    * }
    */
   fastify.post('/api/summarize', async (request, reply) => {
@@ -124,14 +112,10 @@ export async function registerAudioRoutes(fastify) {
 
       const response = { intent };
 
-      // If NOTE, summarize and extract
+      // If NOTE, summarize
       if (intent === 'NOTE') {
         const result = await summarizeAndExtract(transcript);
         response.summary = result.summary;
-        response.materials = result.materials;
-        response.labour_minutes = result.labour_minutes;
-        response.follow_ups = result.follow_ups;
-        response.possible_future_work = result.possible_future_work;
       }
 
       return response;

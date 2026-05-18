@@ -41,7 +41,7 @@ export class APIService {
   /**
    * Upload audio blob and get transcription + summary
    * @param {Blob} audioBlob - Audio file blob
-   * @returns {Promise<{transcript: string, summary: string, materials: string[], labour_minutes: number|null, follow_ups: string[], possible_future_work: string}>}
+   * @returns {Promise<{transcript: string, summary: string}>}
    */
   async transcribeAudio(audioBlob) {
     try {
@@ -83,7 +83,7 @@ export class APIService {
   /**
    * Summarize an existing transcript
    * @param {string} transcript - Transcript text
-   * @returns {Promise<{summary: string, materials: string[], labour_minutes: number|null, follow_ups: string[], possible_future_work: string}>}
+   * @returns {Promise<{summary: string}>}
    */
   async summarizeTranscript(transcript) {
     try {

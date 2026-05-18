@@ -71,10 +71,6 @@ Each job record contains:
 - `user_id` — anonymous session ID or authenticated user
 - `transcript` — raw audio transcription
 - `summary` — Claude-generated summary
-- `materials` — array of materials used
-- `labour_minutes` — time spent (or null)
-- `follow_ups` — array of follow-up tasks
-- `possible_future_work` — text about future opportunities
 - `created_at` — when the job was logged
 - `synced_at` — when it was saved to cloud
 

@@ -8,10 +8,6 @@ function makeEntry(overrides = {}) {
   return {
     transcript: 'Fixed a dripping kitchen tap.',
     summary: 'Fixed dripping kitchen tap.',
-    materials: ['washer'],
-    labour_minutes: 20,
-    follow_ups: [],
-    possible_future_work: '',
     created_at: '2026-05-17T01:00:00.000Z',
     ...overrides,
   };
@@ -64,6 +60,10 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(savedArgs.userId, 'user-1');
     assert.deepEqual(savedArgs.entryData.embedding, vector);
     assert.equal(savedArgs.entryData.embedding_model, EMBEDDING_MODEL);
+    assert.equal('materials' in savedArgs.entryData, false);
+    assert.equal('labour_minutes' in savedArgs.entryData, false);
+    assert.equal('follow_ups' in savedArgs.entryData, false);
+    assert.equal('possible_future_work' in savedArgs.entryData, false);
   });
 
   test('does not create an entry when embedding fails', async () => {
