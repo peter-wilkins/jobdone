@@ -33,6 +33,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [isRecording, setIsRecording] = useState(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [isStoppingRecording, setIsStoppingRecording] = useState(false);
+  const [recordingFlashActive, setRecordingFlashActive] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [captureCount, setCaptureCount] = useState(0);
@@ -155,7 +156,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     }
   };
 
-  const startRecording = async () => {
+  const startRecording = async ({ flash = false } = {}) => {
     if (isStartingRecording || isStoppingRecording) return;
 
     try {
@@ -164,10 +165,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       await audioService.startRecording();
       setIsRecording(true);
       setRecordingTime(0);
+      setRecordingFlashActive(flash);
     } catch (err) {
       console.error('Recording start error:', err);
       setError(err.message);
       setIsRecording(false);
+      setRecordingFlashActive(false);
       audioService.cancelRecording();
     } finally {
       setIsStartingRecording(false);
@@ -193,7 +196,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     }
 
     const timer = window.setTimeout(() => {
-      startRecording();
+      startRecording({ flash: true });
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,6 +276,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       console.error('Recording stop error:', err);
       setError(err.message);
       setIsRecording(false);
+      setRecordingFlashActive(false);
       audioService.cancelRecording();
     } finally {
       setIsStoppingRecording(false);
@@ -291,6 +295,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       setIsRecording(false);
       setIsStartingRecording(false);
       setIsStoppingRecording(false);
+      setRecordingFlashActive(false);
       setRecordingTime(0);
     }
   };
@@ -548,6 +553,14 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  useEffect(() => {
+    if (!recordingFlashActive) return;
+    const timer = window.setTimeout(() => {
+      setRecordingFlashActive(false);
+    }, 1600);
+    return () => window.clearTimeout(timer);
+  }, [recordingFlashActive]);
 
   // Capture Bar states
   const renderCaptureBar = () => {
@@ -809,6 +822,14 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
   return (
     <div className="h-screen bg-white flex flex-col">
+      {isRecording && (
+        <div
+          className="fixed inset-0 pointer-events-none z-40 bg-red-500/10"
+          aria-hidden="true"
+          style={recordingFlashActive ? { animation: 'recording-start-flash 1.6s ease-out' } : undefined}
+        />
+      )}
+
       {/* Header */}
       <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div className="min-w-0">
