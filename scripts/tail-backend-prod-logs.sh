@@ -32,6 +32,7 @@ Options:
   --status-code <code>       HTTP status code filter, e.g. 500, 4xx.
   --query <query>            Vercel advanced query, e.g. "status:500 error".
   --json                     Output JSON Lines.
+  --follow                   Stream live logs. Only supported without filters.
   --no-follow                Do not stream live logs.
   --no-expand                Do not show expanded log details.
   --target <url|id>          Deployment URL/ID. Defaults to production alias.
@@ -78,6 +79,10 @@ while [[ $# -gt 0 ]]; do
       json="1"
       shift
       ;;
+    --follow)
+      follow="1"
+      shift
+      ;;
     --no-follow)
       follow="0"
       shift
@@ -102,10 +107,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-cmd=(vercel --cwd backend logs "$target" --environment production --since "$since" --limit "$limit")
+has_filters="0"
+if [[ -n "$level" || -n "$status_code" || -n "$query" || "$since" != "30m" || "$limit" != "100" || "$json" == "1" ]]; then
+  has_filters="1"
+fi
+
+if [[ "$has_filters" == "1" && "$follow" == "1" ]]; then
+  follow="0"
+fi
+
+cmd=(vercel --cwd backend logs "$target")
 
 if [[ "$follow" == "1" ]]; then
   cmd+=(--follow)
+else
+  cmd+=(--environment production --since "$since" --limit "$limit")
 fi
 
 if [[ "$expand" == "1" && "$json" != "1" ]]; then
