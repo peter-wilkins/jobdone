@@ -42,6 +42,7 @@ function App() {
           const result = await syncService.syncEntry(entry);
           if (result?.entry?.id) {
             await dbService.markEntrySynced(entry.id, result.entry.id);
+            await dbService.upsertCloudEntryLocations(entry.id, result.entry.id, result.entry.locations || []);
           }
         } catch (e) {
           console.warn('[Login] Failed to push entry:', entry.id, e);
@@ -85,6 +86,11 @@ function App() {
       const cloudContacts = await apiService.getCloudContacts();
       for (const cloudContact of cloudContacts) {
         await dbService.upsertCloudContact(cloudContact);
+      }
+
+      const cloudLocations = await apiService.getCloudLocations();
+      for (const cloudLocation of cloudLocations) {
+        await dbService.upsertCloudLocation(cloudLocation);
       }
     } catch (e) {
       console.error('[Sync] Confirmed data sync failed:', e);

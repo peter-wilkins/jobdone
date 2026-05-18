@@ -36,6 +36,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [recordingFlashActive, setRecordingFlashActive] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
+  const [reviewLocations, setReviewLocations] = useState({});
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
@@ -324,19 +325,23 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
       // Handle NOTE intent - save to entries, proceed as before
       // Delete audio and move to confirmed locally
-      await dbService.confirmEntry(id);
+      const locationText = (reviewLocations[id] || '').trim();
+      const locations = locationText ? [{ displayName: locationText, placeText: locationText }] : [];
+      const confirmedEntry = await dbService.confirmEntry(id, { locations });
 
       // Try to sync to cloud (optional - don't block if it fails)
-      if (entry && entry.transcript && entry.summary) {
+      const entryForSync = { ...entry, ...confirmedEntry };
+      if (entryForSync && entryForSync.transcript && entryForSync.summary) {
         if (!user) {
           // Not logged in — entry saved locally, will sync when user logs in
           console.log('[Sync] Skipped — not logged in. Will retry on login.');
         } else {
           try {
-            const result = await syncService.syncEntry(entry);
+            const result = await syncService.syncEntry(entryForSync);
             if (result !== null) {
               await dbService.markEntrySynced(id, result?.entry?.id);
-              entry.syncStatus = 'synced';
+              await dbService.upsertCloudEntryLocations(id, result?.entry?.id, result?.entry?.locations || []);
+              entryForSync.syncStatus = 'synced';
             }
           } catch (syncErr) {
             console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
@@ -347,10 +352,15 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
       // Update UI: move to confirmed section (re-sort)
       setEntries(prev => {
-        const updated = prev.map(e => e.id === id ? { ...e, status: 'confirmed' } : e);
+        const updated = prev.map(e => e.id === id ? { ...e, ...confirmedEntry, status: 'confirmed' } : e);
         const inProgress = updated.filter(e => e.status !== 'confirmed');
         const confirmed = updated.filter(e => e.status === 'confirmed').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         return [...inProgress, ...confirmed];
+      });
+      setReviewLocations(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
       });
     } catch (err) {
       console.error('Failed to confirm entry:', err);
@@ -684,6 +694,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
 
   const renderEntry = (entry) => {
     const isProcessing = processingIds.has(entry.id);
+    const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
+      ? entry.locationSnapshots[0]
+      : null;
 
     if (entry.status === 'recording' || isProcessing) {
       const isQueued = entry.errorMessage === 'offline';
@@ -775,6 +788,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              <label className="block">
+                <span className="text-sm text-gray-500">Location</span>
+                <input
+                  type="text"
+                  value={reviewLocations[entry.id] || ''}
+                  onChange={(event) => setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                  placeholder="+ Location"
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                />
+              </label>
             </div>
           )}
           
@@ -814,6 +837,34 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
+        {primaryLocation && (
+          <div className="mt-2">
+            <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+              <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderLocationPill = (entry) => {
+    const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
+      ? entry.locationSnapshots[0]
+      : Array.isArray(entry.locations) && entry.locations.length > 0
+        ? {
+            displayName: entry.locations[0].display_name || entry.locations[0].displayName,
+            placeText: entry.locations[0].place_text || entry.locations[0].placeText,
+          }
+        : null;
+
+    if (!primaryLocation) return null;
+
+    return (
+      <div className="mt-2">
+        <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
+        </span>
       </div>
     );
   };
@@ -1019,6 +1070,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
+                    {renderLocationPill(entry)}
                   </div>
                 ))}
               </div>

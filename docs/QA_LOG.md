@@ -20,3 +20,13 @@ Status: passed by user on 2026-05-18.
 3. Send the typed report while logged in and confirm it appears under `Sent reports`.
 4. Record a voice issue report and confirm it transcribes to review, shows the same diagnostic preview, and can be sent or discarded.
 5. Confirm the diagnostic preview does not include Entry content, unrelated transcripts, Contact details, shared payload bodies, or audio blobs.
+
+## 2026-05-18 - Issue #28 / Locations
+
+Status: pending user confirmation.
+
+1. Run the updated `docs/schema.sql` in Supabase before relying on cloud sync for Locations.
+2. On production build for this issue or newer, create a normal note, enter a Location on the review screen, confirm it, and check the Timeline card shows the Location pill.
+3. Create a normal note with the Location field left blank, confirm it, and check the Entry still appears and syncs normally.
+4. While logged in, create an Entry with a Location on one device, then open another logged-in device and confirm the Entry and Location pill appear after sync.
+5. Confirm existing Entries created before Locations still appear in Timeline and Recall without errors.

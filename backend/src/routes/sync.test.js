@@ -26,6 +26,8 @@ async function buildApp(deps = {}) {
     getPeople: async () => [],
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
+    saveEntryLocations: async () => [],
+    getLocations: async () => [],
     deleteUserData: async () => ({ success: true }),
     ...deps,
   });
@@ -143,6 +145,64 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(JSON.parse(res.body).entry.context_clues.length, 1);
   });
 
+  test('stores confirmed Location associations after saving an entry', async () => {
+    const vector = makeVector();
+    let locationArgs;
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => vector,
+      },
+      saveEntry: async (userId, entryData) => ({ id: 'entry-1', ...entryData }),
+      saveEntryLocations: async (userId, entryId, locations) => {
+        locationArgs = { userId, entryId, locations };
+        return [{ id: 'location-cloud-1', display_name: '14 Bell Street' }];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          locations: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(locationArgs.userId, 'user-1');
+    assert.equal(locationArgs.entryId, 'entry-1');
+    assert.equal(locationArgs.locations[0].displayName, '14 Bell Street');
+    assert.equal(JSON.parse(res.body).entry.locations[0].display_name, '14 Bell Street');
+  });
+
+  test('continues to save entries with no Location associations', async () => {
+    let locationArgs;
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => makeVector(),
+      },
+      saveEntry: async (userId, entryData) => ({ id: 'entry-1', ...entryData }),
+      saveEntryLocations: async (userId, entryId, locations) => {
+        locationArgs = { userId, entryId, locations };
+        return [];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: makeEntry() }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(locationArgs.locations, []);
+    assert.deepEqual(JSON.parse(res.body).entry.locations, []);
+  });
+
   test('does not save context clues when embedding fails', async () => {
     let contextCalled = false;
 
@@ -233,7 +293,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [] });
   });
 
   test('falls back to created_at when no captureId is provided', async () => {
@@ -268,7 +328,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [] });
   });
 });
 
@@ -336,5 +396,25 @@ describe('SyncRoute Contacts sync', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(savedArgs.contact.displayName, 'Ann Smith');
     assert.equal(JSON.parse(res.body).people[0].local_id, 'legacy-person-local-1');
+  });
+});
+
+describe('SyncRoute Locations sync', () => {
+  test('fetches cloud locations for authenticated user', async () => {
+    const cloudLocations = [{ id: 'location-cloud-1', display_name: '14 Bell Street' }];
+    const app = await buildApp({
+      getLocations: async (userId) => {
+        assert.equal(userId, 'user-1');
+        return cloudLocations;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sync/locations',
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).locations, cloudLocations);
   });
 });

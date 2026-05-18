@@ -189,6 +189,19 @@ export class APIService {
     return this.getCloudContacts();
   }
 
+  async getCloudLocations() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sync/locations`, {
+        headers: authHeader(),
+      });
+      if (!response.ok) return [];
+      const result = await response.json();
+      return result.locations || [];
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Save confirmed feedback to cloud
    * @param {{ userId: string, transcript: string, created_at: string, diagnostic_bundle?: Object }} payload

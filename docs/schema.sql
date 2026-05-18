@@ -9,6 +9,8 @@ DROP FUNCTION IF EXISTS match_entries(TEXT, vector(1024), INT, FLOAT);
 DROP FUNCTION IF EXISTS match_entries(TEXT, vector, INT, DOUBLE PRECISION);
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS context_clues CASCADE;
+DROP TABLE IF EXISTS entry_locations CASCADE;
+DROP TABLE IF EXISTS locations CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
 DROP TABLE IF EXISTS people CASCADE;
 DROP TABLE IF EXISTS feedback CASCADE;
@@ -64,7 +66,51 @@ CREATE POLICY "backend_select_context_clues" ON context_clues FOR SELECT USING (
 CREATE POLICY "backend_update_context_clues" ON context_clues FOR UPDATE USING (TRUE);
 CREATE POLICY "backend_delete_context_clues" ON context_clues FOR DELETE USING (TRUE);
 
--- 5. people (local-first Contacts created from confirmed Captures)
+-- 5. locations (real places associated with confirmed Entries)
+CREATE TABLE locations (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       TEXT NOT NULL,
+  local_id      TEXT,
+  status        TEXT NOT NULL DEFAULT 'confirmed',
+  display_name  TEXT NOT NULL DEFAULT '',
+  place_text    TEXT NOT NULL DEFAULT '',
+  address_text  TEXT NOT NULL DEFAULT '',
+  latitude      DOUBLE PRECISION,
+  longitude     DOUBLE PRECISION,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX locations_user_id_idx    ON locations(user_id);
+CREATE INDEX locations_updated_at_idx ON locations(updated_at DESC);
+CREATE UNIQUE INDEX locations_user_id_local_id_uidx ON locations(user_id, local_id) WHERE local_id IS NOT NULL;
+
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_locations" ON locations FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_locations" ON locations FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_locations" ON locations FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_locations" ON locations FOR DELETE USING (TRUE);
+
+-- 6. entry_locations (immutable MVP Entry-to-Location associations)
+CREATE TABLE entry_locations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     TEXT NOT NULL,
+  entry_id    UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX entry_locations_user_id_idx     ON entry_locations(user_id);
+CREATE INDEX entry_locations_entry_id_idx    ON entry_locations(entry_id);
+CREATE INDEX entry_locations_location_id_idx ON entry_locations(location_id);
+CREATE UNIQUE INDEX entry_locations_user_entry_location_uidx ON entry_locations(user_id, entry_id, location_id);
+
+ALTER TABLE entry_locations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_entry_locations" ON entry_locations FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_entry_locations" ON entry_locations FOR SELECT USING (TRUE);
+CREATE POLICY "backend_delete_entry_locations" ON entry_locations FOR DELETE USING (TRUE);
+
+-- 7. people (local-first Contacts created from confirmed Captures)
 -- The table name stays "people" for compatibility with deployed clients; product language is Contacts.
 CREATE TABLE people (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -100,7 +146,7 @@ CREATE POLICY "backend_select_people" ON people FOR SELECT USING (TRUE);
 CREATE POLICY "backend_update_people" ON people FOR UPDATE USING (TRUE);
 CREATE POLICY "backend_delete_people" ON people FOR DELETE USING (TRUE);
 
--- 6. queries (persisted Recall questions)
+-- 8. queries (persisted Recall questions)
 CREATE TABLE queries (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -114,7 +160,7 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 7. feedback (user-submitted issue reports with compact diagnostics)
+-- 9. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           TEXT NOT NULL,
@@ -131,7 +177,7 @@ CREATE POLICY "backend_insert_feedback" ON feedback FOR INSERT WITH CHECK (TRUE)
 CREATE POLICY "backend_select_feedback" ON feedback FOR SELECT USING (TRUE);
 CREATE POLICY "backend_delete_feedback" ON feedback FOR DELETE USING (TRUE);
 
--- 8. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 10. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  vector(1024),

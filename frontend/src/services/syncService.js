@@ -21,6 +21,9 @@ export class SyncService {
     try {
       console.log('[Sync] Syncing entry:', entryData.id);
       const contextClues = await dbService.getContextCluesForEntry(entryData.id);
+      const locations = Array.isArray(entryData.locationSnapshots) && entryData.locationSnapshots.length
+        ? entryData.locationSnapshots
+        : await dbService.getLocationsForEntry(entryData.id);
 
       const response = await apiService.syncSave({
         entryData: {
@@ -29,6 +32,7 @@ export class SyncService {
           created_at: entryData.created_at,
           captureId: entryData.captureId || entryData.capture_id || null,
           contextClues,
+          locations,
         },
       });
 

@@ -41,6 +41,24 @@ function peopleMatch(existing, incoming) {
     (incoming.normalizedPhones || []).some(phone => existingPhones.has(phone));
 }
 
+function normalizeLocation(location = {}) {
+  const displayName = String(
+    location.displayName || location.display_name || location.placeText || location.place_text || location.addressText || location.address_text || ''
+  ).trim();
+  if (!displayName) return null;
+
+  return {
+    local_id: location.localId || location.local_id || location.id || null,
+    status: location.status || 'confirmed',
+    display_name: displayName,
+    place_text: String(location.placeText || location.place_text || displayName).trim(),
+    address_text: String(location.addressText || location.address_text || '').trim(),
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 const RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS = new Set([
   'body',
   'description',
@@ -197,6 +215,12 @@ export async function deleteUserData(userId) {
       .eq('user_id', userId);
     if (peopleErr) throw peopleErr;
 
+    const { error: locationsErr } = await supabase
+      .from('locations')
+      .delete()
+      .eq('user_id', userId);
+    if (locationsErr) throw locationsErr;
+
     const { error: queriesErr } = await supabase
       .from('queries')
       .delete()
@@ -257,6 +281,24 @@ export async function getEntries(userId) {
       throw cluesError;
     }
 
+    const entryIds = entries.map(entry => entry.id);
+
+    const { data: locationLinks, error: locationsError } = await supabase
+      .from('entry_locations')
+      .select('entry_id, created_at, locations(*)')
+      .eq('user_id', userId)
+      .in('entry_id', entryIds)
+      .order('created_at', { ascending: true });
+
+    if (locationsError) {
+      if (locationsError.code === '42P01' || /locations|entry_locations/i.test(locationsError.message || '')) {
+        console.warn('[DB] locations tables not found; returning entries without locations');
+      } else {
+        console.error('[DB] Location fetch error:', locationsError);
+        throw locationsError;
+      }
+    }
+
     const cluesByEntry = new Map();
     for (const clue of clues || []) {
       const list = cluesByEntry.get(clue.entry_id) || [];
@@ -264,9 +306,18 @@ export async function getEntries(userId) {
       cluesByEntry.set(clue.entry_id, list);
     }
 
+    const locationsByEntry = new Map();
+    for (const link of locationLinks || []) {
+      if (!link.locations) continue;
+      const list = locationsByEntry.get(link.entry_id) || [];
+      list.push(link.locations);
+      locationsByEntry.set(link.entry_id, list);
+    }
+
     return entries.map(entry => ({
       ...entry,
       context_clues: cluesByEntry.get(entry.id) || [],
+      locations: locationsByEntry.get(entry.id) || [],
     }));
   } catch (error) {
     console.error('[DB] Failed to fetch entries:', error.message);
@@ -312,6 +363,73 @@ export async function saveContextClues(userId, entryId, clues = []) {
       .select();
     if (error) throw error;
     saved.push(...(data || []));
+  }
+
+  return saved;
+}
+
+export async function saveEntryLocations(userId, entryId, locations = []) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping locations save');
+    return [];
+  }
+  if (!entryId || !Array.isArray(locations) || locations.length === 0) return [];
+
+  const saved = [];
+  for (const input of locations) {
+    const location = normalizeLocation(input);
+    if (!location) continue;
+
+    let row = null;
+    if (location.local_id) {
+      const { data: existing, error: existingError } = await supabase
+        .from('locations')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('local_id', location.local_id)
+        .limit(1);
+      if (existingError) throw existingError;
+      row = existing?.[0] || null;
+    }
+
+    if (!row) {
+      const { data, error } = await supabase
+        .from('locations')
+        .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
+        .select()
+        .single();
+      if (error) throw error;
+      row = data;
+    } else {
+      const { data, error } = await supabase
+        .from('locations')
+        .update({
+          status: location.status,
+          display_name: location.display_name || row.display_name,
+          place_text: location.place_text || row.place_text,
+          address_text: location.address_text || row.address_text,
+          latitude: location.latitude ?? row.latitude,
+          longitude: location.longitude ?? row.longitude,
+          updated_at: location.updated_at,
+        })
+        .eq('id', row.id)
+        .select()
+        .single();
+      if (error) throw error;
+      row = data;
+    }
+
+    const { error: linkError } = await supabase
+      .from('entry_locations')
+      .upsert([{
+        user_id: userId,
+        entry_id: entryId,
+        location_id: row.id,
+        created_at: new Date().toISOString(),
+      }], { onConflict: 'user_id,entry_id,location_id' });
+    if (linkError) throw linkError;
+
+    saved.push(row);
   }
 
   return saved;
@@ -410,6 +528,22 @@ export async function getPeople(userId) {
 
 export async function getContacts(userId) {
   return getPeople(userId);
+}
+
+export async function getLocations(userId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('locations')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'confirmed')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
 }
 
 /**

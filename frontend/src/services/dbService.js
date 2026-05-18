@@ -4,12 +4,14 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
 const CONTEXT_CLUES_STORE = 'contextClues';
+const LOCATIONS_STORE = 'locations';
+const ENTRY_LOCATIONS_STORE = 'entryLocations';
 // Store name remains "people" so existing installed PWAs keep their local Contacts data.
 const PEOPLE_STORE = 'people';
 
@@ -54,6 +56,17 @@ function compactCalendarPayload(event = {}) {
     attendeeHints: Array.isArray(event.attendeeHints) ? event.attendeeHints : [],
     providerIdHash: event.providerIdHash || event.sourceIdHash || null,
   });
+}
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLocationKey(value) {
+  return normalizeLocationText(value).toLowerCase();
 }
 
 export function entryMentionsContact(entry, contact) {
@@ -167,6 +180,24 @@ export class DBService {
           contextCluesStore.createIndex('remoteEntryId', 'remoteEntryId', { unique: false });
           contextCluesStore.createIndex('kind', 'kind', { unique: false });
           contextCluesStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // v10: local-first Locations and immutable Entry-Location associations.
+        if (!db.objectStoreNames.contains(LOCATIONS_STORE)) {
+          const locationsStore = db.createObjectStore(LOCATIONS_STORE, { keyPath: 'id' });
+          locationsStore.createIndex('status', 'status', { unique: false });
+          locationsStore.createIndex('created_at', 'created_at', { unique: false });
+          locationsStore.createIndex('updated_at', 'updated_at', { unique: false });
+          locationsStore.createIndex('remoteId', 'remoteId', { unique: false });
+          locationsStore.createIndex('normalizedDisplayName', 'normalizedDisplayName', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(ENTRY_LOCATIONS_STORE)) {
+          const entryLocationsStore = db.createObjectStore(ENTRY_LOCATIONS_STORE, { keyPath: 'id' });
+          entryLocationsStore.createIndex('entryId', 'entryId', { unique: false });
+          entryLocationsStore.createIndex('locationId', 'locationId', { unique: false });
+          entryLocationsStore.createIndex('remoteEntryId', 'remoteEntryId', { unique: false });
+          entryLocationsStore.createIndex('created_at', 'created_at', { unique: false });
         }
       };
     });
@@ -318,12 +349,14 @@ export class DBService {
   /**
    * Confirm an entry (delete audio, move to saved)
    */
-  async confirmEntry(entryId) {
+  async confirmEntry(entryId, { locations = [] } = {}) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const transaction = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
+      const locationsStore = transaction.objectStore(LOCATIONS_STORE);
+      const entryLocationsStore = transaction.objectStore(ENTRY_LOCATIONS_STORE);
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
@@ -337,6 +370,43 @@ export class DBService {
         entry.audioBlob = null;
         entry.status = 'confirmed';
         entry.syncStatus = 'pending';
+        entry.locationIds = [];
+        entry.locationSnapshots = [];
+
+        const now = new Date().toISOString();
+        const normalizedLocations = locations
+          .map(location => this.normalizeLocationDraft(location))
+          .filter(Boolean);
+
+        for (const location of normalizedLocations) {
+          const locationId = location.id || this.generateLocationId();
+          const snapshot = {
+            id: locationId,
+            displayName: location.displayName,
+            placeText: location.placeText,
+            addressText: location.addressText,
+            latitude: location.latitude,
+            longitude: location.longitude,
+          };
+          const locationRecord = {
+            ...snapshot,
+            status: 'confirmed',
+            normalizedDisplayName: normalizeLocationKey(location.displayName),
+            remoteId: location.remoteId || null,
+            created_at: location.created_at || now,
+            updated_at: now,
+          };
+          locationsStore.put(locationRecord);
+          entryLocationsStore.put({
+            id: `entry-location-${entryId}-${locationId}`,
+            entryId,
+            locationId,
+            remoteEntryId: entry.remoteId || null,
+            created_at: now,
+          });
+          entry.locationIds.push(locationId);
+          entry.locationSnapshots.push(snapshot);
+        }
 
         const updateRequest = store.put(entry);
 
@@ -365,8 +435,20 @@ export class DBService {
    * @param {string} [params.created_at] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */
-  async createEntryFromCapture({ captureId, transcript, summary, created_at }) {
+  async createEntryFromCapture({ captureId, transcript, summary, created_at, locations = [] }) {
     const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const locationSnapshots = locations
+      .map(location => this.normalizeLocationDraft(location))
+      .filter(Boolean)
+      .map(location => ({
+        id: location.id || this.generateLocationId(),
+        displayName: location.displayName,
+        placeText: location.placeText,
+        addressText: location.addressText,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      }));
 
     const entry = {
       id: this.generateId(),
@@ -379,15 +461,37 @@ export class DBService {
       status: 'confirmed',
       syncStatus: 'pending',
       remoteId: null,
-      created_at: created_at || new Date().toISOString(),
+      created_at: created_at || now,
       synced_at: null,
       intent: 'NOTE',
+      locationIds: locationSnapshots.map(location => location.id),
+      locationSnapshots,
     };
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const transaction = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
+      const locationsStore = transaction.objectStore(LOCATIONS_STORE);
+      const entryLocationsStore = transaction.objectStore(ENTRY_LOCATIONS_STORE);
       const request = store.add(entry);
+
+      for (const location of locationSnapshots) {
+        locationsStore.put({
+          ...location,
+          status: 'confirmed',
+          normalizedDisplayName: normalizeLocationKey(location.displayName),
+          remoteId: null,
+          created_at: now,
+          updated_at: now,
+        });
+        entryLocationsStore.put({
+          id: `entry-location-${entry.id}-${location.id}`,
+          entryId: entry.id,
+          locationId: location.id,
+          remoteEntryId: null,
+          created_at: now,
+        });
+      }
 
       request.onsuccess = () => {
         this.promoteContextCluesFromCapture(captureId, entry.id)
@@ -615,15 +719,70 @@ export class DBService {
       created_at: cloudJob.created_at,
       synced_at: cloudJob.synced_at,
       captureId: cloudJob.capture_id || cloudJob.captureId || null,
+      locationIds: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location =>
+        location.local_id || location.localId || location.id
+      ).filter(Boolean),
+      locationSnapshots: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location => ({
+        id: location.local_id || location.localId || location.id,
+        displayName: location.display_name || location.displayName || '',
+        placeText: location.place_text || location.placeText || location.display_name || '',
+        addressText: location.address_text || location.addressText || '',
+        latitude: location.latitude ?? null,
+        longitude: location.longitude ?? null,
+      })),
     };
     return new Promise((resolve, reject) => {
-      const req = db.transaction([STORE_NAME], 'readwrite').objectStore(STORE_NAME).add(entry);
+      const tx = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
+      const req = tx.objectStore(STORE_NAME).add(entry);
       req.onsuccess = () => {
-        this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || [])
+        Promise.all([
+          this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || []),
+          this.upsertCloudEntryLocations(entry.id, cloudJob.id, cloudJob.locations || cloudJob.locationSnapshots || []),
+        ])
           .then(() => resolve(entry))
           .catch(reject);
       };
       req.onerror = () => reject(new Error('Failed to add cloud entry'));
+    });
+  }
+
+  async upsertCloudEntryLocations(entryId, remoteEntryId, locations = []) {
+    const db = await this.ensureDb();
+    if (!Array.isArray(locations) || locations.length === 0) return [];
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
+      const locationStore = tx.objectStore(LOCATIONS_STORE);
+      const linkStore = tx.objectStore(ENTRY_LOCATIONS_STORE);
+      const saved = [];
+
+      tx.oncomplete = () => resolve(saved);
+      tx.onerror = () => reject(new Error('Failed to save cloud entry locations'));
+
+      for (const cloudLocation of locations) {
+        const localId = cloudLocation.local_id || cloudLocation.localId || `location-cloud-${cloudLocation.id}`;
+        const row = {
+          id: localId,
+          displayName: cloudLocation.display_name || cloudLocation.displayName || '',
+          placeText: cloudLocation.place_text || cloudLocation.placeText || cloudLocation.display_name || '',
+          addressText: cloudLocation.address_text || cloudLocation.addressText || '',
+          latitude: cloudLocation.latitude ?? null,
+          longitude: cloudLocation.longitude ?? null,
+          status: cloudLocation.status || 'confirmed',
+          normalizedDisplayName: normalizeLocationKey(cloudLocation.display_name || cloudLocation.displayName || ''),
+          remoteId: cloudLocation.id || cloudLocation.location_id || null,
+          created_at: cloudLocation.created_at || new Date().toISOString(),
+          updated_at: cloudLocation.updated_at || cloudLocation.created_at || new Date().toISOString(),
+        };
+        locationStore.put(row);
+        linkStore.put({
+          id: `entry-location-${entryId}-${localId}`,
+          entryId,
+          locationId: localId,
+          remoteEntryId,
+          created_at: cloudLocation.link_created_at || new Date().toISOString(),
+        });
+        saved.push(row);
+      }
     });
   }
 
@@ -670,6 +829,10 @@ export class DBService {
 
   generateContactId() {
     return `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  generateLocationId() {
+    return `location-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   generateContextClueId() {
@@ -1226,6 +1389,114 @@ export class DBService {
 
   async upsertCloudPerson(cloudPerson) {
     return this.upsertCloudContact(cloudPerson);
+  }
+
+  // ─── Locations ──────────────────────────────────────────────────────────
+
+  normalizeLocationDraft(location = {}) {
+    const displayName = normalizeLocationText(
+      location.displayName || location.display_name || location.placeText || location.place_text || location.addressText || location.address_text
+    );
+    if (!displayName) return null;
+
+    return {
+      id: location.id || location.localId || location.local_id || null,
+      displayName,
+      placeText: normalizeLocationText(location.placeText || location.place_text || displayName),
+      addressText: normalizeLocationText(location.addressText || location.address_text || ''),
+      latitude: location.latitude ?? null,
+      longitude: location.longitude ?? null,
+      remoteId: location.remoteId || location.remote_id || null,
+      created_at: location.created_at || null,
+    };
+  }
+
+  async getLocations(status = 'confirmed') {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE);
+      const req = status ? store.index('status').getAll(status) : store.getAll();
+      req.onsuccess = () => {
+        const rows = req.result || [];
+        rows.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+        resolve(rows);
+      };
+      req.onerror = () => reject(new Error('Failed to fetch locations'));
+    });
+  }
+
+  async getLocationsUnsynced() {
+    const locations = await this.getLocations('confirmed');
+    return locations.filter(location => !location.remoteId);
+  }
+
+  async getLocationsForEntry(entryId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([ENTRY_LOCATIONS_STORE, LOCATIONS_STORE], 'readonly');
+      const linksReq = tx.objectStore(ENTRY_LOCATIONS_STORE).index('entryId').getAll(entryId);
+      linksReq.onsuccess = () => {
+        const links = linksReq.result || [];
+        if (links.length === 0) {
+          resolve([]);
+          return;
+        }
+        const locations = [];
+        let remaining = links.length;
+        for (const link of links) {
+          const locationReq = tx.objectStore(LOCATIONS_STORE).get(link.locationId);
+          locationReq.onsuccess = () => {
+            if (locationReq.result) locations.push(locationReq.result);
+            remaining -= 1;
+            if (remaining === 0) resolve(locations);
+          };
+          locationReq.onerror = () => reject(new Error('Failed to fetch entry location'));
+        }
+      };
+      linksReq.onerror = () => reject(new Error('Failed to fetch entry location links'));
+    });
+  }
+
+  async markLocationSynced(locationId, remoteId = null) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([LOCATIONS_STORE], 'readwrite').objectStore(LOCATIONS_STORE);
+      const req = store.get(locationId);
+      req.onsuccess = () => {
+        const location = req.result;
+        if (!location) { reject(new Error('Location not found')); return; }
+        location.remoteId = remoteId;
+        location.updated_at = new Date().toISOString();
+        const put = store.put(location);
+        put.onsuccess = () => resolve(location);
+        put.onerror = () => reject(new Error('Failed to mark location synced'));
+      };
+      req.onerror = () => reject(new Error('Failed to fetch location'));
+    });
+  }
+
+  async upsertCloudLocation(cloudLocation) {
+    const db = await this.ensureDb();
+    const locationData = {
+      id: cloudLocation.local_id || `location-cloud-${cloudLocation.id}`,
+      displayName: cloudLocation.display_name || '',
+      placeText: cloudLocation.place_text || cloudLocation.display_name || '',
+      addressText: cloudLocation.address_text || '',
+      latitude: cloudLocation.latitude ?? null,
+      longitude: cloudLocation.longitude ?? null,
+      status: cloudLocation.status || 'confirmed',
+      normalizedDisplayName: normalizeLocationKey(cloudLocation.display_name || cloudLocation.place_text || ''),
+      remoteId: cloudLocation.id,
+      created_at: cloudLocation.created_at || new Date().toISOString(),
+      updated_at: cloudLocation.updated_at || cloudLocation.created_at || new Date().toISOString(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([LOCATIONS_STORE], 'readwrite').objectStore(LOCATIONS_STORE);
+      const req = store.put(locationData);
+      req.onsuccess = () => resolve(locationData);
+      req.onerror = () => reject(new Error('Failed to save cloud location'));
+    });
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────
