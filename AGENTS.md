@@ -25,6 +25,11 @@ confirm the shipped behavior. Keep the QA list practical and specific to the
 issue, including any database/schema steps, device/PWA checks, or production
 smoke tests that cannot be fully verified by automated checks.
 
+When there are QA actions for the user, make them hard to miss: trigger a local
+terminal bell if available and clearly label the final section `QA actions`.
+Do not claim to send WhatsApp or external notifications unless a real project
+integration exists and the message was actually sent.
+
 ### Triage labels
 
 Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
