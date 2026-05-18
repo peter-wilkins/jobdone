@@ -43,6 +43,7 @@ function App() {
           if (result?.entry?.id) {
             await dbService.markEntrySynced(entry.id, result.entry.id);
             await dbService.upsertCloudEntryLocations(entry.id, result.entry.id, result.entry.locations || []);
+            await dbService.upsertCloudEntryTags(entry.id, result.entry.id, result.entry.tags || []);
           }
         } catch (e) {
           console.warn('[Login] Failed to push entry:', entry.id, e);

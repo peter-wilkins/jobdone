@@ -38,3 +38,13 @@ Status: passed by user on 2026-05-18.
 1. On production build for this fix or newer, create and confirm a normal Entry while logged in.
 2. Confirm the Timeline card changes to the cloud icon immediately after confirm without requiring a reload.
 3. Refresh the app and confirm the same Entry still shows the cloud icon.
+
+## 2026-05-18 - Issue #30 / Tags
+
+Status: pending user confirmation.
+
+1. Run the updated `docs/schema.sql` in Supabase before relying on cloud sync for Tags.
+2. On production build for this issue or newer, create a normal note, enter comma-separated Tags on the review screen, confirm it, and check the Timeline card shows Tag pills.
+3. Try an unsafe Tag such as `<script>` or a multi-line value and confirm the app blocks it before Confirmation.
+4. Create a normal note with Tags left blank, confirm it, and check the Entry still appears and syncs normally.
+5. While logged in, create an Entry with Tags on one device, then open another logged-in device and confirm the Entry and Tag pills appear after sync.

@@ -24,6 +24,9 @@ export class SyncService {
       const locations = Array.isArray(entryData.locationSnapshots) && entryData.locationSnapshots.length
         ? entryData.locationSnapshots
         : await dbService.getLocationsForEntry(entryData.id);
+      const tags = Array.isArray(entryData.tagSnapshots) && entryData.tagSnapshots.length
+        ? entryData.tagSnapshots
+        : await dbService.getTagsForEntry(entryData.id);
 
       const response = await apiService.syncSave({
         entryData: {
@@ -33,6 +36,7 @@ export class SyncService {
           captureId: entryData.captureId || entryData.capture_id || null,
           contextClues,
           locations,
+          tags,
         },
       });
 

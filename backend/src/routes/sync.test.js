@@ -27,6 +27,7 @@ async function buildApp(deps = {}) {
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
     saveEntryLocations: async () => [],
+    saveEntryTags: async () => [],
     getLocations: async () => [],
     deleteUserData: async () => ({ success: true }),
     ...deps,
@@ -203,6 +204,37 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.deepEqual(JSON.parse(res.body).entry.locations, []);
   });
 
+  test('stores confirmed Tag associations after saving an entry', async () => {
+    let tagArgs;
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => makeVector(),
+      },
+      saveEntry: async (userId, entryData) => ({ id: 'entry-1', ...entryData }),
+      saveEntryTags: async (userId, entryId, tags) => {
+        tagArgs = { userId, entryId, tags };
+        return [{ id: 'tag-cloud-1', label: 'Boiler Service', category_name: 'General' }];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          tags: [{ id: 'tag-local-1', label: 'Boiler Service', categoryName: 'General' }],
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(tagArgs.userId, 'user-1');
+    assert.equal(tagArgs.entryId, 'entry-1');
+    assert.equal(tagArgs.tags[0].label, 'Boiler Service');
+    assert.equal(JSON.parse(res.body).entry.tags[0].label, 'Boiler Service');
+  });
+
   test('does not save context clues when embedding fails', async () => {
     let contextCalled = false;
 
@@ -293,7 +325,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], tags: [] });
   });
 
   test('falls back to created_at when no captureId is provided', async () => {
@@ -328,7 +360,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], tags: [] });
   });
 });
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { audioService } from './services/audioService';
-import { dbService } from './services/dbService';
+import { dbService, validateTagLabel } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
@@ -37,6 +37,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
+  const [reviewTags, setReviewTags] = useState({});
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
@@ -327,7 +328,22 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       // Delete audio and move to confirmed locally
       const locationText = (reviewLocations[id] || '').trim();
       const locations = locationText ? [{ displayName: locationText, placeText: locationText }] : [];
-      const confirmedEntry = await dbService.confirmEntry(id, { locations });
+      const tagInputs = Array.from(
+        (reviewTags[id] || '')
+          .split(',')
+          .map(tag => tag.trim())
+          .filter(Boolean)
+          .reduce((map, tag) => map.set(tag.toLowerCase(), tag), new Map())
+          .values()
+      );
+      const tagValidations = tagInputs.map(validateTagLabel);
+      const invalidTag = tagValidations.find(result => !result.valid);
+      if (invalidTag) {
+        setError(invalidTag.error);
+        return;
+      }
+      const tags = tagValidations.map(result => ({ label: result.label, categoryName: 'General' }));
+      const confirmedEntry = await dbService.confirmEntry(id, { locations, tags });
       let timelineEntry = { ...entry, ...confirmedEntry };
 
       // Try to sync to cloud (optional - don't block if it fails)
@@ -341,6 +357,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
             if (result !== null) {
               await dbService.markEntrySynced(id, result?.entry?.id);
               await dbService.upsertCloudEntryLocations(id, result?.entry?.id, result?.entry?.locations || []);
+              await dbService.upsertCloudEntryTags(id, result?.entry?.id, result?.entry?.tags || []);
               timelineEntry = {
                 ...timelineEntry,
                 syncStatus: 'synced',
@@ -362,6 +379,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         return [...inProgress, ...confirmed];
       });
       setReviewLocations(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewTags(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -701,6 +723,9 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
       ? entry.locationSnapshots[0]
       : null;
+    const entryTags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
+      ? entry.tagSnapshots
+      : [];
 
     if (entry.status === 'recording' || isProcessing) {
       const isQueued = entry.errorMessage === 'offline';
@@ -802,6 +827,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                   className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
               </label>
+              <label className="mt-3 block">
+                <span className="text-sm text-gray-500">Tags</span>
+                <input
+                  type="text"
+                  value={reviewTags[entry.id] || ''}
+                  onChange={(event) => setReviewTags(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                  placeholder="+ Tags, comma separated"
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                />
+              </label>
             </div>
           )}
           
@@ -848,6 +883,15 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
             </span>
           </div>
         )}
+        {entryTags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {entryTags.map(tag => (
+              <span key={tag.id || tag.label} className="inline-flex max-w-full items-center rounded bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                <span className="truncate">{tag.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -869,6 +913,30 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
           <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
         </span>
+      </div>
+    );
+  };
+
+  const renderTagPills = (entry) => {
+    const tags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
+      ? entry.tagSnapshots
+      : Array.isArray(entry.tags) && entry.tags.length > 0
+        ? entry.tags.map(tag => ({
+            id: tag.local_id || tag.localId || tag.id,
+            label: tag.label,
+            categoryName: tag.category_name || tag.categoryName || tag.tag_categories?.name || 'General',
+          }))
+        : [];
+
+    if (!tags.length) return null;
+
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {tags.map(tag => (
+          <span key={tag.id || tag.label} className="inline-flex max-w-full items-center rounded bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+            <span className="truncate">{tag.label}</span>
+          </span>
+        ))}
       </div>
     );
   };
@@ -1075,6 +1143,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
                     {renderLocationPill(entry)}
+                    {renderTagPills(entry)}
                   </div>
                 ))}
               </div>

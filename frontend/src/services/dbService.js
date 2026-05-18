@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -12,8 +12,17 @@ const CAPTURES_STORE = 'captures';
 const CONTEXT_CLUES_STORE = 'contextClues';
 const LOCATIONS_STORE = 'locations';
 const ENTRY_LOCATIONS_STORE = 'entryLocations';
+const TAG_CATEGORIES_STORE = 'tagCategories';
+const TAGS_STORE = 'tags';
+const TAG_VOCABULARY_STORE = 'tagVocabulary';
+const ENTRY_TAGS_STORE = 'entryTags';
 // Store name remains "people" so existing installed PWAs keep their local Contacts data.
 const PEOPLE_STORE = 'people';
+const DEFAULT_TAG_CATEGORY = {
+  id: 'tag-category-general',
+  name: 'General',
+  slug: 'general',
+};
 
 function normalizeSearchText(value) {
   return String(value || '')
@@ -67,6 +76,34 @@ function normalizeLocationText(value) {
 
 function normalizeLocationKey(value) {
   return normalizeLocationText(value).toLowerCase();
+}
+
+function normalizeTagLabel(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeTagKey(value) {
+  return normalizeTagLabel(value).toLowerCase();
+}
+
+function safeLocalKey(value) {
+  return normalizeTagKey(value)
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'tag';
+}
+
+export function validateTagLabel(value) {
+  const label = normalizeTagLabel(value);
+  if (!label) return { valid: false, label, error: 'Tag is required' };
+  if (label.length > 40) return { valid: false, label, error: 'Tags must be 40 characters or fewer' };
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u.test(label)) {
+    return { valid: false, label, error: 'Tags can use letters, numbers, spaces, hyphens, and underscores' };
+  }
+  return { valid: true, label, error: null };
 }
 
 export function entryMentionsContact(entry, contact) {
@@ -198,6 +235,36 @@ export class DBService {
           entryLocationsStore.createIndex('locationId', 'locationId', { unique: false });
           entryLocationsStore.createIndex('remoteEntryId', 'remoteEntryId', { unique: false });
           entryLocationsStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // v11: local-first Tags, Tag Categories, Vocabulary stats, and immutable Entry-Tag links.
+        if (!db.objectStoreNames.contains(TAG_CATEGORIES_STORE)) {
+          const categoriesStore = db.createObjectStore(TAG_CATEGORIES_STORE, { keyPath: 'id' });
+          categoriesStore.createIndex('slug', 'slug', { unique: false });
+          categoriesStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(TAGS_STORE)) {
+          const tagsStore = db.createObjectStore(TAGS_STORE, { keyPath: 'id' });
+          tagsStore.createIndex('categoryId', 'categoryId', { unique: false });
+          tagsStore.createIndex('normalizedLabel', 'normalizedLabel', { unique: false });
+          tagsStore.createIndex('status', 'status', { unique: false });
+          tagsStore.createIndex('remoteId', 'remoteId', { unique: false });
+          tagsStore.createIndex('updated_at', 'updated_at', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(TAG_VOCABULARY_STORE)) {
+          const vocabularyStore = db.createObjectStore(TAG_VOCABULARY_STORE, { keyPath: 'tagId' });
+          vocabularyStore.createIndex('last_used_at', 'last_used_at', { unique: false });
+          vocabularyStore.createIndex('use_count', 'use_count', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(ENTRY_TAGS_STORE)) {
+          const entryTagsStore = db.createObjectStore(ENTRY_TAGS_STORE, { keyPath: 'id' });
+          entryTagsStore.createIndex('entryId', 'entryId', { unique: false });
+          entryTagsStore.createIndex('tagId', 'tagId', { unique: false });
+          entryTagsStore.createIndex('remoteEntryId', 'remoteEntryId', { unique: false });
+          entryTagsStore.createIndex('created_at', 'created_at', { unique: false });
         }
       };
     });
@@ -349,14 +416,26 @@ export class DBService {
   /**
    * Confirm an entry (delete audio, move to saved)
    */
-  async confirmEntry(entryId, { locations = [] } = {}) {
+  async confirmEntry(entryId, { locations = [], tags = [] } = {}) {
     const db = await this.ensureDb();
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
+      const transaction = db.transaction([
+        STORE_NAME,
+        LOCATIONS_STORE,
+        ENTRY_LOCATIONS_STORE,
+        TAG_CATEGORIES_STORE,
+        TAGS_STORE,
+        TAG_VOCABULARY_STORE,
+        ENTRY_TAGS_STORE,
+      ], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const locationsStore = transaction.objectStore(LOCATIONS_STORE);
       const entryLocationsStore = transaction.objectStore(ENTRY_LOCATIONS_STORE);
+      const tagCategoriesStore = transaction.objectStore(TAG_CATEGORIES_STORE);
+      const tagsStore = transaction.objectStore(TAGS_STORE);
+      const tagVocabularyStore = transaction.objectStore(TAG_VOCABULARY_STORE);
+      const entryTagsStore = transaction.objectStore(ENTRY_TAGS_STORE);
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
@@ -372,6 +451,8 @@ export class DBService {
         entry.syncStatus = 'pending';
         entry.locationIds = [];
         entry.locationSnapshots = [];
+        entry.tagIds = [];
+        entry.tagSnapshots = [];
 
         const now = new Date().toISOString();
         const normalizedLocations = locations
@@ -408,6 +489,55 @@ export class DBService {
           entry.locationSnapshots.push(snapshot);
         }
 
+        const normalizedTags = tags
+          .map(tag => this.normalizeTagDraft(tag))
+          .filter(Boolean);
+
+        if (normalizedTags.length) {
+          tagCategoriesStore.put({
+            ...DEFAULT_TAG_CATEGORY,
+            created_at: now,
+            updated_at: now,
+          });
+        }
+
+        for (const tag of normalizedTags) {
+          const tagId = tag.id || this.generateTagId(tag.label, tag.categoryId);
+          const snapshot = {
+            id: tagId,
+            label: tag.label,
+            normalizedLabel: normalizeTagKey(tag.label),
+            categoryId: tag.categoryId,
+            categoryName: tag.categoryName,
+          };
+          tagsStore.put({
+            ...snapshot,
+            status: 'confirmed',
+            remoteId: tag.remoteId || null,
+            created_at: tag.created_at || now,
+            updated_at: now,
+          });
+          entryTagsStore.put({
+            id: `entry-tag-${entryId}-${tagId}`,
+            entryId,
+            tagId,
+            remoteEntryId: entry.remoteId || null,
+            created_at: now,
+          });
+          tagVocabularyStore.put({
+            tagId,
+            label: tag.label,
+            categoryId: tag.categoryId,
+            created_at: tag.created_at || now,
+            last_used_at: now,
+            use_count: (tag.useCount || 0) + 1,
+            accepted_count: (tag.acceptedCount || 0) + 1,
+            rejected_count: tag.rejectedCount || 0,
+          });
+          entry.tagIds.push(tagId);
+          entry.tagSnapshots.push(snapshot);
+        }
+
         const updateRequest = store.put(entry);
 
         updateRequest.onsuccess = () => {
@@ -435,7 +565,7 @@ export class DBService {
    * @param {string} [params.created_at] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */
-  async createEntryFromCapture({ captureId, transcript, summary, created_at, locations = [] }) {
+  async createEntryFromCapture({ captureId, transcript, summary, created_at, locations = [], tags = [] }) {
     const db = await this.ensureDb();
     const now = new Date().toISOString();
     const locationSnapshots = locations
@@ -448,6 +578,16 @@ export class DBService {
         addressText: location.addressText,
         latitude: location.latitude,
         longitude: location.longitude,
+      }));
+    const tagSnapshots = tags
+      .map(tag => this.normalizeTagDraft(tag))
+      .filter(Boolean)
+      .map(tag => ({
+        id: tag.id || this.generateTagId(tag.label, tag.categoryId),
+        label: tag.label,
+        normalizedLabel: normalizeTagKey(tag.label),
+        categoryId: tag.categoryId,
+        categoryName: tag.categoryName,
       }));
 
     const entry = {
@@ -466,13 +606,27 @@ export class DBService {
       intent: 'NOTE',
       locationIds: locationSnapshots.map(location => location.id),
       locationSnapshots,
+      tagIds: tagSnapshots.map(tag => tag.id),
+      tagSnapshots,
     };
 
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
+      const transaction = db.transaction([
+        STORE_NAME,
+        LOCATIONS_STORE,
+        ENTRY_LOCATIONS_STORE,
+        TAG_CATEGORIES_STORE,
+        TAGS_STORE,
+        TAG_VOCABULARY_STORE,
+        ENTRY_TAGS_STORE,
+      ], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       const locationsStore = transaction.objectStore(LOCATIONS_STORE);
       const entryLocationsStore = transaction.objectStore(ENTRY_LOCATIONS_STORE);
+      const tagCategoriesStore = transaction.objectStore(TAG_CATEGORIES_STORE);
+      const tagsStore = transaction.objectStore(TAGS_STORE);
+      const tagVocabularyStore = transaction.objectStore(TAG_VOCABULARY_STORE);
+      const entryTagsStore = transaction.objectStore(ENTRY_TAGS_STORE);
       const request = store.add(entry);
 
       for (const location of locationSnapshots) {
@@ -490,6 +644,41 @@ export class DBService {
           locationId: location.id,
           remoteEntryId: null,
           created_at: now,
+        });
+      }
+
+      if (tagSnapshots.length) {
+        tagCategoriesStore.put({
+          ...DEFAULT_TAG_CATEGORY,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+
+      for (const tag of tagSnapshots) {
+        tagsStore.put({
+          ...tag,
+          status: 'confirmed',
+          remoteId: null,
+          created_at: now,
+          updated_at: now,
+        });
+        entryTagsStore.put({
+          id: `entry-tag-${entry.id}-${tag.id}`,
+          entryId: entry.id,
+          tagId: tag.id,
+          remoteEntryId: null,
+          created_at: now,
+        });
+        tagVocabularyStore.put({
+          tagId: tag.id,
+          label: tag.label,
+          categoryId: tag.categoryId,
+          created_at: now,
+          last_used_at: now,
+          use_count: 1,
+          accepted_count: 1,
+          rejected_count: 0,
         });
       }
 
@@ -730,6 +919,16 @@ export class DBService {
         latitude: location.latitude ?? null,
         longitude: location.longitude ?? null,
       })),
+      tagIds: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag =>
+        tag.local_id || tag.localId || tag.id
+      ).filter(Boolean),
+      tagSnapshots: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag => ({
+        id: tag.local_id || tag.localId || tag.id,
+        label: tag.label || '',
+        normalizedLabel: tag.normalized_label || tag.normalizedLabel || normalizeTagKey(tag.label || ''),
+        categoryId: tag.category_id || tag.categoryId || DEFAULT_TAG_CATEGORY.id,
+        categoryName: tag.category_name || tag.categoryName || tag.tag_categories?.name || DEFAULT_TAG_CATEGORY.name,
+      })),
     };
     return new Promise((resolve, reject) => {
       const tx = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
@@ -738,6 +937,7 @@ export class DBService {
         Promise.all([
           this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || []),
           this.upsertCloudEntryLocations(entry.id, cloudJob.id, cloudJob.locations || cloudJob.locationSnapshots || []),
+          this.upsertCloudEntryTags(entry.id, cloudJob.id, cloudJob.tags || cloudJob.tagSnapshots || []),
         ])
           .then(() => resolve(entry))
           .catch(reject);
@@ -780,6 +980,74 @@ export class DBService {
           locationId: localId,
           remoteEntryId,
           created_at: cloudLocation.link_created_at || new Date().toISOString(),
+        });
+        saved.push(row);
+      }
+    });
+  }
+
+  async upsertCloudEntryTags(entryId, remoteEntryId, tags = []) {
+    const db = await this.ensureDb();
+    if (!Array.isArray(tags) || tags.length === 0) return [];
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([TAG_CATEGORIES_STORE, TAGS_STORE, TAG_VOCABULARY_STORE, ENTRY_TAGS_STORE], 'readwrite');
+      const categoryStore = tx.objectStore(TAG_CATEGORIES_STORE);
+      const tagStore = tx.objectStore(TAGS_STORE);
+      const vocabularyStore = tx.objectStore(TAG_VOCABULARY_STORE);
+      const linkStore = tx.objectStore(ENTRY_TAGS_STORE);
+      const saved = [];
+      const now = new Date().toISOString();
+
+      tx.oncomplete = () => resolve(saved);
+      tx.onerror = () => reject(new Error('Failed to save cloud entry tags'));
+
+      categoryStore.put({
+        ...DEFAULT_TAG_CATEGORY,
+        created_at: now,
+        updated_at: now,
+      });
+
+      for (const cloudTag of tags) {
+        const categoryId = cloudTag.category_id || cloudTag.categoryId || DEFAULT_TAG_CATEGORY.id;
+        const categoryName = cloudTag.category_name || cloudTag.categoryName || cloudTag.tag_categories?.name || DEFAULT_TAG_CATEGORY.name;
+        const label = normalizeTagLabel(cloudTag.label || '');
+        if (!label) continue;
+        const localId = cloudTag.local_id || cloudTag.localId || `tag-cloud-${cloudTag.id}`;
+        const row = {
+          id: localId,
+          label,
+          normalizedLabel: cloudTag.normalized_label || cloudTag.normalizedLabel || normalizeTagKey(label),
+          categoryId,
+          categoryName,
+          status: cloudTag.status || 'confirmed',
+          remoteId: cloudTag.id || cloudTag.tag_id || null,
+          created_at: cloudTag.created_at || now,
+          updated_at: cloudTag.updated_at || cloudTag.created_at || now,
+        };
+        categoryStore.put({
+          id: categoryId,
+          name: categoryName,
+          slug: safeLocalKey(categoryName),
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        });
+        tagStore.put(row);
+        linkStore.put({
+          id: `entry-tag-${entryId}-${localId}`,
+          entryId,
+          tagId: localId,
+          remoteEntryId,
+          created_at: cloudTag.link_created_at || now,
+        });
+        vocabularyStore.put({
+          tagId: localId,
+          label,
+          categoryId,
+          created_at: row.created_at,
+          last_used_at: row.updated_at,
+          use_count: cloudTag.use_count || 1,
+          accepted_count: cloudTag.accepted_count || 1,
+          rejected_count: cloudTag.rejected_count || 0,
         });
         saved.push(row);
       }
@@ -833,6 +1101,10 @@ export class DBService {
 
   generateLocationId() {
     return `location-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  generateTagId(label, categoryId = DEFAULT_TAG_CATEGORY.id) {
+    return `tag-${safeLocalKey(categoryId)}-${safeLocalKey(label)}`;
   }
 
   generateContextClueId() {
@@ -1496,6 +1768,68 @@ export class DBService {
       const req = store.put(locationData);
       req.onsuccess = () => resolve(locationData);
       req.onerror = () => reject(new Error('Failed to save cloud location'));
+    });
+  }
+
+  // ─── Tags ───────────────────────────────────────────────────────────────
+
+  normalizeTagDraft(tag = {}) {
+    const validation = validateTagLabel(tag.label || tag.name || tag.displayName || tag);
+    if (!validation.valid) return null;
+    const categoryName = normalizeTagLabel(tag.categoryName || tag.category_name || DEFAULT_TAG_CATEGORY.name) || DEFAULT_TAG_CATEGORY.name;
+    const categoryId = tag.categoryId || tag.category_id || `tag-category-${safeLocalKey(categoryName)}`;
+
+    return {
+      id: tag.id || tag.localId || tag.local_id || null,
+      label: validation.label,
+      categoryId,
+      categoryName,
+      remoteId: tag.remoteId || tag.remote_id || null,
+      created_at: tag.created_at || null,
+      useCount: tag.useCount || tag.use_count || 0,
+      acceptedCount: tag.acceptedCount || tag.accepted_count || 0,
+      rejectedCount: tag.rejectedCount || tag.rejected_count || 0,
+    };
+  }
+
+  async getTags(status = 'confirmed') {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([TAGS_STORE], 'readonly').objectStore(TAGS_STORE);
+      const req = status ? store.index('status').getAll(status) : store.getAll();
+      req.onsuccess = () => {
+        const rows = req.result || [];
+        rows.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+        resolve(rows);
+      };
+      req.onerror = () => reject(new Error('Failed to fetch tags'));
+    });
+  }
+
+  async getTagsForEntry(entryId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([ENTRY_TAGS_STORE, TAGS_STORE], 'readonly');
+      const linksReq = tx.objectStore(ENTRY_TAGS_STORE).index('entryId').getAll(entryId);
+      linksReq.onsuccess = () => {
+        const links = linksReq.result || [];
+        if (links.length === 0) {
+          resolve([]);
+          return;
+        }
+        const tags = [];
+        let remaining = links.length;
+        for (const link of links) {
+          const tagReq = tx.objectStore(TAGS_STORE).get(link.tagId);
+          tagReq.onsuccess = () => {
+            if (tagReq.result) tags.push(tagReq.result);
+            remaining -= 1;
+            if (remaining === 0) resolve(tags);
+          };
+          tagReq.onerror = () => reject(new Error('Failed to fetch entry tag'));
+        }
+      };
+      linksReq.onerror = () => reject(new Error('Failed to fetch entry tag links'));
     });
   }
 

@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, getLocations, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryTags, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -13,6 +13,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getContacts: deps.getContacts ?? deps.getPeople ?? getContacts,
     saveContextClues: deps.saveContextClues ?? saveContextClues,
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
+    saveEntryTags: deps.saveEntryTags ?? saveEntryTags,
     getLocations: deps.getLocations ?? getLocations,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
@@ -49,7 +50,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       if (existing) {
         const contextClues = await db.saveContextClues(user.id, existing.id, entryData.contextClues || entryData.context_clues || []);
         const locations = await db.saveEntryLocations(user.id, existing.id, entryData.locations || entryData.locationSnapshots || []);
-        return { success: true, entry: { ...existing, context_clues: contextClues, locations } };
+        const tags = await db.saveEntryTags(user.id, existing.id, entryData.tags || entryData.tagSnapshots || []);
+        return { success: true, entry: { ...existing, context_clues: contextClues, locations, tags } };
       }
 
       const embedding = await embeddingService.embedText(entryData.summary);
@@ -60,8 +62,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       });
       const contextClues = await db.saveContextClues(user.id, saved.id, entryData.contextClues || entryData.context_clues || []);
       const locations = await db.saveEntryLocations(user.id, saved.id, entryData.locations || entryData.locationSnapshots || []);
+      const tags = await db.saveEntryTags(user.id, saved.id, entryData.tags || entryData.tagSnapshots || []);
 
-      return { success: true, entry: { ...saved, context_clues: contextClues, locations } };
+      return { success: true, entry: { ...saved, context_clues: contextClues, locations, tags } };
     } catch (error) {
       console.error('Sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save entry' });

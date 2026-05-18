@@ -7,8 +7,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 2. Drop old tables if present (clean rewrite)
 DROP FUNCTION IF EXISTS match_entries(TEXT, vector(1024), INT, FLOAT);
 DROP FUNCTION IF EXISTS match_entries(TEXT, vector, INT, DOUBLE PRECISION);
+DROP FUNCTION IF EXISTS increment_tag_vocabulary(TEXT, UUID);
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS context_clues CASCADE;
+DROP TABLE IF EXISTS entry_tags CASCADE;
+DROP TABLE IF EXISTS tag_vocabulary CASCADE;
+DROP TABLE IF EXISTS tags CASCADE;
+DROP TABLE IF EXISTS tag_categories CASCADE;
 DROP TABLE IF EXISTS entry_locations CASCADE;
 DROP TABLE IF EXISTS locations CASCADE;
 DROP TABLE IF EXISTS entries CASCADE;
@@ -110,7 +115,107 @@ CREATE POLICY "backend_insert_entry_locations" ON entry_locations FOR INSERT WIT
 CREATE POLICY "backend_select_entry_locations" ON entry_locations FOR SELECT USING (TRUE);
 CREATE POLICY "backend_delete_entry_locations" ON entry_locations FOR DELETE USING (TRUE);
 
--- 7. people (local-first Contacts created from confirmed Captures)
+-- 7. tag_categories, tags, vocabulary, and immutable Entry-to-Tag associations
+CREATE TABLE tag_categories (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  slug       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX tag_categories_user_id_idx ON tag_categories(user_id);
+CREATE UNIQUE INDEX tag_categories_user_slug_uidx ON tag_categories(user_id, slug);
+
+ALTER TABLE tag_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_tag_categories" ON tag_categories FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_tag_categories" ON tag_categories FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_tag_categories" ON tag_categories FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_tag_categories" ON tag_categories FOR DELETE USING (TRUE);
+
+CREATE TABLE tags (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          TEXT NOT NULL,
+  local_id         TEXT,
+  category_id      UUID NOT NULL REFERENCES tag_categories(id) ON DELETE CASCADE,
+  label            TEXT NOT NULL,
+  normalized_label TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'confirmed',
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX tags_user_id_idx     ON tags(user_id);
+CREATE INDEX tags_category_id_idx ON tags(category_id);
+CREATE INDEX tags_updated_at_idx  ON tags(updated_at DESC);
+CREATE UNIQUE INDEX tags_user_id_local_id_uidx ON tags(user_id, local_id) WHERE local_id IS NOT NULL;
+CREATE UNIQUE INDEX tags_user_category_label_uidx ON tags(user_id, category_id, normalized_label);
+
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_tags" ON tags FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_tags" ON tags FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_tags" ON tags FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_tags" ON tags FOR DELETE USING (TRUE);
+
+CREATE TABLE tag_vocabulary (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        TEXT NOT NULL,
+  tag_id         UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  use_count      INTEGER NOT NULL DEFAULT 0,
+  accepted_count INTEGER NOT NULL DEFAULT 0,
+  rejected_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX tag_vocabulary_user_id_idx      ON tag_vocabulary(user_id);
+CREATE INDEX tag_vocabulary_last_used_at_idx ON tag_vocabulary(last_used_at DESC);
+CREATE UNIQUE INDEX tag_vocabulary_user_tag_uidx ON tag_vocabulary(user_id, tag_id);
+
+ALTER TABLE tag_vocabulary ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_tag_vocabulary" ON tag_vocabulary FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_tag_vocabulary" ON tag_vocabulary FOR SELECT USING (TRUE);
+CREATE POLICY "backend_update_tag_vocabulary" ON tag_vocabulary FOR UPDATE USING (TRUE);
+CREATE POLICY "backend_delete_tag_vocabulary" ON tag_vocabulary FOR DELETE USING (TRUE);
+
+CREATE TABLE entry_tags (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    TEXT NOT NULL,
+  entry_id   UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  tag_id     UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX entry_tags_user_id_idx  ON entry_tags(user_id);
+CREATE INDEX entry_tags_entry_id_idx ON entry_tags(entry_id);
+CREATE INDEX entry_tags_tag_id_idx   ON entry_tags(tag_id);
+CREATE UNIQUE INDEX entry_tags_user_entry_tag_uidx ON entry_tags(user_id, entry_id, tag_id);
+
+ALTER TABLE entry_tags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_entry_tags" ON entry_tags FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_entry_tags" ON entry_tags FOR SELECT USING (TRUE);
+CREATE POLICY "backend_delete_entry_tags" ON entry_tags FOR DELETE USING (TRUE);
+
+CREATE OR REPLACE FUNCTION increment_tag_vocabulary(
+  p_user_id TEXT,
+  p_tag_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO tag_vocabulary (user_id, tag_id, use_count, accepted_count, rejected_count, last_used_at)
+  VALUES (p_user_id, p_tag_id, 1, 1, 0, NOW())
+  ON CONFLICT (user_id, tag_id)
+  DO UPDATE SET
+    use_count = tag_vocabulary.use_count + 1,
+    accepted_count = tag_vocabulary.accepted_count + 1,
+    last_used_at = NOW();
+END;
+$$;
+
+-- 8. people (local-first Contacts created from confirmed Captures)
 -- The table name stays "people" for compatibility with deployed clients; product language is Contacts.
 CREATE TABLE people (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -146,7 +251,7 @@ CREATE POLICY "backend_select_people" ON people FOR SELECT USING (TRUE);
 CREATE POLICY "backend_update_people" ON people FOR UPDATE USING (TRUE);
 CREATE POLICY "backend_delete_people" ON people FOR DELETE USING (TRUE);
 
--- 8. queries (persisted Recall questions)
+-- 9. queries (persisted Recall questions)
 CREATE TABLE queries (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -160,7 +265,7 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 9. feedback (user-submitted issue reports with compact diagnostics)
+-- 10. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           TEXT NOT NULL,
@@ -177,7 +282,7 @@ CREATE POLICY "backend_insert_feedback" ON feedback FOR INSERT WITH CHECK (TRUE)
 CREATE POLICY "backend_select_feedback" ON feedback FOR SELECT USING (TRUE);
 CREATE POLICY "backend_delete_feedback" ON feedback FOR DELETE USING (TRUE);
 
--- 10. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 11. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  vector(1024),

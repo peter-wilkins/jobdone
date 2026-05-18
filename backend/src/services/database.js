@@ -59,6 +59,49 @@ function normalizeLocation(location = {}) {
   };
 }
 
+function normalizeTagLabel(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeTagKey(value) {
+  return normalizeTagLabel(value).toLowerCase();
+}
+
+function safeSlug(value) {
+  return normalizeTagKey(value)
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'tag';
+}
+
+function validateTagLabel(value) {
+  const label = normalizeTagLabel(value);
+  if (!label || label.length > 40) return null;
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u.test(label)) return null;
+  return label;
+}
+
+function normalizeTag(tag = {}) {
+  const label = validateTagLabel(tag.label || tag.name || tag.displayName || tag);
+  if (!label) return null;
+  const categoryName = normalizeTagLabel(tag.categoryName || tag.category_name || 'General') || 'General';
+  const categorySlug = safeSlug(categoryName);
+
+  return {
+    local_id: tag.localId || tag.local_id || tag.id || null,
+    label,
+    normalized_label: normalizeTagKey(label),
+    category_name: categoryName,
+    category_slug: categorySlug,
+    status: tag.status || 'confirmed',
+    created_at: new Date(tag.created_at || Date.now()).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 const RESERVED_CONTEXT_CLUE_PAYLOAD_KEYS = new Set([
   'body',
   'description',
@@ -221,6 +264,12 @@ export async function deleteUserData(userId) {
       .eq('user_id', userId);
     if (locationsErr) throw locationsErr;
 
+    const { error: tagCategoriesErr } = await supabase
+      .from('tag_categories')
+      .delete()
+      .eq('user_id', userId);
+    if (tagCategoriesErr) throw tagCategoriesErr;
+
     const { error: queriesErr } = await supabase
       .from('queries')
       .delete()
@@ -299,6 +348,22 @@ export async function getEntries(userId) {
       }
     }
 
+    const { data: tagLinks, error: tagsError } = await supabase
+      .from('entry_tags')
+      .select('entry_id, created_at, tags(*, tag_categories(*))')
+      .eq('user_id', userId)
+      .in('entry_id', entryIds)
+      .order('created_at', { ascending: true });
+
+    if (tagsError) {
+      if (tagsError.code === '42P01' || /tags|entry_tags|tag_categories/i.test(tagsError.message || '')) {
+        console.warn('[DB] tags tables not found; returning entries without tags');
+      } else {
+        console.error('[DB] Tag fetch error:', tagsError);
+        throw tagsError;
+      }
+    }
+
     const cluesByEntry = new Map();
     for (const clue of clues || []) {
       const list = cluesByEntry.get(clue.entry_id) || [];
@@ -314,10 +379,22 @@ export async function getEntries(userId) {
       locationsByEntry.set(link.entry_id, list);
     }
 
+    const tagsByEntry = new Map();
+    for (const link of tagLinks || []) {
+      if (!link.tags) continue;
+      const list = tagsByEntry.get(link.entry_id) || [];
+      list.push({
+        ...link.tags,
+        category_name: link.tags.tag_categories?.name || 'General',
+      });
+      tagsByEntry.set(link.entry_id, list);
+    }
+
     return entries.map(entry => ({
       ...entry,
       context_clues: cluesByEntry.get(entry.id) || [],
       locations: locationsByEntry.get(entry.id) || [],
+      tags: tagsByEntry.get(entry.id) || [],
     }));
   } catch (error) {
     console.error('[DB] Failed to fetch entries:', error.message);
@@ -430,6 +507,137 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
     if (linkError) throw linkError;
 
     saved.push(row);
+  }
+
+  return saved;
+}
+
+export async function saveEntryTags(userId, entryId, tags = []) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping tags save');
+    return [];
+  }
+  if (!entryId || !Array.isArray(tags) || tags.length === 0) return [];
+
+  const saved = [];
+  for (const input of tags) {
+    const tag = normalizeTag(input);
+    if (!tag) continue;
+
+    const { data: category, error: categoryError } = await supabase
+      .from('tag_categories')
+      .upsert([{
+        user_id: userId,
+        name: tag.category_name,
+        slug: tag.category_slug,
+        updated_at: tag.updated_at,
+      }], { onConflict: 'user_id,slug' })
+      .select()
+      .single();
+    if (categoryError) throw categoryError;
+
+    let row = null;
+    if (tag.local_id) {
+      const { data: existing, error: existingError } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('local_id', tag.local_id)
+        .limit(1);
+      if (existingError) throw existingError;
+      row = existing?.[0] || null;
+    }
+
+    if (!row) {
+      const { data: existingByLabel, error: existingByLabelError } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('category_id', category.id)
+        .eq('normalized_label', tag.normalized_label)
+        .limit(1);
+      if (existingByLabelError) throw existingByLabelError;
+      row = existingByLabel?.[0] || null;
+    }
+
+    if (!row) {
+      const { data, error } = await supabase
+        .from('tags')
+        .insert([{
+          user_id: userId,
+          local_id: tag.local_id,
+          category_id: category.id,
+          label: tag.label,
+          normalized_label: tag.normalized_label,
+          status: tag.status,
+          created_at: tag.created_at,
+          updated_at: tag.updated_at,
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      row = data;
+    } else {
+      const { data, error } = await supabase
+        .from('tags')
+        .update({
+          category_id: category.id,
+          label: tag.label,
+          normalized_label: tag.normalized_label,
+          status: tag.status,
+          updated_at: tag.updated_at,
+        })
+        .eq('id', row.id)
+        .select()
+        .single();
+      if (error) throw error;
+      row = data;
+    }
+
+    const { error: linkError } = await supabase
+      .from('entry_tags')
+      .upsert([{
+        user_id: userId,
+        entry_id: entryId,
+        tag_id: row.id,
+        created_at: new Date().toISOString(),
+      }], { onConflict: 'user_id,entry_id,tag_id' });
+    if (linkError) throw linkError;
+
+    const { error: vocabularyError } = await supabase.rpc('increment_tag_vocabulary', {
+      p_user_id: userId,
+      p_tag_id: row.id,
+    });
+    if (vocabularyError) {
+      const { data: existingVocabulary, error: existingVocabularyError } = await supabase
+        .from('tag_vocabulary')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('tag_id', row.id)
+        .limit(1);
+      if (existingVocabularyError) throw existingVocabularyError;
+      const existing = existingVocabulary?.[0] || null;
+      const payload = {
+        user_id: userId,
+        tag_id: row.id,
+        last_used_at: new Date().toISOString(),
+        use_count: (existing?.use_count || 0) + 1,
+        accepted_count: (existing?.accepted_count || 0) + 1,
+        rejected_count: existing?.rejected_count || 0,
+      };
+      const { error: upsertError } = await supabase
+        .from('tag_vocabulary')
+        .upsert([payload], { onConflict: 'user_id,tag_id' });
+      if (upsertError) throw upsertError;
+    }
+
+    saved.push({
+      ...row,
+      category_name: category.name,
+      use_count: 1,
+      accepted_count: 1,
+      rejected_count: 0,
+    });
   }
 
   return saved;
