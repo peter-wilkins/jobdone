@@ -48,6 +48,11 @@ export function InboxScreen({ onBack }) {
     }
   };
 
+  const handleReview = (captureId) => {
+    window.history.pushState({ screen: 'share-target', captureId }, '', `/share-target?id=${encodeURIComponent(captureId)}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   return (
     <div className="h-screen bg-white flex flex-col">
       <div className="border-b border-gray-200 p-6 flex items-center gap-4">
@@ -97,12 +102,20 @@ export function InboxScreen({ onBack }) {
                     </div>
                     <p className="text-xs text-gray-500">{formatTime(new Date(capture.created_at))}</p>
                   </div>
-                  <button
-                    onClick={() => handleReject(capture.id)}
-                    className="text-sm text-gray-500 hover:text-red-600 transition"
-                  >
-                    Reject
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleReview(capture.id)}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 transition"
+                    >
+                      Review
+                    </button>
+                    <button
+                      onClick={() => handleReject(capture.id)}
+                      className="text-sm text-gray-500 hover:text-red-600 transition"
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
