@@ -27,13 +27,10 @@ smoke tests that cannot be fully verified by automated checks.
 
 When there are QA actions for the user, make them hard to miss: trigger a local
 terminal bell if available and clearly label the final section `QA actions`.
-Do not claim to send WhatsApp or external notifications unless a real project
-integration exists and the message was actually sent.
-
-Maintain `docs/QA_QUEUE.md` as the queue of user QA tasks that are not yet
-complete. Add new QA tasks after issue work, remove or check off tasks only when
-the user confirms they are done, and show the current open queue at the end of
-every final response.
+Do not save QA queue state to the repo or GitHub. Send QA actions to ntfy
+instead, using `NTFY_TOPIC` or `NTFY_URL` from the local environment. Only say
+the notification was sent if the ntfy request actually succeeded. If ntfy is not
+configured or fails, say so and include the QA actions in the final response.
 
 ### Triage labels
 
