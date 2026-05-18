@@ -12,9 +12,41 @@ _Avoid_: Draft, Item, Import, Upload
 A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Corrections are made by submitting a new Entry.
 _Avoid_: Event, Job, Note, Recording, Log
 
-**Person**:
-A contactable human known to the user, usually received through a shared contact or inferred from an Entry.
-_Avoid_: Customer, Client, Account
+**Contact**:
+A contactable real human known to the user, anchored by contact evidence such as a phone number, email address, shared vCard, or trusted calendar attendee. A Contact is familiar mobile-address-book language and does not imply billing ownership.
+_Avoid_: Customer, Client, Account, Person
+
+**Location**:
+A real place the work happened at or is about, such as an address, site, venue, GPS-backed place, or remembered place label. Location is a first-class retrieval and filtering concept, not just a display label.
+_Avoid_: Property, Site, Address-only
+
+**Calendar Event**:
+A real calendar item near the time of a Capture or Entry, used as contextual evidence for prediction and review. Calendar Events can suggest likely Location, Contact, or Tags, but are not themselves Entries.
+_Avoid_: Appointment Entry, Job, Booking
+
+**Context Clue**:
+External or inferred evidence used to predict Location, Contact, or Tags for an Entry. Context Clues support review and prediction but are not themselves Timeline content.
+_Avoid_: Metadata, Signal, Evidence
+
+**Tag**:
+A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are how JobDone structures operational memory; they are not decorative UI facets.
+_Avoid_: Label, Chip, Metadata
+
+**Tag Category**:
+The kind of Tag, such as Location, Contact, work type, status, or user/domain-specific categories. Tag Categories define the filtering facets and prediction slots the UX encourages.
+_Avoid_: Facet, Group, Namespace
+
+**Tag Prediction**:
+A suggested Tag inferred from Entry content, context, or prior user Tags, shown for quick Confirmation or removal before an Entry is committed.
+_Avoid_: Auto-tag, AI Guess
+
+**Tag Vocabulary**:
+The user's reusable set of Tags available for future prediction. It is managed from confirmed use, recent use, rejection history, and safe custom Tag creation; it is not the full raw history of every Tag ever typed.
+_Avoid_: Tag History, Prompt List
+
+**Prediction Candidate Set**:
+The bounded set of plausible Locations, Contacts, and Tags selected from Context Clues and Tag Vocabulary before AI ranking. The AI chooses from this small contextual set and may propose a new Tag only when no candidate fits.
+_Avoid_: Full Tag List, Prompt Context, Search Space
 
 **Photo**:
 An image attachment received through a Capture and retained with the Entry after Confirmation.
@@ -63,7 +95,9 @@ _Avoid_: Search bar, Input field, Record button
 - Offline **Recall** can replay cached results for previously run Queries; new Recall requires the backend
 - If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
 - A voice recording creates a **Capture**; transcription and summarization enrich the Capture before review
-- A **Capture** is committed only through Confirmation, producing an Entry, a Person update, or both
+- A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
+- Predicted Locations, Contacts, Tags, and Context Clues remain review-only until Confirmation
+- Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry
 - Confirmation does not require login; confirmed local data syncs after login when available
 - Shared contacts, photos, links, and text always enter as **Captures** and require Confirmation before becoming Entries
 - One OS share action creates one **Capture**, even when it contains multiple payloads
@@ -72,12 +106,27 @@ _Avoid_: Search bar, Input field, Record button
 - A **Capture** is created only after all required payloads are stored locally; partial Captures are not valid
 - Unsupported payloads cause the whole shared Capture to fail before creation in MVP
 - First PWA/share-target implementation slice is app-shell installability plus text/link shared Captures; Photos and vCard/People follow
-- A **Person** can be referenced by Captures and Entries, but does not imply billing ownership or a Customer model
-- Sharing a contact creates or updates a deduplicated **Person** and creates a **Capture** that references that Person
+- A **Contact** can be referenced by Captures and Entries, but does not imply billing ownership or a Customer model
+- Sharing a contact creates or updates a deduplicated **Contact** and creates a **Capture** that references that Contact
 - vCard is the canonical shared contact payload; text-only contact shares are parsed best-effort and reviewed
-- **Person** deduplication uses normalized email or normalized phone number per user; names alone never deduplicate People
-- **People** are local-first and sync to Supabase eventually, using the same per-user normalized identifier rules
-- **Recall** returns Entries only; linked People can improve matching but are not returned as Timeline results
+- **Contact** deduplication uses normalized email or normalized phone number per user; names alone never deduplicate Contacts
+- **Contacts** are local-first and sync to Supabase eventually, using the same per-user normalized identifier rules
+- **Locations**, **Contacts**, and **Tags** are primary retrieval structure for Entries, not secondary decoration
+- **Locations** and **Contacts** use the same pill/filter UX as Tags but remain separate domain entities because they carry identity and context beyond a string label
+- New Locations and Contacts require stronger evidence than arbitrary Tags: Locations should refer to real places, and Contacts should refer to contactable humans with contact evidence
+- Custom Tags can be created from validated free text; custom Locations are created as real places; custom Contacts require deliberate contact creation and should not be inferred from name-only text alone
+- Location and Contact are strongly encouraged during review but not required for Confirmation; their absence is meaningful data rather than invalid data
+- Reminder or to-do-like workflows are Recall/query views over Entries in MVP, not a separate Task model
+- Filterable operational structure belongs in Locations, Contacts, or Tags; narrative memory belongs in Entry content
+- Materials, labour time, follow-ups, possible future work, invoicing status, and similar workflow flags are Tags or Tag Categories in the core model, not structured Entry fields
+- **Context Clues** explain or improve predictions; they can include candidate Locations, Contacts, Calendar Events, device context, and recent user activity, but confirmed Locations and Contacts are Entry associations rather than generic Context Clue records
+- Context Clues are primarily visible during review; after Confirmation they are retained only where useful for explainability, debugging, or prediction quality, not as normal Timeline content
+- **Tag Vocabulary** supplies reusable candidate Tags for prediction, but stale, repeatedly rejected, or one-off Tags should be suppressed
+- A **Prediction Candidate Set** is built before AI prediction so the model sees only plausible contextual options, not the user's entire Tag Vocabulary
+- **Tag Categories** shape prediction and filtering, but MVP does not expose full taxonomy management to users
+- Tag prediction uses a domain template plus the user's Tag Vocabulary; users grow vocabulary through confirmed use but do not manage full category schema in MVP
+- **Calendar Events** are stored as minimal Context Clue snapshots for Entries, not as a full mirrored calendar
+- **Recall** returns Entries only; linked Contacts, Locations, and Tags can improve matching but are not returned as Timeline results
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
 - Transcripts are excluded from MVP Share Packs because they may contain incidental personal data
@@ -91,10 +140,10 @@ _Avoid_: Search bar, Input field, Record button
 - Share Pack recipients view the snapshot in-browser for MVP; PDF/download/export is deferred
 - Recipient-facing Share Pack pages avoid third-party embeds and unnecessary tracking
 - Share Pack access does not create recipient-facing read receipts in MVP; operational access metadata is only for abuse/debug if needed
-- Share Pack recipients are arbitrary external recipients for MVP; sharing a link does not automatically create a Person
-- A Person-only Confirmation updates People and removes the Capture from the Inbox without creating a Timeline Entry
-- A minimal People surface lists, searches, and displays People; merge and full editing are deferred
-- A Person with no linked Entries can be deleted; a Person linked to Entries is hidden from People surfaces while immutable Entry snapshots remain
+- Share Pack recipients are arbitrary external recipients for MVP; sharing a link does not automatically create a Contact
+- A Contact-only Confirmation updates Contacts and removes the Capture from the Inbox without creating a Timeline Entry
+- A minimal Contacts surface lists, searches, and displays Contacts; merge and full editing are deferred
+- A Contact with no linked Entries can be deleted; a Contact linked to Entries cannot be deleted while immutable Entry snapshots remain
 - A **Photo** is attached to a Capture or Entry; it is not its own Timeline item
 - A **Link** is attached to a Capture or Entry; fetching full page content is out of scope for MVP
 - Original user-attached **Photos** are required parts of their Entry; derived artifacts such as thumbnails, OCR text, labels, and embeddings are optional
@@ -109,6 +158,7 @@ _Avoid_: Search bar, Input field, Record button
 - A **Query** moves through: `transcribing → ready_for_review` (user sees intent label + transcription, confirms or corrects) → filters Timeline and is saved to recent Queries
 - The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
+- JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
 
 ## Example dialogue
 
@@ -123,4 +173,4 @@ _Avoid_: Search bar, Input field, Record button
 - The spec mentioned "AI summaries editable separately" — resolved: Entries are fully immutable post-confirmation. Summary editing is not built. Corrections become new Entries.
 - Photos were originally deferred post-MVP — resolved: shared photos can be accepted as attachments through Captures, but do not become standalone Timeline items.
 - Current code stores pre-confirmation recordings in an `entries` IndexedDB store — resolved: these are domain **Captures** and should move to separate Capture storage as PWA/share-target work proceeds.
-- No explicit Customer or Property entity exists in MVP. **Person** exists only as a contactable human, not a billing/account owner. Customer context is carried implicitly in Entry transcripts and surfaced via semantic retrieval. Proactive call-surface (Feature 3) is deferred post-MVP as it requires a richer contact/phone model.
+- No explicit Customer or Property entity exists in MVP. **Contact** exists only as a contactable human, not a billing/account owner. **Location** covers where work happened or is about without implying property ownership. Customer context is carried through Contacts, Locations, Tags, and Entry summaries rather than a Customer account model.
