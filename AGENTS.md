@@ -20,6 +20,11 @@ Before closing an issue, reconcile it with what actually shipped: update stale
 titles/bodies/acceptance criteria, check off completed criteria, record notable
 implementation notes or deviations, then close it as completed.
 
+After implementing an issue, tell the user what QA actions they should take to
+confirm the shipped behavior. Keep the QA list practical and specific to the
+issue, including any database/schema steps, device/PWA checks, or production
+smoke tests that cannot be fully verified by automated checks.
+
 ### Triage labels
 
 Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
