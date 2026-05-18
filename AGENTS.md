@@ -1,5 +1,11 @@
 ## Agent skills
 
+### Before implementation
+
+Always check `git status --short` before starting implementation work. If the
+tree is dirty, distinguish user changes from agent changes and do not overwrite
+or revert unrelated work.
+
 ### Issue tracker
 
 Issues live in GitHub Issues (`peter-wilkins/jobdone`). See `docs/agents/issue-tracker.md`.
