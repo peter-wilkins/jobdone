@@ -20,20 +20,17 @@ Before closing an issue, reconcile it with what actually shipped: update stale
 titles/bodies/acceptance criteria, check off completed criteria, record notable
 implementation notes or deviations, then close it as completed.
 
-After implementing an issue, tell the user what QA actions they should take to
-confirm the shipped behavior. Keep the QA list practical and specific to the
-issue, including any database/schema steps, device/PWA checks, or production
-smoke tests that cannot be fully verified by automated checks.
+After implementation, do not maintain or repeat a long-running QA queue. Instead,
+include a short `UI touched` section in the final response when user-visible UI
+changed. List the specific screens, panels, buttons, routes, or flows that the
+user should visually spot-check. Keep it brief and current; old visual checks
+become stale as the app changes.
 
-When there are QA actions for the user, make them hard to miss: trigger a local
-terminal bell if available and clearly label the final section `QA actions`.
-Append every QA action set to `docs/QA_LOG.md` with the date, related issue or
-commit, status, and concrete checks. This is a complete historical QA log for
-future automated test generation and pre-launch audit work, not a short-lived
-queue. For active back-and-forth notifications, prefer an external notification
-channel configured in the local environment. Only say a notification was sent if
-the request actually succeeded. If notification delivery is not configured or
-fails, say so and include the QA actions in the final response.
+If the work needs a critical non-visual check that the agent cannot perform,
+such as running new SQL, testing a PWA install/share target on a real device, or
+checking another logged-in device, include it under `Manual checks`. Do not write
+these checks to `docs/QA_LOG.md` unless the user explicitly asks for a historical
+QA audit log.
 
 ### Triage labels
 
