@@ -10,6 +10,7 @@ DROP FUNCTION IF EXISTS match_entries(TEXT, vector, INT, DOUBLE PRECISION);
 DROP FUNCTION IF EXISTS increment_tag_vocabulary(TEXT, UUID);
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS context_clues CASCADE;
+DROP TABLE IF EXISTS entry_contacts CASCADE;
 DROP TABLE IF EXISTS entry_tags CASCADE;
 DROP TABLE IF EXISTS tag_vocabulary CASCADE;
 DROP TABLE IF EXISTS tags CASCADE;
@@ -251,7 +252,26 @@ CREATE POLICY "backend_select_people" ON people FOR SELECT USING (TRUE);
 CREATE POLICY "backend_update_people" ON people FOR UPDATE USING (TRUE);
 CREATE POLICY "backend_delete_people" ON people FOR DELETE USING (TRUE);
 
--- 9. queries (persisted Recall questions)
+-- 9. entry_contacts (immutable MVP Entry-to-Contact associations)
+CREATE TABLE entry_contacts (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id   TEXT NOT NULL,
+  entry_id  UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  person_id UUID NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX entry_contacts_user_id_idx  ON entry_contacts(user_id);
+CREATE INDEX entry_contacts_entry_id_idx ON entry_contacts(entry_id);
+CREATE INDEX entry_contacts_person_id_idx ON entry_contacts(person_id);
+CREATE UNIQUE INDEX entry_contacts_user_entry_person_uidx ON entry_contacts(user_id, entry_id, person_id);
+
+ALTER TABLE entry_contacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "backend_insert_entry_contacts" ON entry_contacts FOR INSERT WITH CHECK (TRUE);
+CREATE POLICY "backend_select_entry_contacts" ON entry_contacts FOR SELECT USING (TRUE);
+CREATE POLICY "backend_delete_entry_contacts" ON entry_contacts FOR DELETE USING (TRUE);
+
+-- 10. queries (persisted Recall questions)
 CREATE TABLE queries (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -265,7 +285,7 @@ ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
 CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
--- 10. feedback (user-submitted issue reports with compact diagnostics)
+-- 11. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           TEXT NOT NULL,

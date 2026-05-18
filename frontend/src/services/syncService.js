@@ -27,6 +27,7 @@ export class SyncService {
       const tags = Array.isArray(entryData.tagSnapshots) && entryData.tagSnapshots.length
         ? entryData.tagSnapshots
         : await dbService.getTagsForEntry(entryData.id);
+      const contacts = Array.isArray(entryData.contactSnapshots) ? entryData.contactSnapshots : [];
 
       const response = await apiService.syncSave({
         entryData: {
@@ -36,6 +37,7 @@ export class SyncService {
           captureId: entryData.captureId || entryData.capture_id || null,
           contextClues,
           locations,
+          contacts,
           tags,
         },
       });

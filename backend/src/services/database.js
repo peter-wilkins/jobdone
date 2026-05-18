@@ -366,6 +366,22 @@ export async function getEntries(userId) {
       }
     }
 
+    const { data: contactLinks, error: contactsError } = await supabase
+      .from('entry_contacts')
+      .select('entry_id, created_at, people(*)')
+      .eq('user_id', userId)
+      .in('entry_id', entryIds)
+      .order('created_at', { ascending: true });
+
+    if (contactsError) {
+      if (contactsError.code === '42P01' || /people|entry_contacts/i.test(contactsError.message || '')) {
+        console.warn('[DB] contact association tables not found; returning entries without contacts');
+      } else {
+        console.error('[DB] Contact fetch error:', contactsError);
+        throw contactsError;
+      }
+    }
+
     const cluesByEntry = new Map();
     for (const clue of clues || []) {
       const list = cluesByEntry.get(clue.entry_id) || [];
@@ -392,10 +408,19 @@ export async function getEntries(userId) {
       tagsByEntry.set(link.entry_id, list);
     }
 
+    const contactsByEntry = new Map();
+    for (const link of contactLinks || []) {
+      if (!link.people) continue;
+      const list = contactsByEntry.get(link.entry_id) || [];
+      list.push(link.people);
+      contactsByEntry.set(link.entry_id, list);
+    }
+
     return entries.map(entry => ({
       ...entry,
       context_clues: cluesByEntry.get(entry.id) || [],
       locations: locationsByEntry.get(entry.id) || [],
+      contacts: contactsByEntry.get(entry.id) || [],
       tags: tagsByEntry.get(entry.id) || [],
     }));
   } catch (error) {
@@ -512,6 +537,42 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
   }
 
   return saved;
+}
+
+export async function saveEntryContacts(userId, entryId, contacts = []) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping contacts');
+    return [];
+  }
+  if (!entryId || !Array.isArray(contacts) || contacts.length === 0) return [];
+
+  const savedContacts = [];
+  for (const contact of contacts) {
+    const saved = await saveContact(userId, contact);
+    if (saved?.id) savedContacts.push(saved);
+  }
+
+  if (savedContacts.length === 0) return [];
+
+  const rows = savedContacts.map(contact => ({
+    user_id: userId,
+    entry_id: entryId,
+    person_id: contact.id,
+  }));
+
+  const { error } = await supabase
+    .from('entry_contacts')
+    .upsert(rows, { onConflict: 'user_id,entry_id,person_id' });
+
+  if (error) {
+    if (error.code === '42P01' || /entry_contacts/i.test(error.message || '')) {
+      console.warn('[DB] entry_contacts table not found; saved contacts without Entry associations');
+      return savedContacts;
+    }
+    throw error;
+  }
+
+  return savedContacts;
 }
 
 export async function saveEntryTags(userId, entryId, tags = []) {
@@ -882,6 +943,7 @@ async function attachEntryStructure(userId, entries = []) {
   if (entryIds.length === 0) return entries;
 
   let locationLinks = [];
+  let contactLinks = [];
   let tagLinks = [];
 
   const { data: locationsData, error: locationsError } = await supabase
@@ -899,6 +961,23 @@ async function attachEntryStructure(userId, entries = []) {
     }
   } else {
     locationLinks = locationsData || [];
+  }
+
+  const { data: contactsData, error: contactsError } = await supabase
+    .from('entry_contacts')
+    .select('entry_id, created_at, people(*)')
+    .eq('user_id', userId)
+    .in('entry_id', entryIds)
+    .order('created_at', { ascending: true });
+
+  if (contactsError) {
+    if (contactsError.code === '42P01' || /people|entry_contacts/i.test(contactsError.message || '')) {
+      console.warn('[DB] Contact association tables not available; returning recall results without contacts');
+    } else {
+      throw contactsError;
+    }
+  } else {
+    contactLinks = contactsData || [];
   }
 
   const { data: tagsData, error: tagsError } = await supabase
@@ -934,9 +1013,18 @@ async function attachEntryStructure(userId, entries = []) {
     tagsByEntryId.get(link.entry_id).push(tag);
   }
 
+  const contactsByEntryId = new Map();
+  for (const link of contactLinks) {
+    const contact = link.people;
+    if (!contact) continue;
+    if (!contactsByEntryId.has(link.entry_id)) contactsByEntryId.set(link.entry_id, []);
+    contactsByEntryId.get(link.entry_id).push(contact);
+  }
+
   return entries.map(entry => ({
     ...entry,
     locations: locationsByEntryId.get(entry.id) || [],
+    contacts: contactsByEntryId.get(entry.id) || [],
     tags: tagsByEntryId.get(entry.id) || [],
   }));
 }

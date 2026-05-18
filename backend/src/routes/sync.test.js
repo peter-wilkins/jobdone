@@ -27,6 +27,7 @@ async function buildApp(deps = {}) {
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
     saveEntryLocations: async () => [],
+    saveEntryContacts: async () => [],
     saveEntryTags: async () => [],
     getLocations: async () => [],
     deleteUserData: async () => ({ success: true }),
@@ -202,6 +203,37 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.deepEqual(locationArgs.locations, []);
     assert.deepEqual(JSON.parse(res.body).entry.locations, []);
+  });
+
+  test('stores confirmed Contact associations after saving an entry', async () => {
+    let contactArgs;
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => makeVector(),
+      },
+      saveEntry: async (userId, entryData) => ({ id: 'entry-1', ...entryData }),
+      saveEntryContacts: async (userId, entryId, contacts) => {
+        contactArgs = { userId, entryId, contacts };
+        return [{ id: 'contact-cloud-1', display_name: 'Ann Smith', primary_phone: '+353123' }];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          contacts: [{ id: 'contact-local-1', displayName: 'Ann Smith', primaryPhone: '+353123' }],
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(contactArgs.userId, 'user-1');
+    assert.equal(contactArgs.entryId, 'entry-1');
+    assert.equal(contactArgs.contacts[0].displayName, 'Ann Smith');
+    assert.equal(JSON.parse(res.body).entry.contacts[0].display_name, 'Ann Smith');
   });
 
   test('stores confirmed Tag associations after saving an entry', async () => {
@@ -400,7 +432,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], tags: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
   });
 
   test('falls back to created_at when no captureId is provided', async () => {
@@ -435,7 +467,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], tags: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
   });
 });
 
