@@ -3,8 +3,8 @@
 ### Before implementation
 
 Always check `git status --short` before starting implementation work. If the
-tree is dirty, distinguish user changes from agent changes and do not overwrite
-or revert unrelated work.
+tree is dirty, stop and confirm with the user before changing files. The user
+prefers everything committed before new implementation work starts.
 
 ### Issue tracker
 
