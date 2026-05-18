@@ -20,8 +20,13 @@ function screenFromLocation() {
   return ['feedback', 'inbox', 'contacts', 'login', 'share-target'].includes(hash) ? hash : 'home';
 }
 
+function isPlainHomeOpen() {
+  return window.location.pathname === '/' && window.location.search === '' && window.location.hash === '';
+}
+
 function App() {
   const [screen, setScreen] = useState(screenFromLocation);
+  const [canAutoStartHome] = useState(isPlainHomeOpen);
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -155,7 +160,7 @@ function App() {
     return <LoginScreen onBack={() => navigateTo('home')} user={user} />;
   }
 
-  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} />;
+  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} canAutoStart={canAutoStartHome} />;
 }
 
 export default App;

@@ -4,6 +4,7 @@ import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
+import { preferencesService } from './services/preferencesService';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -11,8 +12,9 @@ const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
 const MIN_STOP_AFTER_MS = 1000;
 const MIN_RECORDING_SECONDS = 1;
+let fastCaptureAttemptedThisRun = false;
 
-export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
+export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const processingIdsRef = useRef(new Set());
@@ -36,6 +38,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
+  const [fastCaptureEnabled, setFastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
+  const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -154,6 +158,27 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
     } finally {
       setIsStartingRecording(false);
     }
+  };
+
+  useEffect(() => {
+    if (!fastCaptureEnabled) return;
+    if (!fastCaptureEnabledAtOpenRef.current) return;
+    if (!canAutoStart) return;
+    if (fastCaptureAttemptedThisRun) return;
+    if (isLoading || activeQuery || isRecording || isStartingRecording || isStoppingRecording) return;
+    if (document.visibilityState !== 'visible') return;
+
+    fastCaptureAttemptedThisRun = true;
+    const timer = window.setTimeout(() => {
+      startRecording();
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fastCaptureEnabled, canAutoStart, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
+
+  const handleFastCaptureChange = (enabled) => {
+    preferencesService.setFastCaptureEnabled(enabled);
+    setFastCaptureEnabled(enabled);
   };
 
   const stopRecording = async () => {
@@ -780,6 +805,18 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
               >
                 Leave feedback
               </button>
+              <label className="flex items-start gap-3 px-4 py-3 border-t border-gray-100 text-sm text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fastCaptureEnabled}
+                  onChange={(event) => handleFastCaptureChange(event.target.checked)}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <span className="block font-medium">Fast Capture</span>
+                  <span className="block text-xs text-gray-400 mt-0.5">Start recording when app opens</span>
+                </span>
+              </label>
               {user && (
                 <button
                   onClick={() => { setMenuOpen(false); onNavigate('login'); }}
