@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { rankStructuredRecallResults } from './recallRanking.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
@@ -876,6 +877,70 @@ export async function updateEntryEmbedding(entryId, embedding, embeddingModel) {
   }
 }
 
+async function attachEntryStructure(userId, entries = []) {
+  const entryIds = entries.map(entry => entry.id).filter(Boolean);
+  if (entryIds.length === 0) return entries;
+
+  let locationLinks = [];
+  let tagLinks = [];
+
+  const { data: locationsData, error: locationsError } = await supabase
+    .from('entry_locations')
+    .select('entry_id, created_at, locations(*)')
+    .eq('user_id', userId)
+    .in('entry_id', entryIds)
+    .order('created_at', { ascending: true });
+
+  if (locationsError) {
+    if (locationsError.code === '42P01' || /locations|entry_locations/i.test(locationsError.message || '')) {
+      console.warn('[DB] Location tables not available; returning recall results without locations');
+    } else {
+      throw locationsError;
+    }
+  } else {
+    locationLinks = locationsData || [];
+  }
+
+  const { data: tagsData, error: tagsError } = await supabase
+    .from('entry_tags')
+    .select('entry_id, created_at, tags(*, tag_categories(*))')
+    .eq('user_id', userId)
+    .in('entry_id', entryIds)
+    .order('created_at', { ascending: true });
+
+  if (tagsError) {
+    if (tagsError.code === '42P01' || /tags|entry_tags/i.test(tagsError.message || '')) {
+      console.warn('[DB] Tag tables not available; returning recall results without tags');
+    } else {
+      throw tagsError;
+    }
+  } else {
+    tagLinks = tagsData || [];
+  }
+
+  const locationsByEntryId = new Map();
+  for (const link of locationLinks) {
+    const location = link.locations;
+    if (!location) continue;
+    if (!locationsByEntryId.has(link.entry_id)) locationsByEntryId.set(link.entry_id, []);
+    locationsByEntryId.get(link.entry_id).push(location);
+  }
+
+  const tagsByEntryId = new Map();
+  for (const link of tagLinks) {
+    const tag = link.tags;
+    if (!tag) continue;
+    if (!tagsByEntryId.has(link.entry_id)) tagsByEntryId.set(link.entry_id, []);
+    tagsByEntryId.get(link.entry_id).push(tag);
+  }
+
+  return entries.map(entry => ({
+    ...entry,
+    locations: locationsByEntryId.get(entry.id) || [],
+    tags: tagsByEntryId.get(entry.id) || [],
+  }));
+}
+
 /**
  * Recall: cosine-similarity search against a user's entries.
  *
@@ -886,7 +951,7 @@ export async function updateEntryEmbedding(entryId, embedding, embeddingModel) {
  * @param {number} opts.floor - minimum similarity (default 0.3)
  * @returns {Promise<Array>} rows with similarity score
  */
-export async function recallEntries(userId, queryEmbedding, { limit = 10, floor = 0.3 } = {}) {
+export async function recallEntries(userId, queryEmbedding, { query = '', limit = 10, floor = 0.3 } = {}) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured');
     return [];
@@ -895,10 +960,11 @@ export async function recallEntries(userId, queryEmbedding, { limit = 10, floor 
   try {
     const vectorLiteral = `[${queryEmbedding.join(',')}]`;
 
+    const candidateLimit = Math.max(limit * 5, limit);
     const { data, error } = await supabase.rpc('match_entries', {
       p_user_id: userId,
       p_query_embedding: vectorLiteral,
-      p_match_count: limit,
+      p_match_count: candidateLimit,
       p_similarity_floor: floor,
     });
 
@@ -907,7 +973,11 @@ export async function recallEntries(userId, queryEmbedding, { limit = 10, floor 
       throw error;
     }
 
-    return data || [];
+    const candidates = data || [];
+    if (candidates.length === 0) return [];
+
+    const structuredCandidates = await attachEntryStructure(userId, candidates);
+    return rankStructuredRecallResults(query, structuredCandidates, { limit });
   } catch (err) {
     console.error('[DB] recallEntries failed:', err.message);
     throw err;

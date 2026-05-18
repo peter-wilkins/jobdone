@@ -616,8 +616,25 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     setIsRecalling(true);
     try {
       const results = await apiService.recall(text);
+      const localEntriesByRemoteId = new Map(
+        entries
+          .filter(entry => entry.remoteId)
+          .map(entry => [entry.remoteId, entry])
+      );
+      const enrichedResults = results.map(result => {
+        const localEntry = localEntriesByRemoteId.get(result.remoteId || result.id);
+        if (!localEntry) return result;
+
+        return {
+          ...result,
+          locationSnapshots: result.locationSnapshots || localEntry.locationSnapshots,
+          contactSnapshots: result.contactSnapshots || localEntry.contactSnapshots,
+          tagSnapshots: result.tagSnapshots || localEntry.tagSnapshots,
+          syncStatus: result.syncStatus || localEntry.syncStatus,
+        };
+      });
       setActiveQuery(text);
-      setQueryResults(results);
+      setQueryResults(enrichedResults);
       // Save to local + server history
       await queryHistoryService.add(text);
       setRecentQueries(await queryHistoryService.getRecent());
@@ -1186,6 +1203,26 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     );
   };
 
+  const renderContactPill = (entry) => {
+    const primaryContact = Array.isArray(entry.contactSnapshots) && entry.contactSnapshots.length > 0
+      ? entry.contactSnapshots[0]
+      : Array.isArray(entry.contacts) && entry.contacts.length > 0
+        ? {
+            displayName: entry.contacts[0].display_name || entry.contacts[0].displayName || entry.contacts[0].label,
+          }
+        : null;
+
+    if (!primaryContact?.displayName) return null;
+
+    return (
+      <div className="mt-2">
+        <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+          <span className="truncate">{primaryContact.displayName}</span>
+        </span>
+      </div>
+    );
+  };
+
   const renderTagPills = (entry) => {
     const tags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
       ? entry.tagSnapshots
@@ -1412,6 +1449,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
                     {renderLocationPill(entry)}
+                    {renderContactPill(entry)}
                     {renderTagPills(entry)}
                   </div>
                 ))}

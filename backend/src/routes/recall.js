@@ -21,8 +21,9 @@ export async function registerRecallRoutes(fastify) {
 
     try {
       const svc = getEmbeddingService();
-      const queryEmbedding = await svc.embedText(query.trim());
-      const rows = await recallEntries(user.id, queryEmbedding);
+      const trimmedQuery = query.trim();
+      const queryEmbedding = await svc.embedText(trimmedQuery);
+      const rows = await recallEntries(user.id, queryEmbedding, { query: trimmedQuery });
 
       return { entries: rows };
     } catch (error) {
