@@ -88,6 +88,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
    */
   const friendlyError = (err) => {
     const msg = err?.message || '';
+    if (err?.code === 'empty_transcription') return 'empty_transcription';
     if (err?.name === 'AbortError' || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
       return 'offline';
     return 'server';
@@ -706,6 +707,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     }
 
     if (entry.status === 'failed') {
+      const isEmptyTranscription = entry.errorMessage === 'empty_transcription';
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
           <div className="flex items-start gap-2 mb-3">
@@ -717,20 +719,24 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           <p className="text-sm text-gray-600 mb-3">
             {entry.errorMessage === 'offline'
               ? 'There is an issue with Sync right now but carry on.'
+              : isEmptyTranscription
+                ? 'No speech detected. Try recording again.'
               : 'Something went wrong while processing this recording.'}
           </p>
           <div className="flex gap-3">
-            <button
-              onClick={() => handleRetry(entry.id)}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
-            >
-              Retry processing
-            </button>
+            {!isEmptyTranscription && (
+              <button
+                onClick={() => handleRetry(entry.id)}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
+              >
+                Retry processing
+              </button>
+            )}
             <button
               onClick={() => handleReject(entry.id)}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
+              className={`${isEmptyTranscription ? 'w-full' : 'flex-1'} px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition`}
             >
-              Discard
+              {isEmptyTranscription ? 'Dismiss' : 'Discard'}
             </button>
           </div>
         </div>

@@ -69,7 +69,11 @@ export class APIService {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || `HTTP ${response.status}: Transcription failed`);
+        const message = error.error || `HTTP ${response.status}: Transcription failed`;
+        const transcriptionError = new Error(message);
+        transcriptionError.code = error.code || null;
+        transcriptionError.status = response.status;
+        throw transcriptionError;
       }
 
       const result = await response.json();

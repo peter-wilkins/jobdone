@@ -3,6 +3,14 @@ import { mockTranscribeAudio } from './mocks.js';
 
 const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
+export class EmptyTranscriptionError extends Error {
+  constructor(message = 'No speech detected') {
+    super(message);
+    this.name = 'EmptyTranscriptionError';
+    this.code = 'empty_transcription';
+  }
+}
+
 /**
  * Transcribe audio blob using Deepgram API (nova-3)
  * @param {Buffer} audioBuffer - Audio file buffer
@@ -35,7 +43,7 @@ export async function transcribeAudio(audioBuffer) {
     const transcript = response.data?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
 
     if (!transcript) {
-      throw new Error('Deepgram returned empty transcription');
+      throw new EmptyTranscriptionError();
     }
 
     console.log('[Deepgram] Transcription complete');
@@ -45,6 +53,10 @@ export async function transcribeAudio(audioBuffer) {
       language: 'en',
     };
   } catch (error) {
+    if (error instanceof EmptyTranscriptionError || error.code === 'empty_transcription') {
+      console.warn('[Deepgram] Empty transcription: no speech detected');
+      throw error;
+    }
     const msg = error.response?.data || error.message;
     console.error('Transcription error:', msg);
     throw new Error(`Failed to transcribe audio: ${msg}`);

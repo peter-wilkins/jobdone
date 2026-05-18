@@ -1,11 +1,15 @@
-import { transcribeAudio, validateAudioBuffer } from '../services/transcription.js';
+import { EmptyTranscriptionError, transcribeAudio, validateAudioBuffer } from '../services/transcription.js';
 import { summarizeAndExtract } from '../services/summarization.js';
 import { classify } from '../services/classify.js';
 
 /**
  * Register audio processing routes
  */
-export async function registerAudioRoutes(fastify) {
+export async function registerAudioRoutes(fastify, deps = {}) {
+  const transcriber = deps.transcribeAudio ?? transcribeAudio;
+  const summarizer = deps.summarizeAndExtract ?? summarizeAndExtract;
+  const classifier = deps.classify ?? classify;
+
   /**
    * Health check
    */
@@ -58,12 +62,12 @@ export async function registerAudioRoutes(fastify) {
 
       // Transcribe
       console.log('[Transcribe] Starting Deepgram transcription...');
-      const { transcript } = await transcribeAudio(audioBuffer);
+      const { transcript } = await transcriber(audioBuffer);
       console.log('[Transcribe] Transcription complete');
 
       // Classify intent (QUERY or NOTE)
       console.log('[Transcribe] Classifying intent...');
-      const intent = classify(transcript);
+      const intent = classifier(transcript);
       console.log(`[Transcribe] Intent: ${intent}`);
 
       // If NOTE, summarize
@@ -71,7 +75,7 @@ export async function registerAudioRoutes(fastify) {
       
       if (intent === 'NOTE') {
         console.log('[Transcribe] Starting Claude summarization...');
-        const result = await summarizeAndExtract(transcript);
+        const result = await summarizer(transcript);
         console.log('[Transcribe] Summarization complete');
         
         response.summary = result.summary;
@@ -79,6 +83,13 @@ export async function registerAudioRoutes(fastify) {
 
       return response;
     } catch (error) {
+      if (error instanceof EmptyTranscriptionError || error.code === 'empty_transcription') {
+        request.log.info({ code: 'empty_transcription' }, 'No speech detected in uploaded audio');
+        return reply.status(422).send({
+          code: 'empty_transcription',
+          error: 'No speech detected',
+        });
+      }
       console.error('Transcription endpoint error:', error);
       return reply.status(500).send({
         error: error.message || 'Failed to process audio',
@@ -108,13 +119,13 @@ export async function registerAudioRoutes(fastify) {
       }
 
       // Classify intent
-      const intent = classify(transcript);
+      const intent = classifier(transcript);
 
       const response = { intent };
 
       // If NOTE, summarize
       if (intent === 'NOTE') {
-        const result = await summarizeAndExtract(transcript);
+        const result = await summarizer(transcript);
         response.summary = result.summary;
       }
 
