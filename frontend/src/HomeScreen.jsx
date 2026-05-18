@@ -41,9 +41,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled, setFastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
+  const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
+  const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
+  const handledForegroundReturnRef = useRef(0);
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -172,20 +175,29 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   };
 
   useEffect(() => {
+    const isForegroundReturn = foregroundReturnCount > handledForegroundReturnRef.current;
+    const isInitialAutoStart = foregroundReturnCount === 0;
+
     if (!fastCaptureEnabled) return;
-    if (!fastCaptureEnabledAtOpenRef.current) return;
-    if (!canAutoStart) return;
-    if (fastCaptureAttemptedThisRun) return;
+    if (isInitialAutoStart && !fastCaptureEnabledAtOpenRef.current) return;
+    if (isInitialAutoStart && !canAutoStart) return;
+    if (isInitialAutoStart && fastCaptureAttemptedThisRun) return;
+    if (!isInitialAutoStart && !isForegroundReturn) return;
     if (isLoading || activeQuery || isRecording || isStartingRecording || isStoppingRecording) return;
     if (document.visibilityState !== 'visible') return;
 
-    fastCaptureAttemptedThisRun = true;
+    if (isForegroundReturn) {
+      handledForegroundReturnRef.current = foregroundReturnCount;
+    } else {
+      fastCaptureAttemptedThisRun = true;
+    }
+
     const timer = window.setTimeout(() => {
       startRecording();
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fastCaptureEnabled, canAutoStart, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
+  }, [fastCaptureEnabled, canAutoStart, foregroundReturnCount, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
 
   const handleFastCaptureChange = (enabled) => {
     preferencesService.setFastCaptureEnabled(enabled);
@@ -483,22 +495,43 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   }, [refreshKey]);
 
   useEffect(() => {
+    const markForegroundReturn = () => {
+      if (!wasBackgroundedRef.current || document.visibilityState !== 'visible') return;
+      wasBackgroundedRef.current = false;
+      setForegroundReturnCount(count => count + 1);
+    };
     const handlePossibleReconnect = () => {
       refreshBackendStatus().catch(err => {
         console.warn('[Online] Backend refresh failed:', err);
       });
     };
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') handlePossibleReconnect();
+      if (document.visibilityState === 'hidden') {
+        wasBackgroundedRef.current = true;
+        return;
+      }
+      markForegroundReturn();
+      handlePossibleReconnect();
+    };
+    const handlePageHide = () => {
+      wasBackgroundedRef.current = true;
+    };
+    const handlePageShow = () => {
+      markForegroundReturn();
+      handlePossibleReconnect();
     };
 
     window.addEventListener('online', handlePossibleReconnect);
     window.addEventListener('focus', handlePossibleReconnect);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('online', handlePossibleReconnect);
       window.removeEventListener('focus', handlePossibleReconnect);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
