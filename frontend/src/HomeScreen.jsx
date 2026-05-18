@@ -16,6 +16,47 @@ const MIN_RECORDING_SECONDS = 1;
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
 let fastCaptureAttemptedThisRun = false;
 
+function reviewText(entry) {
+  return String([entry?.summary, entry?.transcript].filter(Boolean).join(' '))
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function containsContactName(entry, contact) {
+  const haystack = ` ${reviewText(entry)} `;
+  const name = String(contact?.displayName || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return Boolean(name) && haystack.includes(` ${name} `);
+}
+
+function localContactCandidate(contact) {
+  const label = String(contact.displayName || '').trim();
+  if (!contact.id || !label) return null;
+  return {
+    id: contact.id,
+    label,
+    primaryPhone: contact.primaryPhone || null,
+    primaryEmail: contact.primaryEmail || null,
+    source: 'local_contacts',
+  };
+}
+
+function mergeCandidatesById(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter(candidate => {
+    if (!candidate?.id || seen.has(candidate.id)) return false;
+    seen.add(candidate.id);
+    return true;
+  });
+}
+
 export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -121,8 +162,6 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   };
 
   useEffect(() => {
-    if (!user || !backendAvailable) return;
-
     const readyNotes = entries.filter(entry =>
       entry.status === 'ready_for_review' &&
       entry.intent !== 'QUERY' &&
@@ -133,19 +172,39 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     for (const entry of readyNotes) {
       structurePredictionRequestedRef.current.add(entry.id);
       (async () => {
+        let localMatchedContact = null;
+        let localContactCandidates = [];
         try {
+          const localContacts = await dbService.getContacts('confirmed');
+          localContactCandidates = localContacts
+            .filter(contact => containsContactName(entry, contact))
+            .map(localContactCandidate)
+            .filter(Boolean)
+            .slice(0, 5);
+          localMatchedContact = localContactCandidates[0] || null;
+
           const contextClues = entry.captureId
             ? await dbService.getContextCluesForCapture(entry.captureId)
             : await dbService.getContextCluesForEntry(entry.id);
-          const result = await apiService.predictStructure({
-            entryData: {
-              summary: entry.summary,
-              transcript: entry.transcript,
-            },
-            contextClues,
-          });
-          const candidateSet = result.candidateSet || {};
-          const prediction = result.prediction || {};
+          const result = user && backendAvailable
+            ? await apiService.predictStructure({
+                entryData: {
+                  summary: entry.summary,
+                  transcript: entry.transcript,
+                },
+                contextClues,
+              })
+            : { candidateSet: {}, prediction: {} };
+          const candidateSet = {
+            ...(result.candidateSet || {}),
+            contacts: mergeCandidatesById(localContactCandidates, result.candidateSet?.contacts || []),
+          };
+          const prediction = {
+            ...(result.prediction || {}),
+            contactIds: localMatchedContact
+              ? [localMatchedContact.id, ...(result.prediction?.contactIds || []).filter(id => id !== localMatchedContact.id)]
+              : result.prediction?.contactIds || [],
+          };
           const predictedLocation = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
           const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
 
@@ -161,6 +220,18 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           }
         } catch (err) {
           console.warn('[Structure] Prediction unavailable:', err);
+          if (localMatchedContact) {
+            setReviewStructure(prev => ({
+              ...prev,
+              [entry.id]: {
+                error: true,
+                candidateSet: { locations: [], contacts: localContactCandidates, tags: [] },
+                prediction: { contactIds: [localMatchedContact.id] },
+              },
+            }));
+            setReviewContacts(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: localMatchedContact.id });
+            return;
+          }
           setReviewStructure(prev => ({
             ...prev,
             [entry.id]: { error: true, candidateSet: { locations: [], contacts: [], tags: [] }, prediction: {} },

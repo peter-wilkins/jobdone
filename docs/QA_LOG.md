@@ -82,3 +82,11 @@ Status: pending user confirmation.
 1. On production build for this fix or newer, share a Contact from Android to JobDone and confirm the app opens the share review screen instead of browser 404.
 2. Confirm the shared Contact can still be approved or rejected from the review screen.
 3. Confirm opening `https://frontend-jobdone1.vercel.app/share-target?id=capture-test` returns the JobDone app shell, not a Vercel 404.
+
+## 2026-05-18 - Local Contact prediction
+
+Status: pending user confirmation.
+
+1. On production build for this fix or newer, create or reuse a local Contact with a full display name.
+2. Record a note that says the Contact's complete name and confirm the Contact pill is preselected on the review screen.
+3. Remove the Contact pill and confirm the Entry can still be saved without a Contact.
