@@ -56,3 +56,11 @@ Status: passed by user on 2026-05-18.
 1. On production build for this fix or newer, try to confirm an Entry with an unsafe Tag such as `<script>` and confirm the UI blocks it.
 2. Try a multi-line Tag and confirm the UI blocks it.
 3. Confirm a normal safe Tag such as `Boiler Service` still saves and syncs.
+
+## 2026-05-18 - Issue #32 / Prediction Candidate Set pipeline
+
+Status: pending user confirmation.
+
+1. Create or reuse a production account with at least one confirmed Location, Contact, and Tag.
+2. Confirm backend health is OK at `https://jobdone-gamma.vercel.app/health`.
+3. After the next prediction-review UI slice, confirm review suggestions are bounded and separated into Location, Contact, and Tags rather than showing the whole vocabulary.

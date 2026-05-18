@@ -755,6 +755,30 @@ export async function getLocations(userId) {
   return data || [];
 }
 
+export async function getTagVocabulary(userId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('tag_vocabulary')
+    .select('*, tags(*, tag_categories(*))')
+    .eq('user_id', userId)
+    .order('last_used_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    if (error.code === '42P01' || /tag_vocabulary|tags|tag_categories/i.test(error.message || '')) {
+      console.warn('[DB] tag vocabulary tables not found; returning no tag candidates');
+      return [];
+    }
+    throw error;
+  }
+
+  return data || [];
+}
+
 /**
  * Create an anonymous session (no auth needed)
  * Returns a session ID for tracking
