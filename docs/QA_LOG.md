@@ -51,7 +51,7 @@ Status: pending user confirmation.
 
 ## 2026-05-18 - Tag prompt-injection validation
 
-Status: pending user confirmation.
+Status: passed by user on 2026-05-18.
 
 1. On production build for this fix or newer, try to confirm an Entry with an unsafe Tag such as `<script>` and confirm the UI blocks it.
 2. Try a multi-line Tag and confirm the UI blocks it.
