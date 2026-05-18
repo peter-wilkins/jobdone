@@ -59,23 +59,27 @@ export class AudioService {
 
       return true;
     } catch (error) {
-      if (error.name === 'NotAllowedError' || error.message.includes('denied')) {
-        throw new Error(
-          'Microphone access was denied. Please enable microphone access in your browser settings and try again.',
-          { cause: error }
-        );
-      } else if (error.name === 'NotFoundError') {
-        throw new Error('No microphone found on this device.', { cause: error });
-      } else if (error.name === 'NotSupportedError') {
-        throw new Error('Microphone access is not supported in your browser.', { cause: error });
-      } else if (error.name === 'SecurityError') {
-        throw new Error(
-          'Microphone access is only available over HTTPS. Please use a secure connection.',
-          { cause: error }
-        );
-      }
-      throw new Error(`Microphone access error: ${error.message}`, { cause: error });
+      throw this.formatMicrophoneError(error);
     }
+  }
+
+  formatMicrophoneError(error) {
+    if (error.name === 'NotAllowedError' || error.message.includes('denied')) {
+      return new Error(
+        'Microphone access was denied. Please enable microphone access in your browser settings and try again.',
+        { cause: error }
+      );
+    } else if (error.name === 'NotFoundError') {
+      return new Error('No microphone found on this device.', { cause: error });
+    } else if (error.name === 'NotSupportedError') {
+      return new Error('Microphone access is not supported in your browser.', { cause: error });
+    } else if (error.name === 'SecurityError') {
+      return new Error(
+        'Microphone access is only available over HTTPS. Please use a secure connection.',
+        { cause: error }
+      );
+    }
+    return new Error(`Microphone access error: ${error.message}`, { cause: error });
   }
 
   /**
@@ -89,10 +93,13 @@ export class AudioService {
         return;
       }
 
-      // Ensure microphone access is granted
-      await this.requestMicrophoneAccess();
+      const permission = await this.checkPermission();
+      if (permission === 'denied') {
+        throw new Error(
+          'Microphone access has been denied. Please go to your browser settings and enable microphone access for this site, then refresh the page.'
+        );
+      }
 
-      // Request microphone access for recording
       this.stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -117,8 +124,7 @@ export class AudioService {
       return true;
     } catch (error) {
       console.error('Recording error:', error);
-      // Re-throw with original message (already formatted by requestMicrophoneAccess)
-      throw error;
+      throw this.formatMicrophoneError(error);
     }
   }
 
@@ -172,9 +178,11 @@ export class AudioService {
    * Get current recording status
    */
   getStatus() {
+    const elapsedMs = this.isRecording ? Date.now() - this.startTime : 0;
     return {
       isRecording: this.isRecording,
-      elapsedSeconds: this.isRecording ? Math.floor((Date.now() - this.startTime) / 1000) : 0,
+      elapsedMs,
+      elapsedSeconds: Math.floor(elapsedMs / 1000),
     };
   }
 }

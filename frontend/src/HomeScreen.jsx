@@ -9,6 +9,8 @@ import { formatTime } from './mockData';
 // Dev toggle for query-active state testing
 const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
+const MIN_STOP_AFTER_MS = 1000;
+const MIN_RECORDING_SECONDS = 1;
 
 export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -25,6 +27,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   }, [menuOpen]);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
+  const [isStoppingRecording, setIsStoppingRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [captureCount, setCaptureCount] = useState(0);
@@ -134,20 +138,32 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
   };
 
   const handleRecord = async () => {
+    if (isStartingRecording || isStoppingRecording) return;
+
     try {
       setError(null);
 
       if (!isRecording) {
-        // Start recording
+        setIsStartingRecording(true);
         await audioService.startRecording();
         setIsRecording(true);
         setRecordingTime(0);
       } else {
+        if (audioService.getStatus().elapsedMs < MIN_STOP_AFTER_MS) {
+          return;
+        }
+
         // Stop recording and save to DB
+        setIsStoppingRecording(true);
         setIsRecording(false);
         const audioData = await audioService.stopRecording();
 
         if (audioData) {
+          if (audioData.duration < MIN_RECORDING_SECONDS || audioData.size === 0) {
+            setError('Recording was too short. Hold the mic a little longer.');
+            return;
+          }
+
           const jobId = await dbService.createEntry(
             {
               duration: audioData.duration,
@@ -174,7 +190,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       console.error('Recording error:', err);
       setError(err.message);
       setIsRecording(false);
+      setIsStartingRecording(false);
+      setIsStoppingRecording(false);
       audioService.cancelRecording();
+    } finally {
+      setIsStartingRecording(false);
+      setIsStoppingRecording(false);
     }
   };
 
@@ -425,6 +446,17 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       );
     }
 
+    if (isStartingRecording) {
+      return (
+        <div className="flex items-center justify-center px-4 h-12">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <span className="text-sm text-gray-600">Starting recording...</span>
+          </div>
+        </div>
+      );
+    }
+
     // Active query state
     if (activeQuery) {
       return (
@@ -512,6 +544,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
 
   // Floating mic button state colors: grey (idle), red (recording), green (has in-progress entries)
   const getMicColorClass = () => {
+    if (isStartingRecording || isStoppingRecording) return 'bg-blue-500';
     if (isRecording) return 'bg-red-500';
     const hasInProgress = entries.some(e => e.status !== 'confirmed');
     if (hasInProgress) return 'bg-green-500';
@@ -554,14 +587,14 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
           <p className="text-sm text-gray-600 mb-3">
             {entry.errorMessage === 'offline'
               ? 'There is an issue with Sync right now but carry on.'
-              : 'Something went wrong. Tap Retry to try again.'}
+              : 'Something went wrong while processing this recording.'}
           </p>
           <div className="flex gap-3">
             <button
               onClick={() => handleRetry(entry.id)}
               className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
             >
-              Retry
+              Retry processing
             </button>
             <button
               onClick={() => handleReject(entry.id)}
@@ -664,12 +697,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
         <h1 className="text-xl font-light text-gray-900">JobDone</h1>
         
         {/* Recording timer in header */}
-        {isRecording && (
+        {(isRecording || isStartingRecording) && (
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-gray-900">
-              {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
-            </span>
+            <span className={`${isRecording ? 'bg-red-500' : 'bg-blue-500'} w-2 h-2 rounded-full animate-pulse`} />
+            {isRecording ? (
+              <span className="text-sm font-medium text-gray-900">
+                {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-gray-900">Starting...</span>
+            )}
           </div>
         )}
         
@@ -820,10 +857,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0 }) {
       <button
         onClick={handleRecord}
         className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
-        title={isRecording ? 'Stop recording' : 'Start recording'}
-        disabled={isLoading}
+        title={isStartingRecording ? 'Starting recording' : isStoppingRecording ? 'Stopping recording' : isRecording ? 'Stop recording' : 'Start recording'}
+        disabled={isLoading || isStartingRecording || isStoppingRecording}
       >
-        {isRecording ? (
+        {isStartingRecording || isStoppingRecording ? (
+          <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : isRecording ? (
           <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
