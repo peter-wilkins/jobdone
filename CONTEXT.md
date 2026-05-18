@@ -124,6 +124,15 @@ _Avoid_: Search bar, Input field, Record button
 - New Locations and Contacts require stronger evidence than arbitrary Tags: Locations should refer to real places, and Contacts should refer to contactable humans with contact evidence
 - Custom Tags can be created from validated free text; custom Locations are created as real places; custom Contacts require deliberate contact creation and should not be inferred from name-only text alone
 - Location and Contact are strongly encouraged during review but not required for Confirmation; their absence is meaningful data rather than invalid data
+- Contacts are acquired at review/correction time, not through setup import. The user records naturally first; if JobDone misses the Contact, review offers correction paths such as existing Contacts, an OS contact picker where available, deliberate Contact creation, or leaving Contact blank
+- Review distinguishes strong, medium, and weak structure evidence. Strong evidence can be preselected; medium evidence should be shown as an unselected suggestion; weak evidence stays hidden until the user asks to add structure
+- Strong Contact evidence includes a shared vCard, trusted calendar attendee, or exact full-name match to an existing Contact. First-name-only matches are medium evidence at most and should not be preselected
+- Strong Location evidence includes an exact known Location label/address in Entry text or a trusted Calendar Event location. Capture-time GPS near a known Location is medium evidence unless reinforced by Entry text or other Context Clues
+- Capture-time GPS can suggest a new Location but must not create one automatically. A new Location becomes real only through Confirmation; existing nearby Locations may be suggested more confidently than brand-new reverse-geocoded places
+- Missing Location or Contact is valid and should not be presented as an error. When predictions exist, show them inline; when no predictions exist, show compact `+ Location` and `+ Contact` correction controls while keeping Confirmation primary and unblocked
+- JobDone can offer contextual prompts for optional sources after repeated friction, not during first-run setup. These prompts should explain how predictions are made and why the source helps, building trust by showing that JobDone is not silently invasive
+- Optional source prompts should be tied to observed need, such as many Entries without Location, repeated manual Contact correction, or repeated calendar-like Entry text. Equivalent controls can also live passively in menu/settings
+- Prediction review should use subtle source labels and tap-to-explain affordances rather than always-visible explanations. The user should be able to answer "why did JobDone suggest this?" without slowing normal Confirmation
 - Reminder or to-do-like workflows are Recall/query views over Entries in MVP, not a separate Task model
 - Filterable operational structure belongs in Locations, Contacts, or Tags; narrative memory belongs in Entry content
 - Materials, labour time, follow-ups, possible future work, invoicing status, and similar workflow flags are Tags or Tag Categories in the core model, not structured Entry fields
@@ -134,6 +143,9 @@ _Avoid_: Search bar, Input field, Record button
 - **Tag Categories** shape prediction and filtering, but MVP does not expose full taxonomy management to users
 - Tag prediction uses a domain template plus the user's Tag Vocabulary; users grow vocabulary through confirmed use but do not manage full category schema in MVP
 - **Calendar Events** are stored as minimal Context Clue snapshots for Entries, not as a full mirrored calendar
+- Calendar connection is a contextual upgrade offered after the user has seen value, not a first-run requirement. Calendar Events improve suggestions but the core capture flow must work without calendar access
+- Calendar integration is deferred until capture-time Location clues and Contact correction are working. If added before a native shell exists, Google Calendar OAuth is the preferred first route because it works across web and devices
+- Current device location can be captured at capture time as a Location Context Clue when permission exists or is granted in context. JobDone does not require background location history for MVP, and captured location remains review-only until Confirmation
 - **Recall** returns Entries only; linked Contacts, Locations, and Tags can improve matching but are not returned as Timeline results
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
