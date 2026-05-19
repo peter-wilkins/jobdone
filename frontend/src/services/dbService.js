@@ -1,4 +1,5 @@
 import { findReusableLocation } from './locationIdentityService.js';
+import { entryMatchesLocation } from './locationPresentationService.js';
 
 /**
  * IndexedDB service for local entry storage
@@ -1725,6 +1726,23 @@ export class DBService {
       };
       req.onerror = () => reject(new Error('Failed to fetch locations'));
     });
+  }
+
+  async getLocation(locationId) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE).get(locationId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(new Error('Failed to fetch location'));
+    });
+  }
+
+  async getEntriesForLocation(locationId) {
+    const location = await this.getLocation(locationId);
+    if (!location) return [];
+
+    const entries = await this.getEntries('confirmed');
+    return entries.filter(entry => entryMatchesLocation(entry, location));
   }
 
   async getLocationsUnsynced() {

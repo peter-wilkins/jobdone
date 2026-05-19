@@ -1766,6 +1766,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                 Contacts
               </button>
               <button
+                onClick={() => { setMenuOpen(false); onNavigate('locations'); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Locations
+              </button>
+              <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
