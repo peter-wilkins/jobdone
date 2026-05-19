@@ -353,6 +353,37 @@ describe('Structure prediction candidate set', () => {
     assert.deepEqual(prediction.contactIds, ['contact-1']);
   });
 
+  test('preselects Contact from dominant co-occurrence when only Location is matched', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Back at 14 Bell Street for another service' },
+      locations: [{ id: 'loc-1', display_name: '14 Bell Street', updated_at: NOW.toISOString() }],
+      coOccurrences: [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 4,
+        lastSeenAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations[0].id, 'loc-1');
+    assert.equal(candidateSet.locations[0].confidence, 'strong');
+    assert.equal(candidateSet.contacts[0].id, 'contact-1');
+    assert.equal(candidateSet.contacts[0].source, 'co_occurrence');
+    assert.equal(candidateSet.contacts[0].confidence, 'strong');
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+
+    assert.deepEqual(prediction.contactIds, ['contact-1']);
+  });
+
   test('current Location evidence prevents contradictory co-occurrence preselection', () => {
     const candidateSet = buildPredictionCandidateSet({
       entryData: { summary: 'At 22 King Road for Sarah Jenkins' },

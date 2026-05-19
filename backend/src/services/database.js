@@ -42,6 +42,59 @@ function contactsMatch(existing, incoming) {
     (incoming.normalizedPhones || []).some(phone => existingPhones.has(phone));
 }
 
+export function normalizeLocationIdentityText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+export function extractPostcode(value) {
+  const match = String(value || '').toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/);
+  return match ? match[1].replace(/\s+/g, '') : '';
+}
+
+function firstAddressLine(value) {
+  const [line] = String(value || '').split(/[\n,]/);
+  return line || '';
+}
+
+export function locationIdentityKeys(location = {}) {
+  const providerPlaceId = String(
+    location.providerPlaceId || location.provider_place_id || location.placeId || location.place_id || ''
+  ).trim();
+  const displayName = location.displayName || location.display_name || '';
+  const placeText = location.placeText || location.place_text || '';
+  const addressText = location.addressText || location.address_text || '';
+  const combined = [addressText, placeText, displayName].filter(Boolean).join(' ');
+  const postcode = extractPostcode(combined);
+  const addressLine = normalizeLocationIdentityText(firstAddressLine(addressText || placeText || displayName)
+    .replace(new RegExp(postcode, 'i'), ''));
+  const display = normalizeLocationIdentityText(displayName || placeText || addressText);
+
+  return {
+    provider: providerPlaceId ? `provider:${providerPlaceId}` : '',
+    address: postcode && addressLine ? `address:${postcode}:${addressLine}` : '',
+    display: display ? `display:${display}` : '',
+  };
+}
+
+export function locationsHaveStrongIdentityMatch(left = {}, right = {}) {
+  const leftKeys = locationIdentityKeys(left);
+  const rightKeys = locationIdentityKeys(right);
+  return Boolean(
+    (leftKeys.provider && leftKeys.provider === rightKeys.provider) ||
+    (leftKeys.address && leftKeys.address === rightKeys.address) ||
+    (leftKeys.display && leftKeys.display === rightKeys.display)
+  );
+}
+
+export function findReusableLocation(existingLocations = [], draft = {}) {
+  return (existingLocations || []).find(location => locationsHaveStrongIdentityMatch(location, draft)) || null;
+}
+
 function normalizeLocation(location = {}) {
   const displayName = String(
     location.displayName || location.display_name || location.placeText || location.place_text || location.addressText || location.address_text || ''
@@ -480,6 +533,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
   if (!entryId || !Array.isArray(locations) || locations.length === 0) return [];
 
   const saved = [];
+  const existingLocations = await getLocations(userId);
   for (const input of locations) {
     const location = normalizeLocation(input);
     if (!location) continue;
@@ -497,6 +551,10 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
     }
 
     if (!row) {
+      row = findReusableLocation(existingLocations, location);
+    }
+
+    if (!row) {
       const { data, error } = await supabase
         .from('locations')
         .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
@@ -504,6 +562,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
         .single();
       if (error) throw error;
       row = data;
+      existingLocations.push(row);
     } else {
       const { data, error } = await supabase
         .from('locations')

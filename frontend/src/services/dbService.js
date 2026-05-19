@@ -1,3 +1,5 @@
+import { findReusableLocation } from './locationIdentityService.js';
+
 /**
  * IndexedDB service for local entry storage
  * Handles persistence of recordings, transcripts, and metadata
@@ -420,6 +422,9 @@ export class DBService {
    */
   async confirmEntry(entryId, { locations = [], contacts = [], tags = [] } = {}) {
     const db = await this.ensureDb();
+    const existingLocations = Array.isArray(locations) && locations.length
+      ? await this.getLocations('confirmed')
+      : [];
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([
@@ -464,21 +469,25 @@ export class DBService {
           .filter(Boolean);
 
         for (const location of normalizedLocations) {
-          const locationId = location.id || this.generateLocationId();
+          const reusableLocation = location.id
+            ? null
+            : findReusableLocation(existingLocations, location);
+          const locationId = location.id || reusableLocation?.id || this.generateLocationId();
           const snapshot = {
             id: locationId,
-            displayName: location.displayName,
-            placeText: location.placeText,
-            addressText: location.addressText,
-            latitude: location.latitude,
-            longitude: location.longitude,
+            displayName: reusableLocation?.displayName || location.displayName,
+            placeText: reusableLocation?.placeText || location.placeText,
+            addressText: reusableLocation?.addressText || location.addressText,
+            latitude: reusableLocation?.latitude ?? location.latitude,
+            longitude: reusableLocation?.longitude ?? location.longitude,
           };
           const locationRecord = {
+            ...(reusableLocation || {}),
             ...snapshot,
             status: 'confirmed',
-            normalizedDisplayName: normalizeLocationKey(location.displayName),
-            remoteId: location.remoteId || null,
-            created_at: location.created_at || now,
+            normalizedDisplayName: normalizeLocationKey(snapshot.displayName),
+            remoteId: location.remoteId || reusableLocation?.remoteId || null,
+            created_at: reusableLocation?.created_at || location.created_at || now,
             updated_at: now,
           };
           locationsStore.put(locationRecord);
@@ -590,17 +599,25 @@ export class DBService {
   async createEntryFromCapture({ captureId, transcript, summary, created_at, locations = [], tags = [] }) {
     const db = await this.ensureDb();
     const now = new Date().toISOString();
+    const existingLocations = Array.isArray(locations) && locations.length
+      ? await this.getLocations('confirmed')
+      : [];
     const locationSnapshots = locations
       .map(location => this.normalizeLocationDraft(location))
       .filter(Boolean)
-      .map(location => ({
-        id: location.id || this.generateLocationId(),
-        displayName: location.displayName,
-        placeText: location.placeText,
-        addressText: location.addressText,
-        latitude: location.latitude,
-        longitude: location.longitude,
-      }));
+      .map(location => {
+        const reusableLocation = location.id ? null : findReusableLocation(existingLocations, location);
+        return {
+          id: location.id || reusableLocation?.id || this.generateLocationId(),
+          displayName: reusableLocation?.displayName || location.displayName,
+          placeText: reusableLocation?.placeText || location.placeText,
+          addressText: reusableLocation?.addressText || location.addressText,
+          latitude: reusableLocation?.latitude ?? location.latitude,
+          longitude: reusableLocation?.longitude ?? location.longitude,
+          remoteId: location.remoteId || reusableLocation?.remoteId || null,
+          created_at: reusableLocation?.created_at || location.created_at || now,
+        };
+      });
     const tagSnapshots = tags
       .map(tag => this.normalizeTagDraft(tag))
       .filter(Boolean)
@@ -656,8 +673,8 @@ export class DBService {
           ...location,
           status: 'confirmed',
           normalizedDisplayName: normalizeLocationKey(location.displayName),
-          remoteId: null,
-          created_at: now,
+          remoteId: location.remoteId || null,
+          created_at: location.created_at || now,
           updated_at: now,
         });
         entryLocationsStore.put({
