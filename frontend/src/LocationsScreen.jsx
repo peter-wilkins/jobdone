@@ -242,17 +242,19 @@ export function LocationsScreen({ onBack }) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium text-gray-900 truncate">{locationPrimaryLabel(location)}</p>
-                      <span className="text-gray-300">›</span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        {needsDetail && (
+                          <span className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                            Needs detail
+                          </span>
+                        )}
+                        <span className="text-gray-300">›</span>
+                      </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1 truncate">
                       {needsDetail ? 'Needs detail' : locationSecondaryDetail(location)}
                     </p>
                   </button>
-                  {needsDetail && (
-                    <span className="shrink-0 rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                      Needs detail
-                    </span>
-                  )}
                   {mapsUrl && (
                     <a
                       href={mapsUrl}
@@ -313,7 +315,7 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
               <p className="text-sm text-gray-500 mt-2">{locationSecondaryDetail(location)}</p>
               {needsDetail && (
                 <div className="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-3">
-                  <p className="text-sm font-medium text-amber-900">Needs detail</p>
+                  <p className="text-sm font-medium text-amber-900">Are you here now?</p>
                   <p className="mt-1 text-sm text-amber-800">Add a map pin when you are at this place to make future suggestions better.</p>
                   {canAddMapPin && (
                     <button
