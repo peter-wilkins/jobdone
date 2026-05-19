@@ -1,6 +1,13 @@
+export function hasRealCoordinates(location = {}) {
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+  return !(latitude === 0 && longitude === 0);
+}
+
 export function locationHasAnchor(location = {}) {
   const hasAddress = Boolean(String(location.addressText || location.address_text || '').trim());
-  const hasCoordinates = Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude));
+  const hasCoordinates = hasRealCoordinates(location);
   return hasAddress || hasCoordinates;
 }
 

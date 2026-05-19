@@ -13,7 +13,10 @@ export function locationSecondaryDetail(location = {}) {
 }
 
 export function hasCoordinates(location = {}) {
-  return Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude));
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+  return !(latitude === 0 && longitude === 0);
 }
 
 export function coordinateLabel(location = {}) {

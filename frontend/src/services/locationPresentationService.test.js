@@ -28,6 +28,17 @@ test('uses coordinate detail for mappable approximate Locations', () => {
   assert.match(locationMapsUrl(location), /query=52\.198123,-0\.293456/);
 });
 
+test('does not treat default 0,0 coordinates as mappable', () => {
+  const location = {
+    displayName: 'Barn near Little Barford',
+    latitude: 0,
+    longitude: 0,
+  };
+
+  assert.equal(locationSecondaryDetail(location), 'Needs detail');
+  assert.equal(locationMapsUrl(location), 'https://www.google.com/maps/search/?api=1&query=Barn%20near%20Little%20Barford');
+});
+
 test('matches Entries by confirmed Location association only', () => {
   const location = { id: 'location-1', displayName: '14 Bell Street' };
 

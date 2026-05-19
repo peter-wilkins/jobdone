@@ -16,6 +16,13 @@ test('new drafts and already anchored Locations are not strengthening prompts', 
   assert.equal(locationHasAnchor({ id: 'location-2', displayName: 'North field', latitude: 52.1, longitude: -0.2 }), true);
 });
 
+test('default 0,0 coordinates do not count as a real Location anchor', () => {
+  const location = { id: 'location-1', displayName: 'Barn near Little Barford', latitude: 0, longitude: 0 };
+
+  assert.equal(locationHasAnchor(location), false);
+  assert.equal(canStrengthenLocationDraft(location), true);
+});
+
 test('strengthens a Location draft with confirmed current GPS clue', () => {
   const strengthened = strengthenLocationDraftWithClue(
     { id: 'location-1', displayName: 'Barn near Little Barford' },
