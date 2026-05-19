@@ -135,9 +135,14 @@ function textScore(label, evidenceText) {
 }
 
 function sortAndLimit(candidates, limit) {
+  const confidenceRank = { strong: 3, medium: 2, weak: 1 };
   return candidates
     .filter(candidate => candidate.visible !== false)
-    .sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label)))
+    .sort((a, b) =>
+      (confidenceRank[b.confidence] || 0) - (confidenceRank[a.confidence] || 0) ||
+      b.score - a.score ||
+      String(a.label).localeCompare(String(b.label))
+    )
     .slice(0, limit)
     .map(({ score, ...candidate }) => candidate);
 }
@@ -179,6 +184,152 @@ function normalizeContactCandidate(contact = {}, evidenceText, now) {
     visible: confidence !== 'weak',
     score: partialScore + recentBoost,
   };
+}
+
+function normalizeCooccurrence(row = {}) {
+  const contactId = String(row.contactId || row.contact_id || '');
+  const locationId = String(row.locationId || row.location_id || '');
+  const contactLabel = compactText(row.contactLabel || row.contact_label || row.contact?.display_name || row.contact?.displayName);
+  const locationLabel = compactText(row.locationLabel || row.location_label || row.location?.display_name || row.location?.displayName);
+  if (!contactId || !locationId || !contactLabel || !locationLabel) return null;
+
+  return {
+    contactId,
+    contactLabel,
+    locationId,
+    locationLabel,
+    locationPlaceText: compactText(row.locationPlaceText || row.location_place_text || row.location?.place_text || row.location?.placeText || locationLabel),
+    locationLatitude: numericCoordinate(row.locationLatitude ?? row.location_latitude ?? row.location?.latitude),
+    locationLongitude: numericCoordinate(row.locationLongitude ?? row.location_longitude ?? row.location?.longitude),
+    count: Math.max(1, Number(row.count || 1)),
+    lastSeenAt: row.lastSeenAt || row.last_seen_at || null,
+  };
+}
+
+function indexCooccurrences(coOccurrences = []) {
+  const rows = coOccurrences.map(normalizeCooccurrence).filter(Boolean);
+  const byContactId = new Map();
+  const byContactLabel = new Map();
+  const byLocationId = new Map();
+  const byLocationLabel = new Map();
+
+  for (const row of rows) {
+    const contactLabel = key(row.contactLabel);
+    const locationLabel = key(row.locationLabel);
+
+    if (!byContactId.has(row.contactId)) byContactId.set(row.contactId, []);
+    byContactId.get(row.contactId).push(row);
+    if (!byContactLabel.has(contactLabel)) byContactLabel.set(contactLabel, []);
+    byContactLabel.get(contactLabel).push(row);
+
+    if (!byLocationId.has(row.locationId)) byLocationId.set(row.locationId, []);
+    byLocationId.get(row.locationId).push(row);
+    if (!byLocationLabel.has(locationLabel)) byLocationLabel.set(locationLabel, []);
+    byLocationLabel.get(locationLabel).push(row);
+  }
+
+  return { rows, byContactId, byContactLabel, byLocationId, byLocationLabel };
+}
+
+function uniqueCooccurrenceRows(rows = []) {
+  const byPair = new Map();
+  for (const row of rows) {
+    const pairKey = `${row.contactId}:${row.locationId}`;
+    const existing = byPair.get(pairKey);
+    if (!existing || row.count > existing.count) byPair.set(pairKey, row);
+  }
+  return Array.from(byPair.values());
+}
+
+function isDominantCooccurrence(row, alternatives = []) {
+  if (!row || row.count < 2) return false;
+  const nextBest = alternatives
+    .filter(candidate => candidate !== row)
+    .reduce((max, candidate) => Math.max(max, Number(candidate.count || 0)), 0);
+  return nextBest === 0 || row.count >= nextBest * 2;
+}
+
+function hasContradictoryCandidate(candidates = [], targetId, targetLabel) {
+  const targetKey = key(targetLabel);
+  return candidates.some(candidate =>
+    candidate.visible !== false &&
+    candidate.confidence !== 'weak' &&
+    String(candidate.id) !== String(targetId) &&
+    key(candidate.label) !== targetKey
+  );
+}
+
+function cooccurrenceRecencyBoost(row, now) {
+  return Math.max(0, 6 - daysSince(row.lastSeenAt, now) / 21);
+}
+
+function buildCooccurrenceCandidates({ coOccurrences = [], locationCandidates = [], contactCandidates = [], now }) {
+  const index = indexCooccurrences(coOccurrences);
+  const matchedContacts = contactCandidates.filter(candidate => candidate.visible !== false && candidate.confidence !== 'weak');
+  const matchedLocations = locationCandidates.filter(candidate => candidate.visible !== false && candidate.confidence !== 'weak');
+  const locations = [];
+  const contacts = [];
+
+  for (const contact of matchedContacts) {
+    const rows = uniqueCooccurrenceRows([
+      ...(index.byContactId.get(String(contact.id)) || []),
+      ...(index.byContactLabel.get(key(contact.label)) || []),
+    ]);
+    for (const row of rows) {
+      const dominant = isDominantCooccurrence(row, rows);
+      const contradicted = hasContradictoryCandidate(locationCandidates, row.locationId, row.locationLabel);
+      const confidence = dominant && !contradicted ? 'strong' : 'medium';
+      const baseScore = contradicted ? 6 : confidence === 'strong' ? 26 : 14;
+      locations.push({
+        id: row.locationId,
+        label: row.locationLabel,
+        placeText: row.locationPlaceText,
+        latitude: row.locationLatitude,
+        longitude: row.locationLongitude,
+        source: 'co_occurrence',
+        confidence,
+        visible: true,
+        coOccurrenceCount: row.count,
+        lastSeenAt: row.lastSeenAt,
+        matchedCounterpart: {
+          kind: 'contact',
+          id: row.contactId,
+          label: row.contactLabel,
+        },
+        score: baseScore + row.count * 3 + cooccurrenceRecencyBoost(row, now),
+      });
+    }
+  }
+
+  for (const location of matchedLocations) {
+    const rows = uniqueCooccurrenceRows([
+      ...(index.byLocationId.get(String(location.id)) || []),
+      ...(index.byLocationLabel.get(key(location.label)) || []),
+    ]);
+    for (const row of rows) {
+      const dominant = isDominantCooccurrence(row, rows);
+      const contradicted = hasContradictoryCandidate(contactCandidates, row.contactId, row.contactLabel);
+      const confidence = dominant && !contradicted ? 'strong' : 'medium';
+      const baseScore = contradicted ? 6 : confidence === 'strong' ? 26 : 14;
+      contacts.push({
+        id: row.contactId,
+        label: row.contactLabel,
+        source: 'co_occurrence',
+        confidence,
+        visible: true,
+        coOccurrenceCount: row.count,
+        lastSeenAt: row.lastSeenAt,
+        matchedCounterpart: {
+          kind: 'location',
+          id: row.locationId,
+          label: row.locationLabel,
+        },
+        score: baseScore + row.count * 3 + cooccurrenceRecencyBoost(row, now),
+      });
+    }
+  }
+
+  return { locations, contacts };
 }
 
 function normalizeTagVocabularyCandidate(item = {}, evidenceText, now) {
@@ -286,6 +437,7 @@ export function buildPredictionCandidateSet({
   contextClues = [],
   locations = [],
   contacts = [],
+  coOccurrences = [],
   tagVocabulary = [],
   now = new Date(),
 } = {}) {
@@ -301,6 +453,23 @@ export function buildPredictionCandidateSet({
   const contactCandidates = dedupeByLabel([
     ...clue.contacts,
     ...contacts.map(contact => normalizeContactCandidate(contact, evidenceText, now)).filter(Boolean),
+  ]);
+
+  const cooccurrence = buildCooccurrenceCandidates({
+    coOccurrences,
+    locationCandidates,
+    contactCandidates,
+    now,
+  });
+
+  const enrichedLocationCandidates = dedupeByLabel([
+    ...locationCandidates,
+    ...cooccurrence.locations,
+  ]);
+
+  const enrichedContactCandidates = dedupeByLabel([
+    ...contactCandidates,
+    ...cooccurrence.contacts,
   ]);
 
   const vocabularyCandidates = tagVocabulary
@@ -321,8 +490,8 @@ export function buildPredictionCandidateSet({
   ]);
 
   return {
-    locations: sortAndLimit(locationCandidates, MAX_LOCATIONS),
-    contacts: sortAndLimit(contactCandidates, MAX_CONTACTS),
+    locations: sortAndLimit(enrichedLocationCandidates, MAX_LOCATIONS),
+    contacts: sortAndLimit(enrichedContactCandidates, MAX_CONTACTS),
     tags: sortAndLimit(tagCandidates, MAX_TAGS),
     limits: {
       locations: MAX_LOCATIONS,

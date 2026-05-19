@@ -9,6 +9,7 @@ async function buildApp(deps = {}) {
     requireAuth: async () => ({ id: 'user-1' }),
     getLocations: async () => [],
     getContacts: async () => [],
+    getContactLocationCooccurrences: async () => [],
     getTagVocabulary: async () => [],
     ...deps,
   });
@@ -72,6 +73,7 @@ describe('StructureRoute POST /api/structure/predict', () => {
     assert.deepEqual(body.sourceStatus, {
       locations: { ok: true },
       contacts: { ok: true },
+      coOccurrences: { ok: true },
       tags: { ok: true },
     });
     assert.deepEqual(body.prediction.locationIds, [body.candidateSet.locations[0].id]);
@@ -107,6 +109,41 @@ describe('StructureRoute POST /api/structure/predict', () => {
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.candidateSet.tags.some(tag => tag.id === 'unsafe'), false);
+  });
+
+  test('passes Contact-Location co-occurrence candidates into prediction', async () => {
+    const app = await buildApp({
+      getContacts: async () => [
+        { id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: '2026-05-18T10:00:00.000Z' },
+      ],
+      getContactLocationCooccurrences: async () => [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 2,
+        lastSeenAt: '2026-05-18T10:00:00.000Z',
+      }],
+      predictStructure: async (request) => {
+        const location = request.input.candidates.locations.find(candidate => candidate.id === 'loc-1');
+        assert.equal(location.source, 'co_occurrence');
+        assert.equal(location.confidence, 'strong');
+        return { locationIds: ['loc-1'], contactIds: ['contact-1'], tagIds: [], proposedTag: null };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/structure/predict',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: { summary: 'Spoke to Sarah Jenkins about the boiler' } }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.candidateSet.locations[0].source, 'co_occurrence');
+    assert.deepEqual(body.prediction.locationIds, ['loc-1']);
+    assert.equal(body.sourceStatus.coOccurrences.ok, true);
   });
 
   test('degrades when Tag Vocabulary lookup fails', async () => {
@@ -219,6 +256,9 @@ describe('StructureRoute POST /api/structure/predict', () => {
       },
       getContacts: async () => {
         throw new Error('contacts unavailable');
+      },
+      getContactLocationCooccurrences: async () => {
+        throw new Error('co-occurrences unavailable');
       },
       getTagVocabulary: async () => {
         throw new Error('tags unavailable');

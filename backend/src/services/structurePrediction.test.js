@@ -228,6 +228,162 @@ describe('Structure prediction candidate set', () => {
     assert.deepEqual(prediction.contactIds, []);
   });
 
+  test('adds one-off Contact to Location co-occurrence as visible but unselected', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah Jenkins about the boiler' },
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      coOccurrences: [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 1,
+        lastSeenAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+
+    const location = candidateSet.locations.find(candidate => candidate.id === 'loc-1');
+    assert.equal(location.source, 'co_occurrence');
+    assert.equal(location.confidence, 'medium');
+    assert.equal(location.coOccurrenceCount, 1);
+    assert.equal(location.matchedCounterpart.label, 'Sarah Jenkins');
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+    assert.deepEqual(prediction.locationIds, []);
+    assert.deepEqual(prediction.contactIds, ['contact-1']);
+  });
+
+  test('promotes repeated dominant Contact to Location co-occurrence to strong', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah Jenkins about the boiler' },
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      coOccurrences: [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 2,
+        lastSeenAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations[0].id, 'loc-1');
+    assert.equal(candidateSet.locations[0].source, 'co_occurrence');
+    assert.equal(candidateSet.locations[0].confidence, 'strong');
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+    assert.deepEqual(prediction.locationIds, ['loc-1']);
+  });
+
+  test('keeps ambiguous co-occurrence suggestions unselected', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah Jenkins about the boiler' },
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      coOccurrences: [
+        {
+          contactId: 'contact-1',
+          contactLabel: 'Sarah Jenkins',
+          locationId: 'loc-1',
+          locationLabel: '14 Bell Street',
+          count: 3,
+          lastSeenAt: NOW.toISOString(),
+        },
+        {
+          contactId: 'contact-1',
+          contactLabel: 'Sarah Jenkins',
+          locationId: 'loc-2',
+          locationLabel: '22 King Road',
+          count: 2,
+          lastSeenAt: NOW.toISOString(),
+        },
+      ],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations.length, 2);
+    assert.ok(candidateSet.locations.every(candidate => candidate.source === 'co_occurrence'));
+    assert.ok(candidateSet.locations.every(candidate => candidate.confidence === 'medium'));
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+    assert.deepEqual(prediction.locationIds, []);
+  });
+
+  test('adds bidirectional Location to Contact co-occurrence candidates', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Back at 14 Bell Street for a boiler service' },
+      locations: [{ id: 'loc-1', display_name: '14 Bell Street', updated_at: NOW.toISOString() }],
+      coOccurrences: [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 2,
+        lastSeenAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.contacts[0].id, 'contact-1');
+    assert.equal(candidateSet.contacts[0].source, 'co_occurrence');
+    assert.equal(candidateSet.contacts[0].confidence, 'strong');
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+    assert.deepEqual(prediction.contactIds, ['contact-1']);
+  });
+
+  test('current Location evidence prevents contradictory co-occurrence preselection', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'At 22 King Road for Sarah Jenkins' },
+      locations: [{ id: 'loc-2', display_name: '22 King Road', updated_at: NOW.toISOString() }],
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      coOccurrences: [{
+        contactId: 'contact-1',
+        contactLabel: 'Sarah Jenkins',
+        locationId: 'loc-1',
+        locationLabel: '14 Bell Street',
+        count: 8,
+        lastSeenAt: NOW.toISOString(),
+      }],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations[0].id, 'loc-2');
+    assert.equal(candidateSet.locations[0].confidence, 'strong');
+    const coOccurrenceLocation = candidateSet.locations.find(candidate => candidate.id === 'loc-1');
+    assert.equal(coOccurrenceLocation.source, 'co_occurrence');
+    assert.equal(coOccurrenceLocation.confidence, 'medium');
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: ['loc-1'],
+      contactIds: ['contact-1'],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+    assert.deepEqual(prediction.locationIds, []);
+  });
+
   test('keeps LLM-bound candidate data inside structured JSON request', () => {
     const candidateSet = buildPredictionCandidateSet({
       entryData: { summary: 'Boiler service' },

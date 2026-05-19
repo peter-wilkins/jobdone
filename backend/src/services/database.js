@@ -809,6 +809,89 @@ export async function getLocations(userId) {
   return data || [];
 }
 
+export function buildContactLocationCooccurrences(contactLinks = [], locationLinks = []) {
+  const contactsByEntry = new Map();
+  for (const link of contactLinks || []) {
+    if (!link.entry_id || !link.contacts?.id) continue;
+    const list = contactsByEntry.get(link.entry_id) || [];
+    list.push({
+      id: link.contacts.id,
+      label: link.contacts.display_name,
+      seenAt: link.created_at,
+    });
+    contactsByEntry.set(link.entry_id, list);
+  }
+
+  const byPair = new Map();
+  for (const link of locationLinks || []) {
+    if (!link.entry_id || !link.locations?.id) continue;
+    const contacts = contactsByEntry.get(link.entry_id) || [];
+    if (!contacts.length) continue;
+
+    for (const contact of contacts) {
+      const pairKey = `${contact.id}:${link.locations.id}`;
+      const existing = byPair.get(pairKey) || {
+        contactId: contact.id,
+        contactLabel: contact.label,
+        locationId: link.locations.id,
+        locationLabel: link.locations.display_name || link.locations.place_text,
+        locationPlaceText: link.locations.place_text || link.locations.display_name,
+        locationLatitude: link.locations.latitude,
+        locationLongitude: link.locations.longitude,
+        count: 0,
+        lastSeenAt: null,
+      };
+      const seenAt = [contact.seenAt, link.created_at]
+        .filter(Boolean)
+        .sort()
+        .at(-1) || null;
+      existing.count += 1;
+      if (seenAt && (!existing.lastSeenAt || new Date(seenAt) > new Date(existing.lastSeenAt))) {
+        existing.lastSeenAt = seenAt;
+      }
+      byPair.set(pairKey, existing);
+    }
+  }
+
+  return Array.from(byPair.values());
+}
+
+export async function getContactLocationCooccurrences(userId) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured');
+    return [];
+  }
+
+  const [{ data: contactLinks, error: contactError }, { data: locationLinks, error: locationError }] = await Promise.all([
+    supabase
+      .from('entry_contacts')
+      .select('entry_id, created_at, contacts(id, display_name)')
+      .eq('user_id', userId),
+    supabase
+      .from('entry_locations')
+      .select('entry_id, created_at, locations(id, display_name, place_text, latitude, longitude)')
+      .eq('user_id', userId),
+  ]);
+
+  if (contactError) {
+    if (contactError.code === '42P01' || /contacts|entry_contacts/i.test(contactError.message || '')) {
+      console.warn('[DB] contact association tables not available; returning no Contact-Location co-occurrences');
+      return [];
+    }
+    throw contactError;
+  }
+
+  if (locationError) {
+    if (locationError.code === '42P01' || /locations|entry_locations/i.test(locationError.message || '')) {
+      console.warn('[DB] location association tables not available; returning no Contact-Location co-occurrences');
+      return [];
+    }
+    throw locationError;
+  }
+
+  return buildContactLocationCooccurrences(contactLinks || [], locationLinks || []);
+}
+
 export async function getTagVocabulary(userId) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured');

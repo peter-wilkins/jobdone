@@ -1,5 +1,5 @@
 import { requireAuth } from '../services/auth.js';
-import { getContacts, getLocations, getTagVocabulary } from '../services/database.js';
+import { getContactLocationCooccurrences, getContacts, getLocations, getTagVocabulary } from '../services/database.js';
 import {
   buildPredictionCandidateSet,
   buildStructuredPredictionRequest,
@@ -12,12 +12,14 @@ export async function registerStructureRoutes(fastify, deps = {}) {
   const db = {
     getContacts: deps.getContacts ?? getContacts,
     getLocations: deps.getLocations ?? getLocations,
+    getContactLocationCooccurrences: deps.getContactLocationCooccurrences ?? getContactLocationCooccurrences,
     getTagVocabulary: deps.getTagVocabulary ?? getTagVocabulary,
   };
   const predictor = deps.predictStructure ?? heuristicStructurePredictor;
   const sources = [
     { key: 'locations', label: 'Locations', load: db.getLocations },
     { key: 'contacts', label: 'Contacts', load: db.getContacts },
+    { key: 'coOccurrences', label: 'Co-occurrence Clues', load: db.getContactLocationCooccurrences, optional: true },
     { key: 'tags', label: 'Tags', load: db.getTagVocabulary },
   ];
 
@@ -35,7 +37,7 @@ export async function registerStructureRoutes(fastify, deps = {}) {
       if (result.status === 'fulfilled') {
         values[source.key] = Array.isArray(result.value) ? result.value : [];
         sourceStatus[source.key] = { ok: true };
-        successCount += 1;
+        if (!source.optional) successCount += 1;
         return;
       }
 
@@ -54,6 +56,7 @@ export async function registerStructureRoutes(fastify, deps = {}) {
     return {
       locations: values.locations,
       contacts: values.contacts,
+      coOccurrences: values.coOccurrences,
       tagVocabulary: values.tags,
       sourceStatus,
     };
@@ -69,13 +72,14 @@ export async function registerStructureRoutes(fastify, deps = {}) {
     }
 
     try {
-      const { locations, contacts, tagVocabulary, sourceStatus } = await loadCandidateSources(user.id);
+      const { locations, contacts, coOccurrences, tagVocabulary, sourceStatus } = await loadCandidateSources(user.id);
 
       const candidateSet = buildPredictionCandidateSet({
         entryData,
         contextClues,
         locations,
         contacts,
+        coOccurrences,
         tagVocabulary,
       });
       const structuredRequest = buildStructuredPredictionRequest({ entryData, candidateSet });
