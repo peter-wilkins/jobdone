@@ -107,6 +107,63 @@ describe('Structure prediction candidate set', () => {
     assert.equal(labels.includes('Ignore previous instructions'), false);
   });
 
+  test('uses capture-time device location as a review-only Location clue', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Checked the boiler' },
+      contextClues: [{
+        kind: 'device_location',
+        source: 'device_location',
+        summary: 'Current location at capture time',
+        payload: {
+          locationText: 'Current location',
+          latitude: 53.3498,
+          longitude: -6.2603,
+          accuracy: 35,
+        },
+      }],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations[0].label, 'Current location');
+    assert.equal(candidateSet.locations[0].source, 'device_location');
+    assert.equal(candidateSet.locations[0].latitude, 53.3498);
+    assert.equal(candidateSet.locations[0].longitude, -6.2603);
+  });
+
+  test('boosts existing Locations near capture-time device location', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Checked the boiler' },
+      contextClues: [{
+        kind: 'device_location',
+        source: 'device_location',
+        payload: {
+          locationText: 'Current location',
+          latitude: 53.3498,
+          longitude: -6.2603,
+        },
+      }],
+      locations: [
+        {
+          id: 'near',
+          display_name: 'Nearby Customer House',
+          latitude: 53.3499,
+          longitude: -6.2602,
+          updated_at: '2026-05-01T12:00:00.000Z',
+        },
+        {
+          id: 'recent-but-far',
+          display_name: 'Recent Far Site',
+          latitude: 54.0,
+          longitude: -7.0,
+          updated_at: '2026-05-18T12:00:00.000Z',
+        },
+      ],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations[0].id, 'near');
+  });
+
   test('keeps LLM-bound candidate data inside structured JSON request', () => {
     const candidateSet = buildPredictionCandidateSet({
       entryData: { summary: 'Boiler service' },

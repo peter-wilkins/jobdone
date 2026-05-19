@@ -1301,6 +1301,20 @@ export class DBService {
     });
   }
 
+  async createDeviceLocationContextClue({ captureId = null, entryId = null, clue }) {
+    return this.createContextClue({
+      captureId,
+      entryId,
+      kind: 'device_location',
+      source: 'device_location',
+      summary: clue.summary || 'Current location at capture time',
+      payload: clue.payload || {},
+      confidence: clue.confidence ?? 0.55,
+      metadata: clue.metadata || {},
+      created_at: clue.created_at || null,
+    });
+  }
+
   async getContextCluesForCapture(captureId) {
     return this.getContextCluesByIndex('captureId', captureId);
   }

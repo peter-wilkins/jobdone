@@ -5,6 +5,7 @@ import { apiService } from './services/apiService';
 import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
+import { locationClueService } from './services/locationClueService';
 import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { formatTime } from './mockData';
 
@@ -57,6 +58,19 @@ function mergeCandidatesById(primary = [], secondary = []) {
   });
 }
 
+function locationDraftFromCandidate(candidate) {
+  if (!candidate) return null;
+  const isContextSuggestion = candidate.source === 'device_location' || candidate.source === 'context_clue';
+  return {
+    id: isContextSuggestion || candidate.id?.startsWith('clue-location-') ? null : candidate.id,
+    displayName: candidate.label,
+    placeText: candidate.placeText || candidate.label,
+    addressText: candidate.addressText || '',
+    latitude: candidate.latitude ?? null,
+    longitude: candidate.longitude ?? null,
+  };
+}
+
 export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -78,6 +92,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
+  const [reviewLocationDrafts, setReviewLocationDrafts] = useState({});
   const [reviewContacts, setReviewContacts] = useState({});
   const [reviewTags, setReviewTags] = useState({});
   const [reviewStructure, setReviewStructure] = useState({});
@@ -209,8 +224,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
 
           setReviewStructure(prev => ({ ...prev, [entry.id]: { candidateSet, prediction } }));
-          if (predictedLocation) {
+          const isDeviceLocationOnly = predictedLocation?.source === 'device_location';
+          if (predictedLocation && !isDeviceLocationOnly) {
             setReviewLocations(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: predictedLocation.label });
+            setReviewLocationDrafts(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: locationDraftFromCandidate(predictedLocation) });
           }
           if (predictedContact) {
             setReviewContacts(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: predictedContact.id });
@@ -407,6 +424,15 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         audioData.blob
       );
 
+      try {
+        const locationResult = await locationClueService.captureCurrentLocation({ allowPrompt: false });
+        if (locationResult.ok) {
+          await dbService.createDeviceLocationContextClue({ entryId: jobId, clue: locationResult.clue });
+        }
+      } catch (locationErr) {
+        console.warn('[Location] Capture-time location clue unavailable:', locationErr);
+      }
+
       // Add to entries list (at the top, as in-progress)
       const newEntry = await dbService.getEntry(jobId);
       setEntries(prev => [newEntry, ...prev]);
@@ -472,7 +498,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       // Handle NOTE intent - save to entries, proceed as before
       // Delete audio and move to confirmed locally
       const locationText = (reviewLocations[id] || '').trim();
-      const locations = locationText ? [{ displayName: locationText, placeText: locationText }] : [];
+      const selectedLocationDraft = reviewLocationDrafts[id];
+      const locations = locationText
+        ? [{ ...(selectedLocationDraft || {}), displayName: locationText, placeText: selectedLocationDraft?.placeText || locationText }]
+        : [];
       const { contact, tags: selectedPredictedTags } = selectedPredictionCandidates(id);
       const contacts = contact ? [{
         id: contact.id,
@@ -533,6 +562,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         return [...inProgress, ...confirmed];
       });
       setReviewLocations(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewLocationDrafts(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -624,6 +658,49 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     } catch (err) {
       console.error('Failed to clear local database:', err);
       setError('Failed to clear local database');
+    }
+  };
+
+  const addLocationCandidateForEntry = (entryId, candidate) => {
+    setReviewStructure(prev => {
+      const current = prev[entryId] || {};
+      const candidateSet = current.candidateSet || {};
+      return {
+        ...prev,
+        [entryId]: {
+          ...current,
+          candidateSet: {
+            locations: mergeCandidatesById([candidate], candidateSet.locations || []),
+            contacts: candidateSet.contacts || [],
+            tags: candidateSet.tags || [],
+          },
+          prediction: current.prediction || {},
+        },
+      };
+    });
+  };
+
+  const handleUseCurrentLocation = async (entry) => {
+    try {
+      setError(null);
+      const result = await locationClueService.captureCurrentLocation({ allowPrompt: true });
+      if (!result.ok) {
+        setError('Current location is unavailable right now.');
+        return;
+      }
+
+      const clue = await dbService.createDeviceLocationContextClue({ entryId: entry.id, clue: result.clue });
+      addLocationCandidateForEntry(entry.id, {
+        id: clue.id,
+        label: clue.payload.locationText || 'Current location',
+        placeText: clue.payload.locationText || 'Current location',
+        latitude: clue.payload.latitude ?? null,
+        longitude: clue.payload.longitude ?? null,
+        source: 'device_location',
+      });
+    } catch (err) {
+      console.error('Failed to use current location:', err);
+      setError('Current location is unavailable right now.');
     }
   };
 
@@ -1031,7 +1108,14 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                 {reviewLocations[entry.id] ? (
                   <button
                     type="button"
-                    onClick={() => setReviewLocations(prev => ({ ...prev, [entry.id]: '' }))}
+                    onClick={() => {
+                      setReviewLocations(prev => ({ ...prev, [entry.id]: '' }));
+                      setReviewLocationDrafts(prev => {
+                        const next = { ...prev };
+                        delete next[entry.id];
+                        return next;
+                      });
+                    }}
                     className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-700"
                   >
                     <span className="truncate">{reviewLocations[entry.id]}</span>
@@ -1063,7 +1147,14 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                 <input
                   type="text"
                   value={reviewLocations[entry.id] || ''}
-                  onChange={(event) => setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                  onChange={(event) => {
+                    setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }));
+                    setReviewLocationDrafts(prev => {
+                      const next = { ...prev };
+                      delete next[entry.id];
+                      return next;
+                    });
+                  }}
                   placeholder="+ Location"
                   className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
@@ -1074,13 +1165,25 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                     <button
                       key={candidate.id}
                       type="button"
-                      onClick={() => setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }))}
+                      onClick={() => {
+                        setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
+                        setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
+                      }}
                       className="shrink-0 rounded border border-emerald-200 px-2.5 py-1 text-sm text-emerald-700"
                     >
                       {candidate.label}
                     </button>
                   ))}
                 </div>
+              )}
+              {!reviewLocations[entry.id] && (
+                <button
+                  type="button"
+                  onClick={() => handleUseCurrentLocation(entry)}
+                  className="mt-2 text-sm text-emerald-700 underline"
+                >
+                  Use current location for suggestions
+                </button>
               )}
 
               <div className="mt-3">

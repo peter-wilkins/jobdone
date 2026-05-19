@@ -33,6 +33,55 @@ function daysSince(value, now) {
   return Math.max(0, (now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+function numericCoordinate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function distanceMeters(a, b) {
+  const lat1 = numericCoordinate(a?.latitude);
+  const lon1 = numericCoordinate(a?.longitude);
+  const lat2 = numericCoordinate(b?.latitude);
+  const lon2 = numericCoordinate(b?.longitude);
+  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+
+  const radius = 6371000;
+  const toRadians = degrees => degrees * Math.PI / 180;
+  const deltaLat = toRadians(lat2 - lat1);
+  const deltaLon = toRadians(lon2 - lon1);
+  const startLat = toRadians(lat1);
+  const endLat = toRadians(lat2);
+  const haversine = Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLon / 2) ** 2;
+  return 2 * radius * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function locationClues(contextClues = []) {
+  return contextClues
+    .filter(clue => clue.kind === 'device_location')
+    .map(clue => ({
+      latitude: clue.payload?.latitude,
+      longitude: clue.payload?.longitude,
+      accuracy: clue.payload?.accuracy,
+      locationText: compactText(clue.payload?.locationText),
+      created_at: clue.created_at,
+    }))
+    .filter(clue => numericCoordinate(clue.latitude) !== null && numericCoordinate(clue.longitude) !== null);
+}
+
+function proximityScore(location, clues = []) {
+  const distances = clues
+    .map(clue => distanceMeters(location, clue))
+    .filter(distance => distance !== null);
+  if (!distances.length) return 0;
+
+  const nearest = Math.min(...distances);
+  if (nearest <= 100) return 18;
+  if (nearest <= 250) return 12;
+  if (nearest <= 500) return 7;
+  return 0;
+}
+
 function clueText(clue = {}) {
   return [
     clue.summary,
@@ -71,7 +120,7 @@ function sortAndLimit(candidates, limit) {
     .map(({ score, ...candidate }) => candidate);
 }
 
-function normalizeLocationCandidate(location = {}, evidenceText, now) {
+function normalizeLocationCandidate(location = {}, evidenceText, now, deviceLocationClues = []) {
   const label = compactText(location.display_name || location.displayName || location.place_text || location.placeText);
   if (!label) return null;
   const recentBoost = Math.max(0, 8 - daysSince(location.updated_at || location.created_at, now) / 14);
@@ -79,8 +128,10 @@ function normalizeLocationCandidate(location = {}, evidenceText, now) {
     id: String(location.id || location.local_id || label),
     label,
     placeText: compactText(location.place_text || location.placeText || label),
+    latitude: numericCoordinate(location.latitude),
+    longitude: numericCoordinate(location.longitude),
     source: 'location_history',
-    score: textScore(label, evidenceText) + recentBoost,
+    score: textScore(label, evidenceText) + recentBoost + proximityScore(location, deviceLocationClues),
   };
 }
 
@@ -134,12 +185,15 @@ function clueCandidates(contextClues = [], evidenceText) {
     const payload = clue.payload || {};
     const locationLabel = compactText(payload.locationText || payload.location || payload.placeText || payload.addressText);
     if (locationLabel) {
+      const isDeviceLocation = clue.kind === 'device_location';
       locations.push({
         id: `clue-location-${key(locationLabel)}`,
         label: locationLabel,
         placeText: locationLabel,
-        source: 'context_clue',
-        score: 30 + textScore(locationLabel, evidenceText),
+        latitude: numericCoordinate(payload.latitude),
+        longitude: numericCoordinate(payload.longitude),
+        source: isDeviceLocation ? 'device_location' : 'context_clue',
+        score: isDeviceLocation ? 8 : 30 + textScore(locationLabel, evidenceText),
       });
     }
 
@@ -192,10 +246,11 @@ export function buildPredictionCandidateSet({
 } = {}) {
   const evidenceText = buildEvidenceText({ entryData, contextClues });
   const clue = clueCandidates(contextClues, evidenceText);
+  const deviceLocationClues = locationClues(contextClues);
 
   const locationCandidates = dedupeByLabel([
     ...clue.locations,
-    ...locations.map(location => normalizeLocationCandidate(location, evidenceText, now)).filter(Boolean),
+    ...locations.map(location => normalizeLocationCandidate(location, evidenceText, now, deviceLocationClues)).filter(Boolean),
   ]);
 
   const contactCandidates = dedupeByLabel([
