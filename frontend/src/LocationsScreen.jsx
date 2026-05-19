@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
+import { apiService } from './services/apiService';
 import { locationClueService } from './services/locationClueService';
+import { chooseLookupLocationAction } from './services/locationLookupService';
 import {
   locationNeedsDetail,
   locationMapsUrl,
@@ -27,6 +29,14 @@ export function LocationsScreen({ onBack, onRecord }) {
   const [linkedEntries, setLinkedEntries] = useState([]);
   const [query, setQuery] = useState('');
   const [showNeedsDetailOnly, setShowNeedsDetailOnly] = useState(false);
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupStatus, setLookupStatus] = useState('idle');
+  const [lookupResults, setLookupResults] = useState([]);
+  const [proposedLookupCandidate, setProposedLookupCandidate] = useState(null);
+  const [detailLookupQuery, setDetailLookupQuery] = useState('');
+  const [detailLookupStatus, setDetailLookupStatus] = useState('idle');
+  const [detailLookupResults, setDetailLookupResults] = useState([]);
+  const [proposedDetailLookupCandidate, setProposedDetailLookupCandidate] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
@@ -173,6 +183,139 @@ export function LocationsScreen({ onBack, onRecord }) {
     }
   }
 
+  async function syncLocationIfPossible(location) {
+    try {
+      const result = await syncService.syncLocations([location]);
+      const cloudLocation = result?.locations?.[0];
+      if (cloudLocation?.id) {
+        return dbService.markLocationSynced(location.id, cloudLocation.id);
+      }
+    } catch (syncErr) {
+      console.warn('[Locations] Location saved locally but did not sync:', syncErr);
+    }
+    return location;
+  }
+
+  async function runAddressLookup(query, setStatus, setResults, setProposal) {
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      setError('Enter at least 3 characters to search for an address.');
+      return;
+    }
+
+    setError(null);
+    setStatus('loading');
+    setProposal(null);
+    try {
+      const result = await apiService.lookupLocations(trimmed);
+      setResults(result.candidates || []);
+      setStatus((result.candidates || []).length ? 'results' : 'empty');
+    } catch (err) {
+      console.error('Address lookup failed:', err);
+      setResults([]);
+      setStatus('failed');
+    }
+  }
+
+  async function handleConfirmLookupCandidate(candidate) {
+    const decision = chooseLookupLocationAction(locations, candidate);
+    if (decision.action === 'invalid') {
+      setError('Could not use that address.');
+      return;
+    }
+
+    if (decision.action === 'reuse') {
+      setProposedLookupCandidate(null);
+      selectLocation(decision.existing.id);
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+    try {
+      const { location } = await dbService.createLocation(decision.draft);
+      const synced = await syncLocationIfPossible(location);
+      await loadLocations();
+      setLookupQuery('');
+      setLookupResults([]);
+      setLookupStatus('idle');
+      setProposedLookupCandidate(null);
+      selectLocation(synced.id || location.id);
+    } catch (err) {
+      console.error('Failed to create Location from lookup:', err);
+      setError('Failed to save Location');
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleCreateApproximateLocation() {
+    const displayName = lookupQuery.trim();
+    if (!displayName) return;
+
+    setIsMutating(true);
+    setError(null);
+    try {
+      const { location } = await dbService.createLocation({
+        displayName,
+        placeText: displayName,
+        source: 'manual',
+      });
+      const synced = await syncLocationIfPossible(location);
+      await loadLocations();
+      setLookupQuery('');
+      setLookupResults([]);
+      setLookupStatus('idle');
+      setProposedLookupCandidate(null);
+      selectLocation(synced.id || location.id);
+    } catch (err) {
+      console.error('Failed to create approximate Location:', err);
+      setError('Failed to save Location');
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleConfirmDetailLookupCandidate(location, candidate) {
+    if (!location) return;
+    const decision = chooseLookupLocationAction(locations.filter(item => item.id !== location.id), candidate);
+    if (decision.action === 'invalid') {
+      setError('Could not use that address.');
+      return;
+    }
+    if (decision.action === 'reuse') {
+      setProposedDetailLookupCandidate(null);
+      selectLocation(decision.existing.id);
+      return;
+    }
+
+    setIsMutating(true);
+    setError(null);
+    try {
+      const updated = await dbService.updateLocation(location.id, {
+        displayName: decision.draft.displayName,
+        placeText: decision.draft.placeText,
+        addressText: decision.draft.addressText,
+        latitude: decision.draft.latitude,
+        longitude: decision.draft.longitude,
+        providerPlaceId: decision.draft.providerPlaceId,
+        lookupEvidence: decision.draft.lookupEvidence,
+      });
+      const synced = await syncLocationIfPossible(updated);
+      setSelectedLocation(synced);
+      await loadLocations();
+      setDetailLookupQuery('');
+      setDetailLookupResults([]);
+      setDetailLookupStatus('idle');
+      setProposedDetailLookupCandidate(null);
+    } catch (err) {
+      console.error('Failed to update Location from lookup:', err);
+      setError('Failed to update Location');
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   if (selectedLocationId) {
     return (
       <LocationDetailScreen
@@ -183,6 +326,14 @@ export function LocationsScreen({ onBack, onRecord }) {
         onBack={returnToLocationsList}
         onRecord={onRecord}
         onAddCurrentMapPin={handleAddCurrentMapPin}
+        lookupQuery={detailLookupQuery}
+        onLookupQueryChange={setDetailLookupQuery}
+        lookupStatus={detailLookupStatus}
+        lookupResults={detailLookupResults}
+        proposedLookupCandidate={proposedDetailLookupCandidate}
+        onLookup={() => runAddressLookup(detailLookupQuery, setDetailLookupStatus, setDetailLookupResults, setProposedDetailLookupCandidate)}
+        onSelectLookupCandidate={setProposedDetailLookupCandidate}
+        onConfirmLookupCandidate={handleConfirmDetailLookupCandidate}
         isMutating={isMutating}
       />
     );
@@ -208,6 +359,19 @@ export function LocationsScreen({ onBack, onRecord }) {
       )}
 
       <div className="px-6 pt-4">
+        <AddressLookupPanel
+          title="Find address"
+          query={lookupQuery}
+          onQueryChange={setLookupQuery}
+          status={lookupStatus}
+          results={lookupResults}
+          proposedCandidate={proposedLookupCandidate}
+          isMutating={isMutating}
+          onLookup={() => runAddressLookup(lookupQuery, setLookupStatus, setLookupResults, setProposedLookupCandidate)}
+          onSelectCandidate={setProposedLookupCandidate}
+          onConfirmCandidate={() => handleConfirmLookupCandidate(proposedLookupCandidate)}
+          onCreateApproximate={handleCreateApproximateLocation}
+        />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -288,7 +452,24 @@ export function LocationsScreen({ onBack, onRecord }) {
   );
 }
 
-function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBack, onRecord, onAddCurrentMapPin, isMutating }) {
+function LocationDetailScreen({
+  location,
+  linkedEntries,
+  isLoading,
+  error,
+  onBack,
+  onRecord,
+  onAddCurrentMapPin,
+  lookupQuery,
+  onLookupQueryChange,
+  lookupStatus,
+  lookupResults,
+  proposedLookupCandidate,
+  onLookup,
+  onSelectLookupCandidate,
+  onConfirmLookupCandidate,
+  isMutating,
+}) {
   const mapsUrl = location ? locationMapsUrl(location) : '';
   const needsDetail = location ? locationNeedsDetail(location) : false;
   const canAddMapPin = location ? canStrengthenLocationDraft(location) : false;
@@ -327,7 +508,7 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
               <h2 className="text-xl font-light text-gray-900">{locationPrimaryLabel(location)}</h2>
               <p className="text-sm text-gray-500 mt-2">{locationSecondaryDetail(location)}</p>
               {needsDetail && (
-                <div className="mt-4 rounded border border-amber-100 bg-amber-50 px-3 py-3">
+                <div className="mt-4 space-y-4 rounded border border-amber-100 bg-amber-50 px-3 py-3">
                   <p className="text-sm font-medium text-amber-900">Are you here now?</p>
                   <p className="mt-1 text-sm text-amber-800">Add a map pin when you are at this place to make future suggestions better.</p>
                   {canAddMapPin && (
@@ -340,6 +521,21 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
                       {isMutating ? 'Adding...' : 'Add current map pin'}
                     </button>
                   )}
+                  <div className="border-t border-amber-100 pt-4">
+                    <AddressLookupPanel
+                      title="Search postcode or address"
+                      query={lookupQuery}
+                      onQueryChange={onLookupQueryChange}
+                      status={lookupStatus}
+                      results={lookupResults}
+                      proposedCandidate={proposedLookupCandidate}
+                      isMutating={isMutating}
+                      tone="amber"
+                      onLookup={onLookup}
+                      onSelectCandidate={onSelectLookupCandidate}
+                      onConfirmCandidate={() => onConfirmLookupCandidate(location, proposedLookupCandidate)}
+                    />
+                  </div>
                 </div>
               )}
               {mapsUrl && (
@@ -373,6 +569,104 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
         )}
       </div>
       <FloatingRecordButton onRecord={onRecord} />
+    </div>
+  );
+}
+
+function AddressLookupPanel({
+  title,
+  query,
+  onQueryChange,
+  status,
+  results,
+  proposedCandidate,
+  isMutating,
+  tone = 'emerald',
+  onLookup,
+  onSelectCandidate,
+  onConfirmCandidate,
+  onCreateApproximate,
+}) {
+  const buttonClass = tone === 'amber'
+    ? 'bg-amber-600 hover:bg-amber-700'
+    : 'bg-emerald-600 hover:bg-emerald-700';
+  const borderClass = tone === 'amber' ? 'border-amber-200' : 'border-emerald-200';
+  const textClass = tone === 'amber' ? 'text-amber-800' : 'text-emerald-700';
+
+  return (
+    <div className="mb-4 rounded border border-gray-200 bg-white px-3 py-3">
+      <p className="text-sm font-medium text-gray-900">{title}</p>
+      <div className="mt-2 flex gap-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Postcode or address"
+          className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+        />
+        <button
+          type="button"
+          onClick={onLookup}
+          disabled={status === 'loading'}
+          className={`shrink-0 rounded px-3 py-2 text-sm font-medium text-white transition disabled:opacity-50 ${buttonClass}`}
+        >
+          {status === 'loading' ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+
+      {status === 'empty' && (
+        <p className="mt-2 text-sm text-gray-500">No address matches found. You can still use a manual approximate Location.</p>
+      )}
+      {status === 'failed' && (
+        <p className="mt-2 text-sm text-gray-500">Address search is unavailable right now. Manual approximate Locations still work.</p>
+      )}
+
+      {results.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {results.map(candidate => (
+            <button
+              key={candidate.id}
+              type="button"
+              onClick={() => onSelectCandidate(candidate)}
+              className={`w-full rounded border px-3 py-2 text-left text-sm transition hover:bg-gray-50 ${
+                proposedCandidate?.id === candidate.id ? `${borderClass} ${textClass}` : 'border-gray-200 text-gray-700'
+              }`}
+            >
+              <span className="block font-medium">{candidate.displayName}</span>
+              <span className="mt-0.5 block text-xs text-gray-500">{candidate.addressText || candidate.placeText}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {proposedCandidate && (
+        <div className={`mt-3 rounded border ${borderClass} px-3 py-2`}>
+          <p className="text-sm font-medium text-gray-900">Use this Location?</p>
+          <p className="mt-1 text-sm text-gray-600">{proposedCandidate.addressText || proposedCandidate.placeText}</p>
+          <button
+            type="button"
+            onClick={onConfirmCandidate}
+            disabled={isMutating}
+            className={`mt-3 rounded px-3 py-2 text-sm font-medium text-white transition disabled:opacity-50 ${buttonClass}`}
+          >
+            {isMutating ? 'Saving...' : 'Confirm Location'}
+          </button>
+        </div>
+      )}
+      {(status === 'empty' || status === 'failed') && onCreateApproximate && query.trim() && (
+        <div className="mt-3">
+          <p className="mb-2 truncate text-xs text-gray-500">{query.trim()}</p>
+          <button
+            type="button"
+            onClick={onCreateApproximate}
+            disabled={isMutating}
+            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            {isMutating ? 'Saving...' : 'Create approximate Location'}
+          </button>
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-gray-400">Address search powered by OpenStreetMap.</p>
     </div>
   );
 }

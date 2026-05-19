@@ -8,6 +8,7 @@ import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRecallRoutes } from './routes/recall.js';
 import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
+import { registerLocationRoutes } from './routes/locations.js';
 
 export function createApp(options = {}) {
   const fastify = Fastify({
@@ -31,6 +32,7 @@ export function createApp(options = {}) {
   fastify.register(registerRecallRoutes);
   fastify.register(registerQueryRoutes);
   fastify.register(registerStructureRoutes);
+  fastify.register(registerLocationRoutes);
 
   fastify.get('/', async () => {
     return {

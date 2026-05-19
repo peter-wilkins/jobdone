@@ -1737,6 +1737,39 @@ export class DBService {
     });
   }
 
+  async createLocation(locationData) {
+    const normalized = this.normalizeLocationDraft(locationData);
+    if (!normalized) throw new Error('Location needs a name or address');
+
+    const existingLocations = await this.getLocations('confirmed');
+    const reusableLocation = findReusableLocation(existingLocations, normalized);
+    if (reusableLocation) {
+      return { location: reusableLocation, reused: true };
+    }
+
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const location = {
+      ...normalized,
+      id: this.generateLocationId(),
+      status: 'confirmed',
+      normalizedDisplayName: normalizeLocationKey(normalized.displayName),
+      syncStatus: 'pending',
+      synced_at: null,
+      source: locationData.source || 'manual',
+      providerPlaceId: locationData.providerPlaceId || null,
+      lookupEvidence: compactPayload(locationData.lookupEvidence || {}),
+      created_at: now,
+      updated_at: now,
+    };
+
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([LOCATIONS_STORE], 'readwrite').objectStore(LOCATIONS_STORE).add(location);
+      request.onsuccess = () => resolve({ location, reused: false });
+      request.onerror = () => reject(new Error('Failed to create location'));
+    });
+  }
+
   async updateLocation(locationId, updates = {}) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
@@ -1755,7 +1788,10 @@ export class DBService {
           ...location,
           ...updates,
           id: location.id,
+          normalizedDisplayName: updates.displayName ? normalizeLocationKey(updates.displayName) : location.normalizedDisplayName,
           syncStatus: 'pending',
+          providerPlaceId: updates.providerPlaceId || location.providerPlaceId || null,
+          lookupEvidence: compactPayload(updates.lookupEvidence || location.lookupEvidence || {}),
           updated_at: new Date().toISOString(),
         };
         const put = store.put(updated);

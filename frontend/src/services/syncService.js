@@ -88,6 +88,7 @@ export class SyncService {
       latitude: location.latitude,
       longitude: location.longitude,
       remoteId: location.remoteId,
+      providerPlaceId: location.providerPlaceId,
       created_at: location.created_at,
       updated_at: location.updated_at,
     })));

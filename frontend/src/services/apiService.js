@@ -181,6 +181,18 @@ export class APIService {
     return response.json();
   }
 
+  async lookupLocations(query) {
+    const params = new URLSearchParams({ q: query });
+    const response = await fetch(`${API_BASE_URL}/api/locations/lookup?${params.toString()}`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Address lookup failed');
+    }
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/sync/contacts`, {
