@@ -8,7 +8,7 @@ import {
   locationSecondaryDetail,
 } from './services/locationPresentationService';
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
-import { PageHeaderActions } from './PageHeaderActions';
+import { FloatingRecordButton } from './FloatingRecordButton';
 
 function locationIdFromLocation() {
   const hash = window.location.hash || '';
@@ -19,7 +19,7 @@ function locationIdFromLocation() {
   return params.get('location');
 }
 
-export function LocationsScreen({ onBack, onHome, onRecord }) {
+export function LocationsScreen({ onBack, onRecord }) {
   const [locations, setLocations] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState(locationIdFromLocation);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -171,7 +171,6 @@ export function LocationsScreen({ onBack, onHome, onRecord }) {
         isLoading={isDetailLoading}
         error={error}
         onBack={returnToLocationsList}
-        onHome={onHome}
         onRecord={onRecord}
         onAddCurrentMapPin={handleAddCurrentMapPin}
         isMutating={isMutating}
@@ -190,7 +189,6 @@ export function LocationsScreen({ onBack, onHome, onRecord }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Locations</h1>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -275,11 +273,12 @@ export function LocationsScreen({ onBack, onHome, onRecord }) {
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }
 
-function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBack, onHome, onRecord, onAddCurrentMapPin, isMutating }) {
+function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBack, onRecord, onAddCurrentMapPin, isMutating }) {
   const mapsUrl = location ? locationMapsUrl(location) : '';
   const needsDetail = location ? locationNeedsDetail(location) : false;
   const canAddMapPin = location ? canStrengthenLocationDraft(location) : false;
@@ -295,7 +294,6 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Location</h1>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -364,6 +362,7 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { formatTime } from './mockData';
 import { parseContactPayload, buildContactSummary } from './services/contactParser';
-import { PageHeaderActions } from './PageHeaderActions';
+import { FloatingRecordButton } from './FloatingRecordButton';
 
 function payloadLabel(payload) {
   if (payload.type === 'link') return payload.url || payload.title || 'Link';
@@ -27,7 +27,7 @@ function formatBytes(value) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function InboxScreen({ onBack, onHome, onRecord }) {
+export function InboxScreen({ onBack, onRecord }) {
   const [captures, setCaptures] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,7 +78,6 @@ export function InboxScreen({ onBack, onHome, onRecord }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Inbox</h1>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -151,6 +150,7 @@ export function InboxScreen({ onBack, onHome, onRecord }) {
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }

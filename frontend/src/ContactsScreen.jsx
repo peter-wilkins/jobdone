@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { buildContactSummary } from './services/contactParser';
-import { PageHeaderActions } from './PageHeaderActions';
+import { FloatingRecordButton } from './FloatingRecordButton';
 
 function contactIdFromLocation() {
   const hash = window.location.hash || '';
@@ -12,7 +12,7 @@ function contactIdFromLocation() {
   return params.get('contact') || params.get('person');
 }
 
-export function ContactsScreen({ onBack, onHome, onRecord }) {
+export function ContactsScreen({ onBack, onRecord }) {
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState(contactIdFromLocation);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -154,7 +154,6 @@ export function ContactsScreen({ onBack, onHome, onRecord }) {
         isMutating={isMutating}
         error={error}
         onBack={returnToContactsList}
-        onHome={onHome}
         onRecord={onRecord}
         onDelete={handleDeleteContact}
       />
@@ -172,7 +171,6 @@ export function ContactsScreen({ onBack, onHome, onRecord }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Contacts</h1>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -223,11 +221,12 @@ export function ContactsScreen({ onBack, onHome, onRecord }) {
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }
 
-function ContactDetailScreen({ contact, linkedEntries, isLoading, isMutating, error, onBack, onHome, onRecord, onDelete }) {
+function ContactDetailScreen({ contact, linkedEntries, isLoading, isMutating, error, onBack, onRecord, onDelete }) {
   const canDelete = contact && linkedEntries.length === 0;
 
   return (
@@ -241,7 +240,6 @@ function ContactDetailScreen({ contact, linkedEntries, isLoading, isMutating, er
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Contact</h1>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -343,6 +341,7 @@ function ContactDetailScreen({ contact, linkedEntries, isLoading, isMutating, er
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }

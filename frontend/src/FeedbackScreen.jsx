@@ -5,7 +5,7 @@ import { apiService } from './services/apiService';
 import { authService } from './services/authService';
 import { diagnosticService } from './services/diagnosticService';
 import { formatTime } from './mockData';
-import { PageHeaderActions } from './PageHeaderActions';
+import { FloatingRecordButton } from './FloatingRecordButton';
 
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
 
@@ -59,7 +59,7 @@ function DiagnosticPreview({ bundle }) {
   );
 }
 
-export function FeedbackScreen({ onBack, onHome, onRecord }) {
+export function FeedbackScreen({ onBack, onRecord }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [inProgress, setInProgress] = useState([]);
@@ -299,7 +299,6 @@ export function FeedbackScreen({ onBack, onHome, onRecord }) {
           <h1 className="text-2xl font-light text-gray-900">Report issue</h1>
           <p className="text-[10px] leading-4 text-gray-400 font-mono">build {BUILD_ID}</p>
         </div>
-        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {/* Error */}
@@ -459,6 +458,7 @@ export function FeedbackScreen({ onBack, onHome, onRecord }) {
           </div>
         )}
       </div>
+      <FloatingRecordButton onRecord={onRecord} />
     </div>
   );
 }

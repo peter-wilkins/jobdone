@@ -160,27 +160,27 @@ function App() {
   };
 
   if (screen === 'feedback') {
-    return <FeedbackScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'inbox') {
-    return <InboxScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'contacts') {
-    return <ContactsScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'locations') {
-    return <LocationsScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'share-target') {
-    return <ShareTargetScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
+    return <ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
   }
 
   if (screen === 'login') {
-    return <LoginScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
+    return <LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
   }
 
   return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} canAutoStart={canAutoStartHome} recordRequestId={recordRequestId} />;
