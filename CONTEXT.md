@@ -81,8 +81,20 @@ A user-curated subset of Recall-returned Entries, optionally with a short user-w
 _Avoid_: Report, Export, Search Result
 
 **Feedback Report**:
-A user-submitted report that something was confusing, broken, or worth improving. A Feedback Report can contain the user's voice/text description, optional attachments, and privacy-bounded Context Clues such as route, build id, device/browser state, recent app events, and recent errors.
+A user-submitted maintainer/agent triage artifact that something was confusing, broken, or worth improving. A Feedback Report can contain the user's voice/text description, optional attachments, and privacy-bounded Context Clues such as route, build id, device/browser state, recent app events, and recent errors. It is not a support-ticket conversation, CRM history, or user-facing work queue.
 _Avoid_: Telemetry, Bug Video, Debug Dump
+
+**Feedback Kind**:
+The user-selected type of Feedback Report: bug, data loss, confusing, improvement, sync/login, share/install, performance, or other. Feedback Kind is a triage aid, not a product taxonomy exposed elsewhere.
+_Avoid_: Support Category, Ticket Type, Label
+
+**Request ID**:
+An opaque random identifier attached to an API request so frontend diagnostics, Feedback Reports, and backend logs can be correlated without exposing user, session, device, Entry, Contact, Location, or payload identity.
+_Avoid_: Correlation ID with user data, Trace Token
+
+**Crash Report**:
+A self-hosted automatic report created after a frontend error, unhandled promise rejection, startup failure, or service worker failure. A Crash Report is a compact diagnostic artifact, not a user-authored Feedback Report, and should avoid third-party crash tooling unless self-hosting proves insufficient.
+_Avoid_: Third-party telemetry, User Complaint
 
 **Native Integration Shell**:
 A thin platform app whose purpose is to bridge OS capabilities such as sharing, install presence, notifications, and permissions into JobDone while the web app remains the product surface and source of domain behavior.
@@ -184,7 +196,20 @@ _Avoid_: Search bar, Input field, Record button
 - Share Pack access does not create recipient-facing read receipts in MVP; operational access metadata is only for abuse/debug if needed
 - Share Pack recipients are arbitrary external recipients for MVP; sharing a link does not automatically create a Contact
 - A **Feedback Report** contains user-submitted feedback content plus optional attachments and Context Clues; it is not a background telemetry stream
+- Feedback Reports optimise for maintainer/agent triage and reproduction, not for user history, conversation threads, or support-ticket management
+- Feedback Reports can be submitted without login when protected by server-side abuse controls such as rate limits. Login can attach Supabase `user_id` ownership context, but reporting bugs must not depend on a working login flow.
+- Feedback Report identity is per-device before login and linked to the user's email/Supabase identity after login. Exact edge cases around later identity linking are less important than not losing useful reports.
+- Feedback Reports use a small fixed triage taxonomy: Feedback Kind (`bug`, `data_loss`, `confusing`, `improvement`, `sync_login`, `share_install`, `performance`, `other`), impact (`blocked`, `degraded`, `annoyance`, `unsure`), and data loss (`yes`, `no`, `unsure`)
+- The Feedback Report surface should start with quick triage controls for Feedback Kind, impact, and data loss before optional text or voice detail. Error bars and failed-flow screens can deep-link into Feedback Report creation with kind/surface preselected.
+- Data-loss Feedback Reports are high-priority triage artifacts. They should not require extra user detail before sending, but should invite optional "what is missing?" detail, include local DB/sync counts and recent storage/service worker/API errors, avoid mutating local data during reporting, and retain sanitized local diagnostics longer than the normal rolling buffer.
+- Raw Feedback Reports should not automatically create GitHub Issues. They should enter a maintainer/agent triage queue where duplicates can be grouped, private details can be redacted, and actionable reports can be promoted into GitHub Issues deliberately.
+- Agent-facing Feedback Report triage should present a normalized factual record with kind, impact, data loss, build id, route/surface, identity class, created time, recent Request IDs, backend health, sync/local DB counts, recent sanitized events/errors, user description, dedupe signature, and suggested next action. Any AI-written summary or diagnosis must be labelled as a suggestion, not truth.
+- Feedback Report improvements should be delivered as tracer-bullet slices: Request IDs and API diagnostics first, anonymous submission with rate limiting next, fast triage UI next, self-hosted Crash Reports next, and an agent triage queue after enough report data exists.
+- Frontend API calls should include a random opaque **Request ID** header. The backend accepts valid frontend Request IDs or generates its own, logs the Request ID with method, route, status, and error kind, and Feedback Reports include recent Request IDs so maintainers and agents can search production logs.
+- Anonymous Feedback Report and Crash Report rate limits should be server-enforced using abuse keys derived from IP hash, user-agent hash, route type, and optionally build id. A client-side per-device feedback id can group reports diagnostically but must not be trusted as the only limiter key. Data-loss reports can bypass strict client throttles but not server abuse guards.
 - Feedback Report Context Clues exclude private Entry content, transcripts, Contact details, and shared payload bodies by default unless the user explicitly includes them
+- Crash Reports should be self-hosted by default, sent automatically when compact privacy-bounded crash context is available, and surfaced with a small non-blocking error/status bar rather than a permission prompt or modal
+- Crash Reports can include crash id, build id, route, timestamp, error name/message, trimmed stack, known surface/component, recent Request IDs, recent sanitized app events, browser/device/install mode, and online/backend status. They must exclude Entry content, Capture payloads, Feedback text/audio, Contact details, Location labels/addresses, transcripts, auth/session data, raw API bodies, localStorage dumps, and IndexedDB dumps. Crash submission should be rate-limited per device/build/error signature to prevent loops.
 - A Contact-only Confirmation updates Contacts and removes the Capture from the Inbox without creating a Timeline Entry
 - A minimal Contacts surface lists, searches, and displays Contacts; merge and full editing are deferred
 - A Contact with no linked Entries can be deleted; a Contact linked to Entries cannot be deleted while immutable Entry snapshots remain
