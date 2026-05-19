@@ -499,6 +499,10 @@ export class DBService {
             displayName: normalizeLocationText(contact.displayName || contact.display_name || contact.label || ''),
             primaryPhone: contact.primaryPhone || contact.primary_phone || null,
             primaryEmail: contact.primaryEmail || contact.primary_email || null,
+            phones: contact.phones || [],
+            emails: contact.emails || [],
+            normalizedPhones: contact.normalizedPhones || contact.normalized_phones || [],
+            normalizedEmails: contact.normalizedEmails || contact.normalized_emails || [],
           }))
           .filter(contact => contact.id && contact.displayName);
 

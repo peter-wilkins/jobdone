@@ -6,6 +6,12 @@ import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
+import {
+  contactDraftFromManualInput,
+  isContactPickerSupported,
+  pickContact,
+  validateContactDraftForCreation,
+} from './services/contactPickerService';
 import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { formatTime } from './mockData';
 
@@ -45,6 +51,10 @@ function localContactCandidate(contact) {
     label,
     primaryPhone: contact.primaryPhone || null,
     primaryEmail: contact.primaryEmail || null,
+    phones: contact.phones || [],
+    emails: contact.emails || [],
+    normalizedPhones: contact.normalizedPhones || [],
+    normalizedEmails: contact.normalizedEmails || [],
     source: 'local_contacts',
   };
 }
@@ -94,6 +104,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [reviewLocations, setReviewLocations] = useState({});
   const [reviewLocationDrafts, setReviewLocationDrafts] = useState({});
   const [reviewContacts, setReviewContacts] = useState({});
+  const [reviewContactPanels, setReviewContactPanels] = useState({});
+  const [reviewContactSearch, setReviewContactSearch] = useState({});
+  const [reviewContactOptions, setReviewContactOptions] = useState({});
+  const [reviewManualContacts, setReviewManualContacts] = useState({});
   const [reviewTags, setReviewTags] = useState({});
   const [reviewStructure, setReviewStructure] = useState({});
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
@@ -135,6 +149,12 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     const selectedTagIds = new Set(reviewSelectedTags[entryId] || []);
     const tags = (candidateSet.tags || []).filter(candidate => selectedTagIds.has(candidate.id));
     return { structure, candidateSet, prediction, location, contact, tags };
+  };
+
+  const resetContactCorrection = (entryId) => {
+    setReviewContactPanels(prev => ({ ...prev, [entryId]: false }));
+    setReviewContactSearch(prev => ({ ...prev, [entryId]: '' }));
+    setReviewManualContacts(prev => ({ ...prev, [entryId]: { displayName: '', phone: '', email: '' } }));
   };
 
   const togglePredictedTag = (entryId, tagId) => {
@@ -508,6 +528,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         displayName: contact.label,
         primaryPhone: contact.primaryPhone,
         primaryEmail: contact.primaryEmail,
+        phones: contact.phones || [],
+        emails: contact.emails || [],
+        normalizedPhones: contact.normalizedPhones || [],
+        normalizedEmails: contact.normalizedEmails || [],
       }] : [];
       const tagDrafts = [
         ...selectedPredictedTags.map(tag => ({ label: tag.label, categoryName: tag.categoryName || 'General' })),
@@ -567,6 +591,31 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         return next;
       });
       setReviewLocationDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewContacts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewContactPanels(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewContactSearch(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewContactOptions(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewManualContacts(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -650,6 +699,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       setQueryResults(null);
       setReviewLocations({});
       setReviewContacts({});
+      setReviewContactPanels({});
+      setReviewContactSearch({});
+      setReviewContactOptions({});
+      setReviewManualContacts({});
       setReviewTags({});
       setReviewStructure({});
       setReviewSelectedTags({});
@@ -678,6 +731,105 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         },
       };
     });
+  };
+
+  const addContactCandidateForEntry = (entryId, candidate) => {
+    setReviewStructure(prev => {
+      const current = prev[entryId] || {};
+      const candidateSet = current.candidateSet || {};
+      return {
+        ...prev,
+        [entryId]: {
+          ...current,
+          candidateSet: {
+            locations: candidateSet.locations || [],
+            contacts: mergeCandidatesById([candidate], candidateSet.contacts || []),
+            tags: candidateSet.tags || [],
+          },
+          prediction: current.prediction || {},
+        },
+      };
+    });
+  };
+
+  const loadContactOptions = async (entryId, query = '') => {
+    try {
+      const contacts = query.trim()
+        ? await dbService.searchContacts(query)
+        : await dbService.getContacts('confirmed');
+      setReviewContactOptions(prev => ({
+        ...prev,
+        [entryId]: contacts.map(localContactCandidate).filter(Boolean).slice(0, 8),
+      }));
+    } catch (err) {
+      console.error('Failed to load Contacts for review:', err);
+      setError('Failed to load Contacts');
+    }
+  };
+
+  const openContactCorrection = async (entryId) => {
+    setReviewContactPanels(prev => ({ ...prev, [entryId]: true }));
+    setReviewManualContacts(prev => ({
+      ...prev,
+      [entryId]: prev[entryId] || { displayName: '', phone: '', email: '' },
+    }));
+    await loadContactOptions(entryId, reviewContactSearch[entryId] || '');
+  };
+
+  const selectReviewContactCandidate = (entryId, candidate) => {
+    addContactCandidateForEntry(entryId, candidate);
+    setReviewContacts(prev => ({ ...prev, [entryId]: candidate.id }));
+    resetContactCorrection(entryId);
+  };
+
+  const handleContactSearchChange = async (entryId, value) => {
+    setReviewContactSearch(prev => ({ ...prev, [entryId]: value }));
+    await loadContactOptions(entryId, value);
+  };
+
+  const handlePickNativeContact = async (entryId) => {
+    try {
+      setError(null);
+      const result = await pickContact();
+      if (!result.ok) {
+        setError(result.reason === 'unsupported' ? 'Contact Picker is unavailable on this device.' : 'No Contact was selected.');
+        return;
+      }
+
+      const savedContact = await dbService.upsertContact(result.contact);
+      const candidate = localContactCandidate(savedContact);
+      if (!candidate) {
+        setError('Could not use selected Contact');
+        return;
+      }
+      selectReviewContactCandidate(entryId, candidate);
+    } catch (err) {
+      console.error('Failed to pick Contact:', err);
+      setError('Could not pick Contact');
+    }
+  };
+
+  const handleCreateManualContact = async (entryId) => {
+    try {
+      setError(null);
+      const draft = contactDraftFromManualInput(reviewManualContacts[entryId]);
+      const validation = validateContactDraftForCreation(draft);
+      if (!validation.valid) {
+        setError(validation.error);
+        return;
+      }
+
+      const savedContact = await dbService.upsertContact(draft);
+      const candidate = localContactCandidate(savedContact);
+      if (!candidate) {
+        setError('Could not create Contact');
+        return;
+      }
+      selectReviewContactCandidate(entryId, candidate);
+    } catch (err) {
+      console.error('Failed to create Contact:', err);
+      setError('Could not create Contact');
+    }
   };
 
   const handleUseCurrentLocation = async (entry) => {
@@ -1072,6 +1224,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
       const contactCandidates = candidateSet.contacts || [];
+      const contactPanelOpen = Boolean(reviewContactPanels[entry.id]);
+      const contactOptions = reviewContactOptions[entry.id] || [];
+      const contactSearch = reviewContactSearch[entry.id] || '';
+      const manualContact = reviewManualContacts[entry.id] || { displayName: '', phone: '', email: '' };
       const tagCandidates = candidateSet.tags || [];
       const selectedTagIds = new Set(reviewSelectedTags[entry.id] || []);
       const tagGroups = tagCandidates.reduce((groups, tag) => {
@@ -1129,16 +1285,23 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                 {selectedContact ? (
                   <button
                     type="button"
-                    onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: null }))}
+                    onClick={() => {
+                      setReviewContacts(prev => ({ ...prev, [entry.id]: null }));
+                      openContactCorrection(entry.id);
+                    }}
                     className="inline-flex max-w-full items-center rounded bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-700"
                   >
                     <span className="truncate">{selectedContact.label}</span>
                     <span className="ml-1 text-violet-500">x</span>
                   </button>
                 ) : (
-                  <span className="inline-flex items-center rounded border border-dashed border-violet-300 px-2.5 py-1 text-sm text-violet-700">
+                  <button
+                    type="button"
+                    onClick={() => openContactCorrection(entry.id)}
+                    className="inline-flex items-center rounded border border-dashed border-violet-300 px-2.5 py-1 text-sm text-violet-700"
+                  >
                     + Contact
-                  </span>
+                  </button>
                 )}
               </div>
 
@@ -1187,7 +1350,16 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
               )}
 
               <div className="mt-3">
-                <span className="text-sm text-gray-500">Contact</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-500">Contact</span>
+                  <button
+                    type="button"
+                    onClick={() => openContactCorrection(entry.id)}
+                    className="text-sm text-violet-700 underline"
+                  >
+                    {selectedContact ? 'Change Contact' : '+ Contact'}
+                  </button>
+                </div>
                 {contactCandidates.length > 0 ? (
                   <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
                     {contactCandidates.map(candidate => (
@@ -1206,7 +1378,101 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-1 text-sm text-gray-400">+ Contact</p>
+                  <p className="mt-1 text-sm text-gray-400">No Contact selected. This is fine if none applies.</p>
+                )}
+                {contactPanelOpen && (
+                  <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={contactSearch}
+                        onChange={(event) => handleContactSearchChange(entry.id, event.target.value)}
+                        placeholder="Search saved Contacts"
+                        className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => resetContactCorrection(entry.id)}
+                        className="rounded border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    {contactOptions.length > 0 && (
+                      <div className="mt-2 max-h-36 overflow-y-auto rounded border border-white bg-white">
+                        {contactOptions.map(candidate => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            onClick={() => selectReviewContactCandidate(entry.id, candidate)}
+                            className="block w-full border-b border-gray-100 px-3 py-2 text-left text-sm text-gray-800 last:border-b-0 hover:bg-violet-50"
+                          >
+                            <span className="block font-medium">{candidate.label}</span>
+                            {(candidate.primaryPhone || candidate.primaryEmail) && (
+                              <span className="block text-xs text-gray-400">{candidate.primaryPhone || candidate.primaryEmail}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePickNativeContact(entry.id)}
+                        disabled={!isContactPickerSupported()}
+                        className="rounded bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-200 disabled:text-gray-500"
+                      >
+                        Pick from phone
+                      </button>
+                      {!isContactPickerSupported() && (
+                        <span className="self-center text-xs text-gray-500">Phone picker unavailable here.</span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      <input
+                        type="text"
+                        value={manualContact.displayName}
+                        onChange={(event) => setReviewManualContacts(prev => ({
+                          ...prev,
+                          [entry.id]: { ...(prev[entry.id] || {}), displayName: event.target.value },
+                        }))}
+                        placeholder="New Contact name"
+                        className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
+                      />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          type="tel"
+                          value={manualContact.phone}
+                          onChange={(event) => setReviewManualContacts(prev => ({
+                            ...prev,
+                            [entry.id]: { ...(prev[entry.id] || {}), phone: event.target.value },
+                          }))}
+                          placeholder="Phone"
+                          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
+                        />
+                        <input
+                          type="email"
+                          value={manualContact.email}
+                          onChange={(event) => setReviewManualContacts(prev => ({
+                            ...prev,
+                            [entry.id]: { ...(prev[entry.id] || {}), email: event.target.value },
+                          }))}
+                          placeholder="Email"
+                          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateManualContact(entry.id)}
+                        className="justify-self-start rounded border border-violet-200 bg-white px-3 py-2 text-sm font-medium text-violet-700"
+                      >
+                        Create Contact
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 
