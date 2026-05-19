@@ -97,7 +97,14 @@ function locationDraftFromCandidate(candidate) {
   };
 }
 
-export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false, recordRequestId = 0 }) {
+export function HomeScreen({
+  onNavigate,
+  user,
+  refreshKey = 0,
+  canAutoStart = false,
+  recordRequestId = 0,
+  onRecordRequestHandled,
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const processingIdsRef = useRef(new Set());
@@ -389,6 +396,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     handledRecordRequestRef.current = recordRequestId;
     const timer = window.setTimeout(() => {
       startRecording({ flash: true });
+      onRecordRequestHandled?.();
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -133,6 +133,9 @@ function App() {
     const handlePopState = () => {
       const nextScreen = screenFromLocation();
       diagnosticService.record('screen_open', { screen: nextScreen, source: 'history' });
+      if (nextScreen === 'home') {
+        setRecordRequestId(0);
+      }
       setScreen(nextScreen);
     };
     window.addEventListener('popstate', handlePopState);
@@ -142,6 +145,9 @@ function App() {
   // Navigate with history support
   const navigateTo = (newScreen) => {
     diagnosticService.record('screen_open', { screen: newScreen, source: 'app_navigation' });
+    if (newScreen === 'home') {
+      setRecordRequestId(0);
+    }
     if (newScreen !== 'home' && screen === 'home') {
       // Push state when leaving home
       window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
@@ -150,6 +156,10 @@ function App() {
       window.history.replaceState({}, '', '/');
     }
     setScreen(newScreen);
+  };
+
+  const handleRecordRequestHandled = () => {
+    setRecordRequestId(0);
   };
 
   const startRecordingFromShortcut = () => {
@@ -183,7 +193,16 @@ function App() {
     return <LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
   }
 
-  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} canAutoStart={canAutoStartHome} recordRequestId={recordRequestId} />;
+  return (
+    <HomeScreen
+      onNavigate={navigateTo}
+      user={user}
+      refreshKey={refreshKey}
+      canAutoStart={canAutoStartHome}
+      recordRequestId={recordRequestId}
+      onRecordRequestHandled={handleRecordRequestHandled}
+    />
+  );
 }
 
 export default App;
