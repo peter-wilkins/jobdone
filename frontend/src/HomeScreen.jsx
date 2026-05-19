@@ -12,6 +12,7 @@ import {
   pickContact,
   validateContactDraftForCreation,
 } from './services/contactPickerService';
+import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
 import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { formatTime } from './mockData';
 
@@ -92,6 +93,7 @@ function locationDraftFromCandidate(candidate) {
     addressText: candidate.addressText || '',
     latitude: candidate.latitude ?? null,
     longitude: candidate.longitude ?? null,
+    source: candidate.source || null,
   };
 }
 
@@ -883,6 +885,36 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     }
   };
 
+  const handleStrengthenLocationHere = async (entry) => {
+    const selectedDraft = reviewLocationDrafts[entry.id];
+    if (!canStrengthenLocationDraft(selectedDraft)) return;
+
+    try {
+      setError(null);
+      const result = await locationClueService.captureCurrentLocation({ allowPrompt: true });
+      if (!result.ok) {
+        setError('Current location is unavailable right now.');
+        return;
+      }
+
+      const clue = await dbService.createDeviceLocationContextClue({ entryId: entry.id, clue: result.clue });
+      const strengthenedDraft = strengthenLocationDraftWithClue(selectedDraft, clue);
+      setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: strengthenedDraft }));
+      addLocationCandidateForEntry(entry.id, {
+        id: selectedDraft.id,
+        label: selectedDraft.displayName,
+        placeText: selectedDraft.placeText || selectedDraft.displayName,
+        addressText: selectedDraft.addressText || '',
+        latitude: strengthenedDraft.latitude,
+        longitude: strengthenedDraft.longitude,
+        source: selectedDraft.source || 'location_history',
+      });
+    } catch (err) {
+      console.error('Failed to strengthen Location:', err);
+      setError('Current location is unavailable right now.');
+    }
+  };
+
   /**
    * Execute a query: call recall, show results, save to history.
    * Used for both confirm-screen queries and re-runs from dropdown.
@@ -1250,6 +1282,8 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       };
       const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
+      const selectedLocationDraft = reviewLocationDrafts[entry.id];
+      const canStrengthenSelectedLocation = canStrengthenLocationDraft(selectedLocationDraft);
       const contactCandidates = candidateSet.contacts || [];
       const contactPanelOpen = Boolean(reviewContactPanels[entry.id]);
       const contactOptions = reviewContactOptions[entry.id] || [];
@@ -1365,6 +1399,21 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
                       {candidate.label}
                     </button>
                   ))}
+                </div>
+              )}
+              {canStrengthenSelectedLocation && (
+                <div className="mt-2 rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-emerald-900">Are you here now?</p>
+                    <button
+                      type="button"
+                      onClick={() => handleStrengthenLocationHere(entry)}
+                      className="shrink-0 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 transition"
+                    >
+                      Add map pin
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-emerald-700">This will save today&apos;s location to {selectedLocationDraft.displayName} when you confirm.</p>
                 </div>
               )}
               {!reviewLocations[entry.id] && (

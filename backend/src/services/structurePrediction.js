@@ -159,6 +159,7 @@ function normalizeLocationCandidate(location = {}, evidenceText, now, deviceLoca
     id: String(location.id || location.local_id || label),
     label,
     placeText: compactText(location.place_text || location.placeText || label),
+    addressText: compactText(location.address_text || location.addressText || ''),
     latitude: numericCoordinate(location.latitude),
     longitude: numericCoordinate(location.longitude),
     source: 'location_history',
