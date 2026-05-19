@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   entryMatchesLocation,
+  locationNeedsDetail,
   locationMapsUrl,
   locationPrimaryLabel,
   locationSecondaryDetail,
@@ -36,7 +37,13 @@ test('does not treat default 0,0 coordinates as mappable', () => {
   };
 
   assert.equal(locationSecondaryDetail(location), 'Needs detail');
+  assert.equal(locationNeedsDetail(location), true);
   assert.equal(locationMapsUrl(location), 'https://www.google.com/maps/search/?api=1&query=Barn%20near%20Little%20Barford');
+});
+
+test('identifies anchored Locations as not needing detail', () => {
+  assert.equal(locationNeedsDetail({ displayName: '14 Bell Street', addressText: '14 Bell Street' }), false);
+  assert.equal(locationNeedsDetail({ displayName: 'North field', latitude: 52.1, longitude: -0.2 }), false);
 });
 
 test('matches Entries by confirmed Location association only', () => {

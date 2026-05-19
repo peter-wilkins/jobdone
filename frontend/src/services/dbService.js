@@ -1737,6 +1737,35 @@ export class DBService {
     });
   }
 
+  async updateLocation(locationId, updates = {}) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCATIONS_STORE], 'readwrite');
+      const store = tx.objectStore(LOCATIONS_STORE);
+      const request = store.get(locationId);
+
+      request.onsuccess = () => {
+        const location = request.result;
+        if (!location) {
+          reject(new Error('Location not found'));
+          return;
+        }
+
+        const updated = {
+          ...location,
+          ...updates,
+          id: location.id,
+          updated_at: new Date().toISOString(),
+        };
+        const put = store.put(updated);
+        put.onsuccess = () => resolve(updated);
+        put.onerror = () => reject(new Error('Failed to update location'));
+      };
+
+      request.onerror = () => reject(new Error('Failed to fetch location'));
+    });
+  }
+
   async getEntriesForLocation(locationId) {
     const location = await this.getLocation(locationId);
     if (!location) return [];

@@ -12,6 +12,13 @@ export function locationSecondaryDetail(location = {}) {
   return 'Needs detail';
 }
 
+export function locationNeedsDetail(location = {}) {
+  const address = String(location.addressText || location.address_text || '').trim();
+  const place = String(location.placeText || location.place_text || '').trim();
+  const primary = locationPrimaryLabel(location);
+  return !address && !hasCoordinates(location) && (!place || place === primary);
+}
+
 export function hasCoordinates(location = {}) {
   const latitude = Number(location.latitude);
   const longitude = Number(location.longitude);
