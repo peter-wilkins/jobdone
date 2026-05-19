@@ -48,6 +48,10 @@ _Avoid_: Tag History, Prompt List
 The bounded set of plausible Locations, Contacts, and Tags selected from Context Clues and Tag Vocabulary before AI ranking. The AI chooses from this small contextual set and may propose a new Tag only when no candidate fits.
 _Avoid_: Full Tag List, Prompt Context, Search Space
 
+**Co-occurrence Clue**:
+A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
+_Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
+
 **Photo**:
 An image attachment received through a Capture and retained with the Entry after Confirmation.
 _Avoid_: Image Entry, Scan, Upload
@@ -128,6 +132,13 @@ _Avoid_: Search bar, Input field, Record button
 - Review distinguishes strong, medium, and weak structure evidence. Strong evidence can be preselected; medium evidence should be shown as an unselected suggestion; weak evidence stays hidden until the user asks to add structure
 - Strong Contact evidence includes a shared vCard, trusted calendar attendee, or exact full-name match to an existing Contact. First-name-only matches are medium evidence at most and should not be preselected
 - Strong Location evidence includes an exact known Location label/address in Entry text or a trusted Calendar Event location. Capture-time GPS near a known Location is medium evidence unless reinforced by Entry text or other Context Clues
+- When a Contact is matched, Locations previously confirmed with that Contact can appear as **Co-occurrence Clues**; when a Location is matched, Contacts previously confirmed with that Location can appear the same way. These clues are bidirectional and support prediction, but they do not create an independent Contact-Location relationship outside Entry history
+- A Co-occurrence Clue can preselect a Location or Contact only when the matched counterpart has a repeated and clearly dominant confirmed association, with no contradictory evidence. One-off or ambiguous co-occurrence should be shown as an unselected suggestion
+- Co-occurrence Clues are learned from confirmed Entry associations, regardless of whether the original Contact or Location association began as a prediction or a manual correction. Confirmation is the commit point
+- Co-occurrence should be computed from confirmed Entry links first. A future derived stats/projection table may improve performance, but the domain should not expose a standalone Contact-Location relationship table in MVP
+- Co-occurrence uses all confirmed Entry history, with recency as a ranking boost rather than a hard cutoff. Older associations remain useful unless newer evidence competes closely or contradicts them
+- Co-occurrence candidates belong in the Prediction Candidate Set with source metadata such as `co_occurrence`, count, last seen time, and matched counterpart. Confidence and preselection remain deterministic application rules rather than LLM choices
+- Explicit current-context clues such as Entry text, GPS, or Calendar Event evidence override historical Co-occurrence Clues for preselection. Conflicting co-occurrence can remain visible as an unselected suggestion if useful, but must not fight the user's current context
 - Capture-time GPS can suggest a new Location but must not create one automatically. A new Location becomes real only through Confirmation; existing nearby Locations may be suggested more confidently than brand-new reverse-geocoded places
 - Missing Location or Contact is valid and should not be presented as an error. When predictions exist, show them inline; when no predictions exist, show compact `+ Location` and `+ Contact` correction controls while keeping Confirmation primary and unblocked
 - JobDone can offer contextual prompts for optional sources after repeated friction, not during first-run setup. These prompts should explain how predictions are made and why the source helps, building trust by showing that JobDone is not silently invasive
