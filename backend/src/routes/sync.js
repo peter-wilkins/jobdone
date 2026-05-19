@@ -12,6 +12,9 @@ function validateTagLabel(value) {
     .trim();
   if (!label) return { valid: false, error: 'Tag label required' };
   if (label.length > 40) return { valid: false, error: 'Tag label too long' };
+  if (/\b(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above)\s+instructions?\b/i.test(label)) {
+    return { valid: false, error: 'Tag label contains unsafe characters' };
+  }
   if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u.test(label)) {
     return { valid: false, error: 'Tag label contains unsafe characters' };
   }
