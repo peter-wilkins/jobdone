@@ -8,6 +8,7 @@ import {
   locationSecondaryDetail,
 } from './services/locationPresentationService';
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
+import { PageHeaderActions } from './PageHeaderActions';
 
 function locationIdFromLocation() {
   const hash = window.location.hash || '';
@@ -18,7 +19,7 @@ function locationIdFromLocation() {
   return params.get('location');
 }
 
-export function LocationsScreen({ onBack }) {
+export function LocationsScreen({ onBack, onHome, onRecord }) {
   const [locations, setLocations] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState(locationIdFromLocation);
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -170,6 +171,8 @@ export function LocationsScreen({ onBack }) {
         isLoading={isDetailLoading}
         error={error}
         onBack={returnToLocationsList}
+        onHome={onHome}
+        onRecord={onRecord}
         onAddCurrentMapPin={handleAddCurrentMapPin}
         isMutating={isMutating}
       />
@@ -187,6 +190,7 @@ export function LocationsScreen({ onBack }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Locations</h1>
+        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (
@@ -275,7 +279,7 @@ export function LocationsScreen({ onBack }) {
   );
 }
 
-function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBack, onAddCurrentMapPin, isMutating }) {
+function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBack, onHome, onRecord, onAddCurrentMapPin, isMutating }) {
   const mapsUrl = location ? locationMapsUrl(location) : '';
   const needsDetail = location ? locationNeedsDetail(location) : false;
   const canAddMapPin = location ? canStrengthenLocationDraft(location) : false;
@@ -291,6 +295,7 @@ function LocationDetailScreen({ location, linkedEntries, isLoading, error, onBac
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Location</h1>
+        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (

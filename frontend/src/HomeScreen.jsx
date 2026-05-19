@@ -97,10 +97,11 @@ function locationDraftFromCandidate(candidate) {
   };
 }
 
-export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false }) {
+export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = false, recordRequestId = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const processingIdsRef = useRef(new Set());
+  const handledRecordRequestRef = useRef(0);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -379,6 +380,19 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       setIsStartingRecording(false);
     }
   };
+
+  useEffect(() => {
+    if (!recordRequestId || handledRecordRequestRef.current === recordRequestId) return;
+    if (isLoading || activeQuery || isRecording || isStartingRecording || isStoppingRecording) return;
+    if (document.visibilityState !== 'visible') return;
+
+    handledRecordRequestRef.current = recordRequestId;
+    const timer = window.setTimeout(() => {
+      startRecording({ flash: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordRequestId, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
 
   useEffect(() => {
     const isForegroundReturn = foregroundReturnCount > handledForegroundReturnRef.current;

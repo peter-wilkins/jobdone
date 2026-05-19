@@ -30,6 +30,7 @@ function App() {
   const [canAutoStartHome] = useState(isPlainHomeOpen);
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [recordRequestId, setRecordRequestId] = useState(0);
 
   /**
    * Push unsynced local confirmed data to cloud, then pull cloud data not yet on this device.
@@ -151,31 +152,38 @@ function App() {
     setScreen(newScreen);
   };
 
+  const startRecordingFromShortcut = () => {
+    diagnosticService.record('record_shortcut_used', { from: screen });
+    setRecordRequestId(id => id + 1);
+    window.history.replaceState({}, '', '/');
+    setScreen('home');
+  };
+
   if (screen === 'feedback') {
-    return <FeedbackScreen onBack={() => navigateTo('home')} />;
+    return <FeedbackScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'inbox') {
-    return <InboxScreen onBack={() => navigateTo('home')} />;
+    return <InboxScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'contacts') {
-    return <ContactsScreen onBack={() => navigateTo('home')} />;
+    return <ContactsScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'locations') {
-    return <LocationsScreen onBack={() => navigateTo('home')} />;
+    return <LocationsScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
   }
 
   if (screen === 'share-target') {
-    return <ShareTargetScreen onBack={() => navigateTo('home')} user={user} />;
+    return <ShareTargetScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
   }
 
   if (screen === 'login') {
-    return <LoginScreen onBack={() => navigateTo('home')} user={user} />;
+    return <LoginScreen onBack={() => navigateTo('home')} onHome={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
   }
 
-  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} canAutoStart={canAutoStartHome} />;
+  return <HomeScreen onNavigate={navigateTo} user={user} refreshKey={refreshKey} canAutoStart={canAutoStartHome} recordRequestId={recordRequestId} />;
 }
 
 export default App;

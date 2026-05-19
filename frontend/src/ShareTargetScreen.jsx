@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
 import { parseContactPayload, buildContactSummary, summarizeContactConflicts, getContactIdentity } from './services/contactParser';
+import { PageHeaderActions } from './PageHeaderActions';
 
 function payloadPreview(payload) {
   if (payload.type === 'unsupported_file') {
@@ -91,7 +92,7 @@ async function loadContactDrafts(capture) {
   return drafts;
 }
 
-export function ShareTargetScreen({ onBack, user }) {
+export function ShareTargetScreen({ onBack, onHome, onRecord, user }) {
   const [capture, setCapture] = useState(null);
   const [contactDrafts, setContactDrafts] = useState([]);
   const captureId = new URLSearchParams(window.location.search).get('id');
@@ -268,6 +269,7 @@ export function ShareTargetScreen({ onBack, user }) {
             ←
           </button>
           <h1 className="text-2xl font-light text-gray-900">Review Share</h1>
+          <PageHeaderActions onHome={onHome} onRecord={onRecord} />
         </div>
         <div className="flex-1 flex items-center justify-center">
           <p className="text-gray-400 text-sm">Loading...</p>
@@ -287,6 +289,7 @@ export function ShareTargetScreen({ onBack, user }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Review Share</h1>
+        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       {error && (

@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { authService } from './services/authService';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
+import { PageHeaderActions } from './PageHeaderActions';
 
-export function LoginScreen({ onBack, user }) {
+export function LoginScreen({ onBack, onHome, onRecord, user }) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,6 +58,7 @@ export function LoginScreen({ onBack, user }) {
           ←
         </button>
         <h1 className="text-2xl font-light text-gray-900">Account</h1>
+        <PageHeaderActions onHome={onHome} onRecord={onRecord} />
       </div>
 
       <div className="flex-1 flex flex-col justify-center px-8">
