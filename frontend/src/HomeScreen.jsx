@@ -33,17 +33,29 @@ function reviewText(entry) {
 }
 
 function containsContactName(entry, contact) {
-  const haystack = ` ${reviewText(entry)} `;
   const name = String(contact?.displayName || '')
     .normalize('NFKC')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-  return Boolean(name) && haystack.includes(` ${name} `);
+  return Boolean(name) && ` ${reviewText(entry)} `.includes(` ${name} `);
 }
 
-function localContactCandidate(contact) {
+function contactConfidenceForEntry(entry, contact) {
+  if (containsContactName(entry, contact)) return 'strong';
+  const firstName = String(contact?.displayName || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)[0]
+    ?.toLowerCase();
+  if (firstName && ` ${reviewText(entry)} `.includes(` ${firstName} `)) return 'medium';
+  return 'weak';
+}
+
+function localContactCandidate(contact, confidence = 'medium') {
   const label = String(contact.displayName || '').trim();
   if (!contact.id || !label) return null;
   return {
@@ -56,6 +68,8 @@ function localContactCandidate(contact) {
     normalizedPhones: contact.normalizedPhones || [],
     normalizedEmails: contact.normalizedEmails || [],
     source: 'local_contacts',
+    confidence,
+    visible: confidence !== 'weak',
   };
 }
 
@@ -214,11 +228,11 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
         try {
           const localContacts = await dbService.getContacts('confirmed');
           localContactCandidates = localContacts
-            .filter(contact => containsContactName(entry, contact))
-            .map(localContactCandidate)
+            .map(contact => localContactCandidate(contact, contactConfidenceForEntry(entry, contact)))
+            .filter(candidate => candidate?.visible)
             .filter(Boolean)
             .slice(0, 5);
-          localMatchedContact = localContactCandidates[0] || null;
+          localMatchedContact = localContactCandidates.find(candidate => candidate.confidence === 'strong') || null;
 
           const contextClues = entry.captureId
             ? await dbService.getContextCluesForCapture(entry.captureId)

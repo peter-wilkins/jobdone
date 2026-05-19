@@ -51,11 +51,13 @@ describe('Structure prediction candidate set', () => {
       now: NOW,
     });
 
-    assert.equal(candidateSet.locations.length, 5);
-    assert.equal(candidateSet.contacts.length, 5);
+    assert.equal(candidateSet.locations.length, 1);
+    assert.equal(candidateSet.contacts.length, 1);
     assert.equal(candidateSet.tags.length, 12);
     assert.equal(candidateSet.locations[0].label, '14 Bell Street');
+    assert.equal(candidateSet.locations[0].confidence, 'strong');
     assert.equal(candidateSet.contacts[0].label, 'Sarah Jenkins');
+    assert.equal(candidateSet.contacts[0].confidence, 'strong');
     assert.ok(candidateSet.tags.some(tag => tag.label === 'Boiler Service'));
     assert.ok(candidateSet.tags.some(tag => tag.label === 'Expansion Vessel'));
   });
@@ -126,6 +128,7 @@ describe('Structure prediction candidate set', () => {
 
     assert.equal(candidateSet.locations[0].label, 'Current location');
     assert.equal(candidateSet.locations[0].source, 'device_location');
+    assert.equal(candidateSet.locations[0].confidence, 'medium');
     assert.equal(candidateSet.locations[0].latitude, 53.3498);
     assert.equal(candidateSet.locations[0].longitude, -6.2603);
   });
@@ -162,6 +165,67 @@ describe('Structure prediction candidate set', () => {
     });
 
     assert.equal(candidateSet.locations[0].id, 'near');
+    assert.equal(candidateSet.locations[0].confidence, 'medium');
+  });
+
+  test('marks exact Location label matches as strong and filters weak Locations', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Boiler service at 14 Bell Street' },
+      locations: [
+        { id: 'exact', display_name: '14 Bell Street', updated_at: NOW.toISOString() },
+        { id: 'weak', display_name: 'Old Far Site', updated_at: NOW.toISOString() },
+      ],
+      now: NOW,
+    });
+
+    assert.equal(candidateSet.locations.length, 1);
+    assert.equal(candidateSet.locations[0].id, 'exact');
+    assert.equal(candidateSet.locations[0].confidence, 'strong');
+  });
+
+  test('marks exact Contact full-name matches as strong and first-name-only as medium', () => {
+    const fullNameSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah Jenkins about the boiler' },
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      now: NOW,
+    });
+    const firstNameSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah about the boiler' },
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      now: NOW,
+    });
+
+    assert.equal(fullNameSet.contacts[0].confidence, 'strong');
+    assert.equal(firstNameSet.contacts[0].confidence, 'medium');
+  });
+
+  test('does not preselect medium GPS-only Location or first-name-only Contact predictions', () => {
+    const candidateSet = buildPredictionCandidateSet({
+      entryData: { summary: 'Spoke to Sarah about the boiler' },
+      contextClues: [{
+        kind: 'device_location',
+        source: 'device_location',
+        payload: {
+          locationText: 'Current location',
+          latitude: 53.3498,
+          longitude: -6.2603,
+        },
+      }],
+      contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
+      now: NOW,
+    });
+
+    const prediction = normalizeStructuredPredictionResponse({
+      locationIds: [candidateSet.locations[0].id],
+      contactIds: [candidateSet.contacts[0].id],
+      tagIds: [],
+      proposedTag: null,
+    }, candidateSet);
+
+    assert.equal(candidateSet.locations[0].confidence, 'medium');
+    assert.equal(candidateSet.contacts[0].confidence, 'medium');
+    assert.deepEqual(prediction.locationIds, []);
+    assert.deepEqual(prediction.contactIds, []);
   });
 
   test('keeps LLM-bound candidate data inside structured JSON request', () => {
@@ -191,7 +255,7 @@ describe('Structure prediction candidate set', () => {
 
   test('normalizes structured prediction response to known candidates and safe proposed Tag', () => {
     const candidateSet = buildPredictionCandidateSet({
-      entryData: { summary: 'Boiler service' },
+      entryData: { summary: 'Boiler service at 14 Bell Street for Sarah Jenkins' },
       locations: [{ id: 'loc-1', display_name: '14 Bell Street', updated_at: NOW.toISOString() }],
       contacts: [{ id: 'contact-1', display_name: 'Sarah Jenkins', updated_at: NOW.toISOString() }],
       tagVocabulary: [{

@@ -19,6 +19,26 @@ function key(value) {
   return compactText(value).toLowerCase();
 }
 
+function normalizedWords(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function containsExactPhrase(evidenceText, label) {
+  const labelWords = normalizedWords(label);
+  if (!evidenceText || labelWords.length === 0) return false;
+  return ` ${evidenceText} `.includes(` ${labelWords.join(' ')} `);
+}
+
+function containsFirstNameOnly(evidenceText, label) {
+  const words = normalizedWords(label);
+  if (words.length < 2 || !evidenceText) return false;
+  return ` ${evidenceText} `.includes(` ${words[0]} `);
+}
+
 export function validateCandidateTagLabel(value) {
   if (/[\p{C}]/u.test(String(value || ''))) return null;
   const label = compactText(value);
@@ -98,11 +118,12 @@ function clueText(clue = {}) {
 }
 
 function buildEvidenceText({ entryData = {}, contextClues = [] }) {
-  return [
+  const text = [
     entryData.summary,
     entryData.transcript,
     ...contextClues.map(clueText),
-  ].map(compactText).filter(Boolean).join(' ').toLowerCase();
+  ].map(compactText).filter(Boolean).join(' ');
+  return normalizedWords(text).join(' ');
 }
 
 function textScore(label, evidenceText) {
@@ -115,6 +136,7 @@ function textScore(label, evidenceText) {
 
 function sortAndLimit(candidates, limit) {
   return candidates
+    .filter(candidate => candidate.visible !== false)
     .sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label)))
     .slice(0, limit)
     .map(({ score, ...candidate }) => candidate);
@@ -124,6 +146,10 @@ function normalizeLocationCandidate(location = {}, evidenceText, now, deviceLoca
   const label = compactText(location.display_name || location.displayName || location.place_text || location.placeText);
   if (!label) return null;
   const recentBoost = Math.max(0, 8 - daysSince(location.updated_at || location.created_at, now) / 14);
+  const exactMatch = containsExactPhrase(evidenceText, label);
+  const proximityBoost = proximityScore(location, deviceLocationClues);
+  const partialScore = textScore(label, evidenceText);
+  const confidence = exactMatch ? 'strong' : proximityBoost > 0 || partialScore > 0 ? 'medium' : 'weak';
   return {
     id: String(location.id || location.local_id || label),
     label,
@@ -131,7 +157,9 @@ function normalizeLocationCandidate(location = {}, evidenceText, now, deviceLoca
     latitude: numericCoordinate(location.latitude),
     longitude: numericCoordinate(location.longitude),
     source: 'location_history',
-    score: textScore(label, evidenceText) + recentBoost + proximityScore(location, deviceLocationClues),
+    confidence,
+    visible: confidence !== 'weak',
+    score: partialScore + recentBoost + proximityBoost,
   };
 }
 
@@ -139,11 +167,17 @@ function normalizeContactCandidate(contact = {}, evidenceText, now) {
   const label = compactText(contact.display_name || contact.displayName || contact.primary_email || contact.primaryEmail || contact.primary_phone || contact.primaryPhone);
   if (!label) return null;
   const recentBoost = Math.max(0, 8 - daysSince(contact.updated_at || contact.created_at, now) / 14);
+  const exactMatch = containsExactPhrase(evidenceText, label);
+  const firstNameOnly = containsFirstNameOnly(evidenceText, label);
+  const partialScore = textScore(label, evidenceText);
+  const confidence = exactMatch ? 'strong' : firstNameOnly || partialScore > 0 ? 'medium' : 'weak';
   return {
     id: String(contact.id || contact.local_id || label),
     label,
     source: 'contact_history',
-    score: textScore(label, evidenceText) + recentBoost,
+    confidence,
+    visible: confidence !== 'weak',
+    score: partialScore + recentBoost,
   };
 }
 
@@ -161,18 +195,23 @@ function normalizeTagVocabularyCandidate(item = {}, evidenceText, now) {
   if (useCount <= 1 && ageDays > STALE_ONE_OFF_DAYS && textScore(label, evidenceText) === 0) return null;
 
   const categoryName = compactText(tag.category_name || tag.categoryName || tag.tag_categories?.name || 'General') || 'General';
+  const exactMatch = containsExactPhrase(evidenceText, label);
+  const partialScore = textScore(label, evidenceText);
+  const confidence = exactMatch ? 'strong' : partialScore > 0 || useCount > 1 ? 'medium' : 'weak';
   return {
     id: String(tag.id || item.tag_id || label),
     label,
     categoryName,
     source: 'tag_vocabulary',
+    confidence,
+    visible: confidence !== 'weak',
     stats: {
       useCount,
       acceptedCount,
       rejectedCount,
       lastUsedAt: item.last_used_at || tag.updated_at || tag.created_at || null,
     },
-    score: textScore(label, evidenceText) + useCount + acceptedCount * 2 - rejectedCount * 3 + Math.max(0, 10 - ageDays / 7),
+    score: partialScore + useCount + acceptedCount * 2 - rejectedCount * 3 + Math.max(0, 10 - ageDays / 7),
   };
 }
 
@@ -193,6 +232,8 @@ function clueCandidates(contextClues = [], evidenceText) {
         latitude: numericCoordinate(payload.latitude),
         longitude: numericCoordinate(payload.longitude),
         source: isDeviceLocation ? 'device_location' : 'context_clue',
+        confidence: isDeviceLocation ? 'medium' : 'strong',
+        visible: true,
         score: isDeviceLocation ? 8 : 30 + textScore(locationLabel, evidenceText),
       });
     }
@@ -203,6 +244,8 @@ function clueCandidates(contextClues = [], evidenceText) {
         id: `clue-contact-${key(contactLabel)}`,
         label: contactLabel,
         source: 'context_clue',
+        confidence: 'strong',
+        visible: true,
         score: 30 + textScore(contactLabel, evidenceText),
       });
     }
@@ -216,6 +259,8 @@ function clueCandidates(contextClues = [], evidenceText) {
         label,
         categoryName: 'General',
         source: 'context_clue',
+        confidence: 'strong',
+        visible: true,
         score: 30 + textScore(label, evidenceText),
       });
     }
@@ -264,6 +309,8 @@ export function buildPredictionCandidateSet({
 
   const seedCandidates = DOMAIN_SEED_TAGS.map(tag => ({
     ...tag,
+    confidence: textScore(tag.label, evidenceText) > 0 ? 'medium' : 'weak',
+    visible: textScore(tag.label, evidenceText) > 0,
     score: textScore(tag.label, evidenceText) + 1,
   }));
 
@@ -330,6 +377,8 @@ export function normalizeStructuredPredictionResponse(response = {}, candidateSe
   const locationIds = new Set(candidateSet.locations.map(candidate => candidate.id));
   const contactIds = new Set(candidateSet.contacts.map(candidate => candidate.id));
   const tagIds = new Set(candidateSet.tags.map(candidate => candidate.id));
+  const strongLocationIds = new Set(candidateSet.locations.filter(candidate => candidate.confidence === 'strong').map(candidate => candidate.id));
+  const strongContactIds = new Set(candidateSet.contacts.filter(candidate => candidate.confidence === 'strong').map(candidate => candidate.id));
 
   const proposedTag = response.proposedTag?.label
     ? {
@@ -339,8 +388,8 @@ export function normalizeStructuredPredictionResponse(response = {}, candidateSe
     : null;
 
   return {
-    locationIds: (response.locationIds || []).filter(id => locationIds.has(id)).slice(0, 1),
-    contactIds: (response.contactIds || []).filter(id => contactIds.has(id)).slice(0, 1),
+    locationIds: (response.locationIds || []).filter(id => locationIds.has(id) && strongLocationIds.has(id)).slice(0, 1),
+    contactIds: (response.contactIds || []).filter(id => contactIds.has(id) && strongContactIds.has(id)).slice(0, 1),
     tagIds: (response.tagIds || []).filter(id => tagIds.has(id)).slice(0, 5),
     proposedTag: proposedTag?.label ? proposedTag : null,
   };
