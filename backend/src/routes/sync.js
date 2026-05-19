@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, getLocations, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveLocation, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -40,6 +40,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
     saveEntryContacts: deps.saveEntryContacts ?? saveEntryContacts,
     saveEntryTags: deps.saveEntryTags ?? saveEntryTags,
+    saveLocation: deps.saveLocation ?? saveLocation,
     getLocations: deps.getLocations ?? getLocations,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
@@ -154,6 +155,23 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
   fastify.post('/api/sync/contacts', handleSaveContacts);
   fastify.get('/api/sync/contacts', handleGetContacts);
+
+  fastify.post('/api/sync/locations', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const locations = Array.isArray(request.body?.locations) ? request.body.locations : [];
+      const saved = [];
+      for (const location of locations) {
+        saved.push(await db.saveLocation(user.id, location));
+      }
+      return { success: true, locations: saved.filter(Boolean) };
+    } catch (error) {
+      console.error('Locations sync save error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to save locations' });
+    }
+  });
 
   fastify.get('/api/sync/locations', async (request, reply) => {
     const user = await auth(request, reply);

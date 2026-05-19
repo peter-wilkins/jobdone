@@ -598,6 +598,61 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
   return saved;
 }
 
+export async function saveLocation(userId, input = {}) {
+  if (!supabase) {
+    console.warn('[DB] Supabase not configured, skipping location save');
+    return null;
+  }
+
+  const location = normalizeLocation(input);
+  if (!location) return null;
+
+  const existingLocations = await getLocations(userId);
+  let row = null;
+  if (location.local_id) {
+    const { data: existing, error: existingError } = await supabase
+      .from('locations')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('local_id', location.local_id)
+      .limit(1);
+    if (existingError) throw existingError;
+    row = existing?.[0] || null;
+  }
+
+  if (!row) {
+    row = findReusableLocation(existingLocations, location);
+  }
+
+  if (!row) {
+    const { data, error } = await supabase
+      .from('locations')
+      .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await supabase
+    .from('locations')
+    .update({
+      status: location.status,
+      local_id: row.local_id || location.local_id,
+      display_name: location.display_name || row.display_name,
+      place_text: location.place_text || row.place_text,
+      address_text: location.address_text || row.address_text,
+      latitude: location.latitude ?? row.latitude,
+      longitude: location.longitude ?? row.longitude,
+      updated_at: location.updated_at,
+    })
+    .eq('id', row.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function saveEntryContacts(userId, entryId, contacts = []) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured, skipping contacts');

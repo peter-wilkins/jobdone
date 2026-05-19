@@ -30,6 +30,7 @@ async function buildApp(deps = {}) {
     saveEntryContacts: async () => [],
     saveEntryTags: async () => [],
     getLocations: async () => [],
+    saveLocation: async () => null,
     deleteUserData: async () => ({ success: true }),
     ...deps,
   });
@@ -516,6 +517,41 @@ describe('SyncRoute Contacts sync', () => {
 });
 
 describe('SyncRoute Locations sync', () => {
+  test('saves standalone location updates for authenticated user', async () => {
+    let saveArgs;
+    const savedLocation = {
+      id: 'cloud-location-1',
+      local_id: 'location-local-1',
+      display_name: '14 Bell Street',
+      latitude: 53.3498,
+      longitude: -6.2603,
+    };
+    const app = await buildApp({
+      saveLocation: async (userId, location) => {
+        saveArgs = { userId, location };
+        return savedLocation;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/locations',
+      payload: {
+        locations: [{
+          id: 'location-local-1',
+          displayName: '14 Bell Street',
+          latitude: 53.3498,
+          longitude: -6.2603,
+        }],
+      },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(saveArgs.userId, 'user-1');
+    assert.equal(saveArgs.location.id, 'location-local-1');
+    assert.equal(JSON.parse(res.body).locations[0].id, 'cloud-location-1');
+  });
+
   test('fetches cloud locations for authenticated user', async () => {
     const cloudLocations = [{ id: 'location-cloud-1', display_name: '14 Bell Street' }];
     const app = await buildApp({

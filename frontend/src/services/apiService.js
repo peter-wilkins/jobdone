@@ -168,6 +168,19 @@ export class APIService {
     return response.json();
   }
 
+  async syncLocations(locations) {
+    const response = await fetch(`${API_BASE_URL}/api/sync/locations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ locations }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Locations sync failed');
+    }
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/sync/contacts`, {

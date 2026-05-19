@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
+import { syncService } from './services/syncService';
 import { locationClueService } from './services/locationClueService';
 import {
   locationNeedsDetail,
@@ -154,6 +155,15 @@ export function LocationsScreen({ onBack, onRecord }) {
         longitude: strengthened.longitude,
       });
       setSelectedLocation(updated);
+      try {
+        const result = await syncService.syncLocations([updated]);
+        const cloudLocation = result?.locations?.[0];
+        if (cloudLocation?.id) {
+          await dbService.markLocationSynced(updated.id, cloudLocation.id);
+        }
+      } catch (syncErr) {
+        console.warn('[Locations] Location map pin saved locally but did not sync:', syncErr);
+      }
       await loadLocations();
     } catch (err) {
       console.error('Failed to add current map pin:', err);

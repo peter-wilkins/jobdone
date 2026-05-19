@@ -1755,6 +1755,7 @@ export class DBService {
           ...location,
           ...updates,
           id: location.id,
+          syncStatus: 'pending',
           updated_at: new Date().toISOString(),
         };
         const put = store.put(updated);
@@ -1776,7 +1777,7 @@ export class DBService {
 
   async getLocationsUnsynced() {
     const locations = await this.getLocations('confirmed');
-    return locations.filter(location => !location.remoteId);
+    return locations.filter(location => location.syncStatus !== 'synced' || !location.remoteId);
   }
 
   async getLocationsForEntry(entryId) {
@@ -1814,8 +1815,9 @@ export class DBService {
       req.onsuccess = () => {
         const location = req.result;
         if (!location) { reject(new Error('Location not found')); return; }
-        location.remoteId = remoteId;
-        location.updated_at = new Date().toISOString();
+        location.remoteId = remoteId || location.remoteId;
+        location.syncStatus = 'synced';
+        location.synced_at = new Date().toISOString();
         const put = store.put(location);
         put.onsuccess = () => resolve(location);
         put.onerror = () => reject(new Error('Failed to mark location synced'));
@@ -1826,8 +1828,17 @@ export class DBService {
 
   async upsertCloudLocation(cloudLocation) {
     const db = await this.ensureDb();
+    const localId = cloudLocation.local_id || null;
+    const existing = localId ? await this.getLocation(localId) : null;
+    if (
+      existing?.syncStatus === 'pending' &&
+      new Date(existing.updated_at || 0) > new Date(cloudLocation.updated_at || cloudLocation.created_at || 0)
+    ) {
+      return existing;
+    }
+
     const locationData = {
-      id: cloudLocation.local_id || `location-cloud-${cloudLocation.id}`,
+      id: localId || existing?.id || `location-cloud-${cloudLocation.id}`,
       displayName: cloudLocation.display_name || '',
       placeText: cloudLocation.place_text || cloudLocation.display_name || '',
       addressText: cloudLocation.address_text || '',
@@ -1836,6 +1847,8 @@ export class DBService {
       status: cloudLocation.status || 'confirmed',
       normalizedDisplayName: normalizeLocationKey(cloudLocation.display_name || cloudLocation.place_text || ''),
       remoteId: cloudLocation.id,
+      syncStatus: 'synced',
+      synced_at: new Date().toISOString(),
       created_at: cloudLocation.created_at || new Date().toISOString(),
       updated_at: cloudLocation.updated_at || cloudLocation.created_at || new Date().toISOString(),
     };

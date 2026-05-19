@@ -90,6 +90,15 @@ function App() {
         await dbService.upsertCloudContact(cloudContact);
       }
 
+      const unsyncedLocations = await dbService.getLocationsUnsynced();
+      const locationSyncResult = await syncService.syncLocations(unsyncedLocations);
+      const syncedLocations = locationSyncResult?.locations || [];
+      if (syncedLocations.length) {
+        for (const cloudLocation of syncedLocations) {
+          await dbService.upsertCloudLocation(cloudLocation);
+        }
+      }
+
       const cloudLocations = await apiService.getCloudLocations();
       for (const cloudLocation of cloudLocations) {
         await dbService.upsertCloudLocation(cloudLocation);

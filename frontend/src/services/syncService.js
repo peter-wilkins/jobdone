@@ -75,6 +75,24 @@ export class SyncService {
     return response;
   }
 
+  async syncLocations(locations) {
+    if (!authService.isLoggedIn() || !locations.length) return null;
+
+    return apiService.syncLocations(locations.map(location => ({
+      id: location.id,
+      localId: location.id,
+      status: location.status,
+      displayName: location.displayName,
+      placeText: location.placeText,
+      addressText: location.addressText,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      remoteId: location.remoteId,
+      created_at: location.created_at,
+      updated_at: location.updated_at,
+    })));
+  }
+
 }
 
 export const syncService = new SyncService();
