@@ -14,6 +14,11 @@ import {
 } from './services/contactPickerService';
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
 import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
+import {
+  getInstallState,
+  listenForInstallPrompt,
+  requestInstall,
+} from './services/installPromptService';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -142,6 +147,8 @@ export function HomeScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled, setFastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
+  const [installState, setInstallState] = useState(getInstallState);
+  const [installMessage, setInstallMessage] = useState(null);
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -198,6 +205,8 @@ export function HomeScreen({
       setUpdateStatus(null);
     });
   }, []);
+
+  useEffect(() => listenForInstallPrompt(setInstallState), []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -430,6 +439,19 @@ export function HomeScreen({
   const handleFastCaptureChange = (enabled) => {
     preferencesService.setFastCaptureEnabled(enabled);
     setFastCaptureEnabled(enabled);
+  };
+
+  const handleInstall = async () => {
+    setInstallMessage(null);
+    const result = await requestInstall();
+    if (result.mode === 'manual') {
+      setInstallMessage('In Chrome, open the menu and choose Install app. You can keep using JobDone here too.');
+    } else if (result.outcome === 'dismissed') {
+      setInstallMessage('No problem. You can install from this menu later.');
+    } else {
+      setMenuOpen(false);
+    }
+    setInstallState(getInstallState());
   };
 
   const handleApplyUpdate = async () => {
@@ -1820,6 +1842,19 @@ export function HomeScreen({
                 >
                   Log in
                 </button>
+              )}
+              {installState.canShowAction && (
+                <div className="border-t border-gray-100">
+                  <button
+                    onClick={handleInstall}
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    Install JobDone
+                  </button>
+                  {installMessage && (
+                    <p className="px-4 pb-3 text-xs leading-5 text-gray-500">{installMessage}</p>
+                  )}
+                </div>
               )}
               <button
                 onClick={() => { setMenuOpen(false); onNavigate('inbox'); }}
