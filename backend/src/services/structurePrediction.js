@@ -515,6 +515,12 @@ export function buildStructuredPredictionRequest({ entryData = {}, candidateSet 
         chooseOnlyCandidateIds: true,
         proposedTagAllowedOnlyWhenNoCandidateFits: true,
         proposedTagValidation: 'letters, numbers, spaces, hyphens, underscores, max 40 chars',
+        locationAddressMatching: [
+          'Treat address-like phrases as strong Location evidence, including house or unit numbers, street names, building/site names, villages, towns, landmarks, and UK/Irish postcodes.',
+          'Prefer an existing Location candidate when its label, placeText, addressText, postcode, or distinctive address fragment appears in the entry summary or transcript.',
+          'Preserve the user-confirmed Location identity; do not invent corrected addresses or choose a Location only because it is geographically nearby.',
+          'If multiple Location candidates could match the same address fragment, choose only the clearly best candidate; otherwise leave locationIds empty for user review.',
+        ],
       },
     },
     responseSchema: {

@@ -437,6 +437,8 @@ describe('Structure prediction candidate set', () => {
     assert.equal(request.task, 'rank_entry_structure_candidates');
     assert.equal(request.input.candidates, candidateSet);
     assert.equal(request.input.rules.chooseOnlyCandidateIds, true);
+    assert.ok(request.input.rules.locationAddressMatching.some(rule => rule.includes('postcodes')));
+    assert.ok(request.input.rules.locationAddressMatching.some(rule => rule.includes('do not invent corrected addresses')));
     assert.equal(request.responseSchema.type, 'object');
   });
 

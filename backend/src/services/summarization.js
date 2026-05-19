@@ -21,13 +21,16 @@ Important:
 - Write the summary in the plumber's voice (first person, casual but professional)
 - Only include information that was explicitly mentioned
 - If something wasn't mentioned, don't guess or estimate
+- Preserve any spoken addresses, postcodes, building names, site names, street names, villages, towns, or landmarks as close to verbatim as possible
+- If the transcript includes an address-like phrase, include it in the summary even if the rest of the job detail is brief
+- Do not "correct" or complete partial addresses; keep uncertain address fragments as spoken
 - Keep the summary 1-2 sentences, conversational`;
 
     const userPrompt = `Here's a voice transcript from a plumber about a job they just completed:
 
 "${transcript}"
 
-Please provide a clean 1-2 sentence summary written in their voice.
+Please provide a clean 1-2 sentence summary written in their voice. Preserve any address, postcode, building/site name, street, village, town, or landmark mentioned in the transcript.
 
 Format your response as:
 SUMMARY: [summary here]`;
