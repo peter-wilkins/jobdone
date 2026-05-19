@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   contactDraftFromManualInput,
   contactDraftFromPickerResult,
+  isContactPickerSupported,
   validateContactDraftForCreation,
 } from './contactPickerService.js';
 
@@ -36,4 +37,8 @@ test('manual Contact creation accepts deliberate phone evidence', () => {
 
   assert.equal(draft.primaryPhone, '07700900123');
   assert.deepEqual(validateContactDraftForCreation(draft), { valid: true, error: null });
+});
+
+test('unsupported browsers cleanly report no native Contact Picker', () => {
+  assert.equal(isContactPickerSupported(), false);
 });

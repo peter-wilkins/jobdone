@@ -13,7 +13,7 @@ function contactValue(value, normalizer) {
 }
 
 export function isContactPickerSupported() {
-  return Boolean(navigator.contacts?.select);
+  return typeof navigator !== 'undefined' && Boolean(navigator.contacts?.select);
 }
 
 export function contactDraftFromPickerResult(result = {}) {
