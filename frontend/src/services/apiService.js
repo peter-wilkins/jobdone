@@ -4,6 +4,7 @@
 
 import { authService } from './authService.js';
 import { normalizeRecallEntry } from './entryMapper.js';
+import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -224,14 +225,18 @@ export class APIService {
 
   /**
    * Save confirmed feedback to cloud
-   * @param {{ userId: string, transcript: string, created_at: string, diagnostic_bundle?: Object }} payload
+   * @param {{ transcript: string, created_at: string, diagnostic_bundle?: Object }} payload
    */
   async saveFeedback(payload) {
     try {
+      const body = {
+        ...payload,
+        anonymous_device_id: getFeedbackDeviceId(),
+      };
       const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/feedback/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const error = await response.json();

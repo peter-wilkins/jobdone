@@ -129,6 +129,15 @@ export function FeedbackScreen({ onBack, onRecord }) {
     }
   }, []);
 
+  const syncFeedbackItem = useCallback(async (item) => {
+    await apiService.saveFeedback({
+      transcript: item.transcript,
+      created_at: item.created_at,
+      diagnostic_bundle: item.diagnosticBundle,
+    });
+    return dbService.markFeedbackSynced(item.id);
+  }, []);
+
   useEffect(() => {
     diagnosticService.record('report_issue_opened', { build: BUILD_ID });
     const load = async () => {
@@ -224,33 +233,42 @@ export function FeedbackScreen({ onBack, onRecord }) {
       setError(null);
       const item = inProgress.find(f => f.id === id);
       await dbService.confirmFeedback(id);
+      let syncSuccess = false;
 
-      // Sync to cloud (best-effort, requires login)
+      // Sync to cloud. Feedback accepts anonymous reports when auth is unavailable.
       try {
-        if (authService.isLoggedIn()) {
-          await apiService.saveFeedback({
-            transcript: item.transcript,
-            created_at: item.created_at,
-            diagnostic_bundle: item.diagnosticBundle,
-          });
-          await dbService.markFeedbackSynced(id);
-        }
+        await syncFeedbackItem(item);
+        syncSuccess = true;
       } catch (syncErr) {
         console.warn('Feedback sync failed:', syncErr);
       }
 
       setInProgress(prev => prev.filter(f => f.id !== id));
       setSubmitted(prev =>
-        [...prev, { ...item, status: 'confirmed' }]
+        [...prev, { ...item, status: 'confirmed', syncStatus: syncSuccess ? 'synced' : 'pending' }]
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       );
       diagnosticService.record('issue_report_submitted', {
         source: item.audioDuration ? 'audio' : 'typed',
-        synced: authService.isLoggedIn(),
+        synced: syncSuccess,
+        identity: authService.isLoggedIn() ? 'signed_in' : 'anonymous',
       });
     } catch (err) {
       console.error('Failed to confirm feedback:', err);
       setError('Failed to submit feedback');
+    }
+  };
+
+  const handleSendPending = async (id) => {
+    try {
+      setError(null);
+      const item = submitted.find(f => f.id === id);
+      if (!item) return;
+      const synced = await syncFeedbackItem(item);
+      setSubmitted(prev => prev.map(f => f.id === id ? synced : f));
+    } catch (err) {
+      console.warn('Pending feedback sync failed:', err);
+      setError('Could not send yet. Try again later.');
     }
   };
 
@@ -445,7 +463,20 @@ export function FeedbackScreen({ onBack, onRecord }) {
               {submitted.map(item => (
                 <div key={item.id} className="py-3 border-b border-gray-200 last:border-b-0">
                   <p className="text-sm text-gray-900">{item.transcript}</p>
-                  <p className="text-xs text-gray-400 mt-1">{formatTime(new Date(item.created_at))}</p>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-400">{formatTime(new Date(item.created_at))}</p>
+                    {item.syncStatus === 'pending' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSendPending(item.id)}
+                        className="text-xs font-medium text-amber-700 hover:text-amber-900"
+                      >
+                        Waiting to send
+                      </button>
+                    ) : (
+                      <p className="text-xs text-gray-400">Sent</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

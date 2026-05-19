@@ -1041,17 +1041,28 @@ export function createAnonymousSession() {
 /**
  * Save an issue report to Supabase
  */
-export async function saveFeedback(userId, { transcript, created_at, diagnostic_bundle }) {
+export async function saveFeedback(userId, {
+  transcript,
+  created_at,
+  diagnostic_bundle,
+  identity_class = userId ? 'signed_in' : 'anonymous',
+  anonymous_device_id = null,
+  abuse_key_hash = null,
+} = {}) {
   if (!supabase) {
     console.warn('[DB] Supabase not configured, skipping feedback save');
     return null;
   }
 
   try {
+    const diagnosticBundle = diagnostic_bundle || {};
     const row = {
       user_id: userId,
+      identity_class,
+      anonymous_device_id,
+      abuse_key_hash,
       transcript,
-      diagnostic_bundle: diagnostic_bundle || {},
+      diagnostic_bundle: diagnosticBundle,
       created_at: new Date(created_at).toISOString(),
     };
 
@@ -1060,11 +1071,37 @@ export async function saveFeedback(userId, { transcript, created_at, diagnostic_
       .insert([row])
       .select();
 
+    if (error && /identity_class|anonymous_device_id|abuse_key_hash|user_id/i.test(String(error.message || ''))) {
+      console.warn('[DB] feedback identity columns missing; saving compatible report shape');
+      const compatibilityRow = {
+        user_id: userId || `anonymous:${anonymous_device_id || 'unknown'}`,
+        transcript: row.transcript,
+        diagnostic_bundle: {
+          ...diagnosticBundle,
+          feedback_identity: {
+            identity_class,
+            anonymous_device_id,
+          },
+        },
+        created_at: row.created_at,
+      };
+      const retry = await supabase
+        .from('feedback')
+        .insert([compatibilityRow])
+        .select();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error && String(error.message || '').includes('diagnostic_bundle')) {
       console.warn('[DB] feedback.diagnostic_bundle missing; saving report without diagnostics');
       const retry = await supabase
         .from('feedback')
-        .insert([{ user_id: row.user_id, transcript: row.transcript, created_at: row.created_at }])
+        .insert([{
+          user_id: row.user_id || `anonymous:${anonymous_device_id || 'unknown'}`,
+          transcript: row.transcript,
+          created_at: row.created_at,
+        }])
         .select();
       data = retry.data;
       error = retry.error;

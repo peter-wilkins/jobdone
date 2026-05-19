@@ -27,3 +27,15 @@ export async function requireAuth(request, reply) {
 
   return user;
 }
+
+/**
+ * Validate a Bearer JWT when present.
+ * Returns null for anonymous requests without writing a response.
+ */
+export async function optionalAuth(request, reply) {
+  const header = request.headers.authorization;
+
+  if (!header?.startsWith('Bearer ')) return null;
+
+  return requireAuth(request, reply);
+}

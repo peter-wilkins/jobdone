@@ -288,14 +288,20 @@ CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 -- 11. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id           TEXT NOT NULL,
+  user_id           TEXT,
+  identity_class    TEXT NOT NULL DEFAULT 'signed_in'
+                    CHECK (identity_class IN ('signed_in', 'anonymous')),
+  anonymous_device_id TEXT,
+  abuse_key_hash    TEXT,
   transcript        TEXT NOT NULL,
   diagnostic_bundle JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX feedback_user_id_idx    ON feedback(user_id);
-CREATE INDEX feedback_created_at_idx ON feedback(created_at DESC);
+CREATE INDEX feedback_user_id_idx              ON feedback(user_id);
+CREATE INDEX feedback_anonymous_device_id_idx  ON feedback(anonymous_device_id);
+CREATE INDEX feedback_abuse_key_hash_idx       ON feedback(abuse_key_hash);
+CREATE INDEX feedback_created_at_idx           ON feedback(created_at DESC);
 
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "backend_insert_feedback" ON feedback FOR INSERT WITH CHECK (TRUE);
