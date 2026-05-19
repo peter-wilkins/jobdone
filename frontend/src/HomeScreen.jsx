@@ -111,6 +111,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const [reviewTags, setReviewTags] = useState({});
   const [reviewStructure, setReviewStructure] = useState({});
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
+  const [confirmingIds, setConfirmingIds] = useState(new Set());
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
@@ -124,6 +125,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
   const handledForegroundReturnRef = useRef(0);
   const structurePredictionRequestedRef = useRef(new Set());
+  const confirmingIdsRef = useRef(new Set());
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -498,6 +500,10 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
   const isOffline = () => !navigator.onLine || !backendAvailable;
 
   const handleConfirm = async (id) => {
+    if (confirmingIdsRef.current.has(id)) return;
+    confirmingIdsRef.current.add(id);
+    setConfirmingIds(prev => new Set([...prev, id]));
+
     try {
       setError(null);
       const entry = entries.find(e => e.id === id);
@@ -628,6 +634,13 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
     } catch (err) {
       console.error('Failed to confirm entry:', err);
       setError('Failed to confirm entry');
+    } finally {
+      confirmingIdsRef.current.delete(id);
+      setConfirmingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -1228,6 +1241,7 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
       const contactOptions = reviewContactOptions[entry.id] || [];
       const contactSearch = reviewContactSearch[entry.id] || '';
       const manualContact = reviewManualContacts[entry.id] || { displayName: '', phone: '', email: '' };
+      const isConfirming = confirmingIds.has(entry.id);
       const tagCandidates = candidateSet.tags || [];
       const selectedTagIds = new Set(reviewSelectedTags[entry.id] || []);
       const tagGroups = tagCandidates.reduce((groups, tag) => {
@@ -1516,21 +1530,38 @@ export function HomeScreen({ onNavigate, user, refreshKey = 0, canAutoStart = fa
           {/* Intent toggle */}
           <button
             onClick={toggleIntent}
-            className="text-sm text-blue-600 underline mb-4 hover:text-blue-800 transition"
+            disabled={isConfirming}
+            className="text-sm text-blue-600 underline mb-4 hover:text-blue-800 transition disabled:text-gray-400 disabled:no-underline"
           >
             {isQuery ? 'Save as note instead' : 'Search instead'}
           </button>
           
+          {isConfirming && (
+            <div className="mb-3 flex items-center gap-2 rounded bg-blue-50 px-3 py-2 text-sm text-blue-700">
+              <span className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+              <span>{isQuery ? 'Starting search...' : user ? 'Saving and syncing...' : 'Saving locally...'}</span>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={() => handleConfirm(entry.id)}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
+              disabled={isConfirming}
+              className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:cursor-not-allowed disabled:bg-blue-300"
             >
-              {isQuery ? 'Search' : 'Confirm'}
+              {isConfirming ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  {isQuery ? 'Searching...' : 'Confirming...'}
+                </span>
+              ) : (
+                isQuery ? 'Search' : 'Confirm'
+              )}
             </button>
             <button
               onClick={() => handleReject(entry.id)}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
+              disabled={isConfirming}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
             >
               Reject
             </button>
