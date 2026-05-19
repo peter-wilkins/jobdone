@@ -1,6 +1,9 @@
+import { recentApiRequests } from './requestDiagnosticsService.js';
+
 const EVENT_STORAGE_KEY = 'jobdone-diagnostic-events';
 const MAX_EVENTS = 40;
-const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
+const ENV = import.meta.env || {};
+const BUILD_ID = ENV.VITE_DEPLOYMENT_ID || ENV.VITE_BUILD_ID || 'dev';
 
 const PRIVATE_KEYS = new Set([
   'audio',
@@ -97,6 +100,7 @@ export const diagnosticService = {
         available: backendAvailable,
       },
       recent_events: this.recentEvents(),
+      recent_api_requests: recentApiRequests(),
       privacy: {
         excludes: [
           'entry content',
