@@ -61,6 +61,7 @@ npm test
 - `POST /api/recall`
 - `POST /api/queries`
 - `POST /api/feedback/save`
+- `POST /api/crash-reports`
 - `POST /api/structure/predict`
 - `GET /api/locations/lookup`
 

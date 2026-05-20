@@ -122,3 +122,71 @@ describe('FeedbackRoute POST /api/feedback/save', () => {
     assert.equal(res.statusCode, 400);
   });
 });
+
+describe('FeedbackRoute POST /api/crash-reports', () => {
+  test('stores anonymous crash reports as typed feedback diagnostics', async () => {
+    let savedArgs;
+    const app = await buildApp({
+      optionalAuth: async () => null,
+      saveFeedback: async (userId, report) => {
+        savedArgs = { userId, report };
+        return { id: 'crash-1', ...report };
+      },
+      checkAnonymousFeedbackRateLimit: () => ({
+        allowed: true,
+        abuseKeyHash: 'crash-abuse-key',
+        resetAt: Date.now() + 1000,
+      }),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/crash-reports',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        anonymous_device_id: 'fbd_abcdefghijkl',
+        crash_report: {
+          crash_id: 'crash_123',
+          signature: 'TypeError:boom:app',
+          captured_at: '2026-05-20T10:00:00.000Z',
+          build_id: 'build-1',
+          route: { screen: 'home', path: '/', hash: '' },
+          error: {
+            name: 'TypeError',
+            message: 'Boom',
+            stack: 'TypeError: Boom\n    at App.jsx:1',
+          },
+          recent_request_ids: ['req_abcdefghijkl'],
+        },
+        diagnostic_bundle: {
+          build_id: 'build-1',
+          route: { screen: 'home' },
+          recent_events: [{ event: 'screen_open' }],
+        },
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(savedArgs.userId, null);
+    assert.equal(savedArgs.report.identity_class, 'anonymous');
+    assert.equal(savedArgs.report.anonymous_device_id, 'fbd_abcdefghijkl');
+    assert.equal(savedArgs.report.abuse_key_hash, 'crash-abuse-key');
+    assert.equal(savedArgs.report.transcript, 'Crash report: TypeError: Boom');
+    assert.equal(savedArgs.report.diagnostic_bundle.report_type, 'crash_report');
+    assert.equal(savedArgs.report.diagnostic_bundle.crash_report.error.message, 'Boom');
+    assert.deepEqual(savedArgs.report.diagnostic_bundle.crash_report.recent_request_ids, ['req_abcdefghijkl']);
+  });
+
+  test('rejects crash reports without a signature and message', async () => {
+    const app = await buildApp({ optionalAuth: async () => null });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/crash-reports',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ crash_report: { error: {} } }),
+    });
+
+    assert.equal(res.statusCode, 400);
+  });
+});

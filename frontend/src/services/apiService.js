@@ -250,6 +250,32 @@ export class APIService {
   }
 
   /**
+   * Save a privacy-bounded crash report to cloud.
+   * @param {{ crash_report: Object, diagnostic_bundle?: Object }} payload
+   */
+  async saveCrashReport(payload) {
+    try {
+      const body = {
+        ...payload,
+        anonymous_device_id: getFeedbackDeviceId(),
+      };
+      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/crash-reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save crash report');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Crash report save error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Save a query to the server
    * @param {string} text - Query text
    * @returns {Promise<Object>} Saved query
