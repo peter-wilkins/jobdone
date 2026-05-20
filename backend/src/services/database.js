@@ -1066,7 +1066,7 @@ export async function saveFeedback(userId, {
       abuse_key_hash,
       transcript,
       diagnostic_bundle: diagnosticBundle,
-      created_at: new Date(created_at).toISOString(),
+      created_at: new Date(created_at || Date.now()).toISOString(),
     };
 
     let { data, error } = await jobdoneDb
