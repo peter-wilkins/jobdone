@@ -18,16 +18,25 @@ dotenv.config();
 import readline from 'readline';
 import { createClient } from '@supabase/supabase-js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../src/services/embedding.js';
+import { createJobDoneDb } from '../src/services/postgresDb.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+const postgresUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY required');
 }
 
+if (!postgresUrl) {
+  throw new Error('SUPABASE_DB_URL or DATABASE_URL required');
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
-const jobdoneDb = supabase.schema(process.env.SUPABASE_DB_SCHEMA || 'jobdone');
+const jobdoneDb = createJobDoneDb({
+  connectionString: postgresUrl,
+  schema: process.env.SUPABASE_DB_SCHEMA || 'jobdone',
+});
 const embeddingService = getEmbeddingService();
 
 // ---------------------------------------------------------------------------

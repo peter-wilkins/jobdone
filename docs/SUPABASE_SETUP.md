@@ -1,6 +1,7 @@
 # Supabase Setup for JobDone
 
-This guide walks through setting up Supabase for cloud storage and sync.
+This guide walks through setting up Supabase Auth plus direct Postgres cloud
+storage and sync.
 
 ## 1. Create a Supabase Project
 
@@ -31,23 +32,24 @@ Manual dashboard fallback:
 5. Should see "Success" message
 
 The SQL creates a dedicated `jobdone` schema for app tables and functions.
-Expose that schema to the API:
-
-1. Go to **Settings** → **API**
-2. Add `jobdone` to **Exposed schemas**
-3. Keep `public` exposed if Supabase requires it for project defaults
+JobDone app data uses direct Postgres via the pooler URL, so the Supabase
+REST/Data API does not need to expose the `jobdone` schema.
 
 ## 3. Get Your Credentials
 
-1. Go to **Settings** → **API**
-2. Copy these:
+For login, go to **Settings** → **API** and copy:
    - **Project URL** → `SUPABASE_URL`
    - **anon public** key → `SUPABASE_KEY`
+
+For app data, use the Supabase pooler connection string from `~/.profile`:
+
+- `SUPABASE_DB_URL`
 
 Example:
 ```
 SUPABASE_URL=https://abcdef123456.supabase.co
 SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_DB_URL=postgresql://postgres.project-ref:password@aws-0-region.pooler.supabase.com:5432/postgres
 ```
 
 ## 4. Add to Backend
@@ -57,6 +59,7 @@ cd backend
 cat >> .env << 'EOF'
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
+SUPABASE_DB_URL=postgresql://postgres.project-ref:password@aws-0-region.pooler.supabase.com:5432/postgres
 # Optional; defaults to jobdone
 SUPABASE_DB_SCHEMA=jobdone
 EOF
@@ -73,7 +76,7 @@ You should see:
 🚀 JobDone server running at http://localhost:3000
 ```
 
-No error about Supabase means it's connected.
+No error about Postgres means cloud sync is connected.
 
 ## 7. Wire Frontend to Sync
 
@@ -111,11 +114,11 @@ Via Supabase dashboard:
 3. See all your data
 4. Filter by user_id to see specific user's jobs
 
-Via API:
+Via SQL:
+
 ```bash
-curl "https://your-project.supabase.co/rest/v1/entries?user_id=eq.USER_ID" \
-  -H "Accept-Profile: jobdone" \
-  -H "Authorization: Bearer YOUR_ANON_KEY"
+. ~/.profile
+psql "$SUPABASE_DB_URL" -c "select id, summary, created_at from jobdone.entries order by created_at desc limit 10;"
 ```
 
 ## Next: Frontend Sync Integration

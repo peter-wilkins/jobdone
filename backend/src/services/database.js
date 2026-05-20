@@ -1,19 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 import { rankStructuredRecallResults } from './recallRanking.js';
+import { createJobDoneDb } from './postgresDb.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+const postgresUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 export const JOBDONE_DB_SCHEMA = process.env.SUPABASE_DB_SCHEMA || 'jobdone';
 
+if (!postgresUrl) {
+  console.warn('[Database] Postgres not configured. Cloud sync disabled.');
+}
+
 if (!supabaseUrl || !supabaseKey) {
-  console.warn('[Database] Supabase not configured. Cloud sync disabled.');
+  console.warn('[Database] Supabase Auth not configured. Login disabled.');
 }
 
 const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
-export const jobdoneDb = supabase?.schema(JOBDONE_DB_SCHEMA) || null;
+export const jobdoneDb = createJobDoneDb({
+  connectionString: postgresUrl,
+  schema: JOBDONE_DB_SCHEMA,
+});
 
 function toVectorLiteral(embedding) {
   if (!Array.isArray(embedding)) return embedding ?? null;
@@ -197,7 +206,7 @@ export function normalizeContextClue(clue = {}) {
  * Save a confirmed entry to Supabase
  */
 export async function saveEntry(userId, entryData) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping save');
     return null;
   }
@@ -235,7 +244,7 @@ export async function saveEntry(userId, entryData) {
  * Find an existing confirmed entry by Capture ID.
  */
 export async function getEntryByCaptureId(userId, captureId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return null;
   }
@@ -266,7 +275,7 @@ export async function getEntryByCaptureId(userId, captureId) {
  * This makes cloud sync idempotent for retries from the same device.
  */
 export async function getEntryByCreatedAt(userId, createdAt) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return null;
   }
@@ -298,7 +307,7 @@ export async function getEntryByCreatedAt(userId, createdAt) {
  * Removes entries, queries, and feedback for the given user.
  */
 export async function deleteUserData(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping delete');
     return null;
   }
@@ -352,7 +361,7 @@ export async function deleteUserData(userId) {
  * Get all entries for a user
  */
 export async function getEntries(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
@@ -486,7 +495,7 @@ export async function getEntries(userId) {
 }
 
 export async function saveContextClues(userId, entryId, clues = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping context clues save');
     return [];
   }
@@ -529,7 +538,7 @@ export async function saveContextClues(userId, entryId, clues = []) {
 }
 
 export async function saveEntryLocations(userId, entryId, locations = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping locations save');
     return [];
   }
@@ -602,7 +611,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
 }
 
 export async function saveLocation(userId, input = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping location save');
     return null;
   }
@@ -657,7 +666,7 @@ export async function saveLocation(userId, input = {}) {
 }
 
 export async function saveEntryContacts(userId, entryId, contacts = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping contacts');
     return [];
   }
@@ -693,7 +702,7 @@ export async function saveEntryContacts(userId, entryId, contacts = []) {
 }
 
 export async function saveEntryTags(userId, entryId, tags = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping tags save');
     return [];
   }
@@ -824,7 +833,7 @@ export async function saveEntryTags(userId, entryId, tags = []) {
 }
 
 export async function saveContact(userId, contactData) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping contact save');
     return null;
   }
@@ -895,7 +904,7 @@ export async function saveContact(userId, contactData) {
 }
 
 export async function getContacts(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
@@ -911,7 +920,7 @@ export async function getContacts(userId) {
 }
 
 export async function getLocations(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
@@ -974,17 +983,17 @@ export function buildContactLocationCooccurrences(contactLinks = [], locationLin
 }
 
 export async function getContactLocationCooccurrences(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   const [{ data: contactLinks, error: contactError }, { data: locationLinks, error: locationError }] = await Promise.all([
-    supabase
+    jobdoneDb
       .from('entry_contacts')
       .select('entry_id, created_at, contacts(id, display_name)')
       .eq('user_id', userId),
-    supabase
+    jobdoneDb
       .from('entry_locations')
       .select('entry_id, created_at, locations(id, display_name, place_text, latitude, longitude)')
       .eq('user_id', userId),
@@ -1010,7 +1019,7 @@ export async function getContactLocationCooccurrences(userId) {
 }
 
 export async function getTagVocabulary(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
@@ -1052,7 +1061,7 @@ export async function saveFeedback(userId, {
   anonymous_device_id = null,
   abuse_key_hash = null,
 } = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping feedback save');
     return null;
   }
@@ -1124,7 +1133,7 @@ export async function saveFeedback(userId, {
  * Get all feedback for a user
  */
 export async function getFeedback(userId) {
-  if (!supabase) return [];
+  if (!jobdoneDb) return [];
 
   try {
     const { data, error } = await jobdoneDb
@@ -1146,7 +1155,7 @@ export async function getFeedback(userId) {
  * Update an entry's embedding after it has been saved.
  */
 export async function updateEntryEmbedding(entryId, embedding, embeddingModel) {
-  if (!supabase) return;
+  if (!jobdoneDb) return;
 
   try {
     const { error } = await jobdoneDb
@@ -1269,7 +1278,7 @@ async function attachEntryStructure(userId, entries = []) {
  * @returns {Promise<Array>} rows with similarity score
  */
 export async function recallEntries(userId, queryEmbedding, { query = '', limit = 10, floor = 0.3 } = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
@@ -1306,7 +1315,7 @@ export async function recallEntries(userId, queryEmbedding, { query = '', limit 
  * already exists for the user, updates created_at to bubble to top.
  */
 export async function saveQuery(userId, text) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping query save');
     return null;
   }
@@ -1353,7 +1362,7 @@ export async function saveQuery(userId, text) {
  * Returns distinct texts ordered by most recent created_at.
  */
 export async function getQueries(userId, { limit = 50 } = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }

@@ -67,6 +67,7 @@ ANTHROPIC_API_KEY
 VOYAGE_API_KEY
 SUPABASE_URL
 SUPABASE_KEY
+SUPABASE_DB_URL
 ```
 
 Use `USE_MOCK_APIS=true` in `backend/.env` for mock transcription,

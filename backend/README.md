@@ -35,8 +35,13 @@ ANTHROPIC_API_KEY
 VOYAGE_API_KEY
 SUPABASE_URL
 SUPABASE_KEY
+SUPABASE_DB_URL
 USE_MOCK_APIS
 ```
+
+`SUPABASE_URL`/`SUPABASE_KEY` are for Supabase Auth. App data uses direct
+Postgres via `SUPABASE_DB_URL`; it does not require Supabase REST/Data API
+schemas.
 
 ## Commands
 
