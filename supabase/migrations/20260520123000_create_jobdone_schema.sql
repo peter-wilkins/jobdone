@@ -25,7 +25,7 @@ DROP TABLE IF EXISTS public.feedback CASCADE;
 DROP TABLE IF EXISTS public.queries CASCADE;
 
 CREATE SCHEMA jobdone;
-GRANT USAGE ON SCHEMA jobdone TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA jobdone TO service_role;
 SET search_path = jobdone, public;
 
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
@@ -48,9 +48,6 @@ CREATE UNIQUE INDEX entries_user_id_capture_id_uidx ON entries(user_id, capture_
 CREATE UNIQUE INDEX entries_user_id_created_at_uidx ON entries(user_id, created_at) WHERE capture_id IS NULL;
 
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_entries" ON entries FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_entries" ON entries FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_entries" ON entries FOR UPDATE USING (TRUE);
 
 -- 4. context_clues (internal prediction/debug evidence linked to confirmed Entries)
 CREATE TABLE context_clues (
@@ -73,10 +70,6 @@ CREATE INDEX context_clues_kind_idx       ON context_clues(kind);
 CREATE UNIQUE INDEX context_clues_user_id_local_id_uidx ON context_clues(user_id, local_id);
 
 ALTER TABLE context_clues ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_context_clues" ON context_clues FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_context_clues" ON context_clues FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_context_clues" ON context_clues FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_context_clues" ON context_clues FOR DELETE USING (TRUE);
 
 -- 5. locations (real places associated with confirmed Entries)
 CREATE TABLE locations (
@@ -98,10 +91,6 @@ CREATE INDEX locations_updated_at_idx ON locations(updated_at DESC);
 CREATE UNIQUE INDEX locations_user_id_local_id_uidx ON locations(user_id, local_id) WHERE local_id IS NOT NULL;
 
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_locations" ON locations FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_locations" ON locations FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_locations" ON locations FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_locations" ON locations FOR DELETE USING (TRUE);
 
 -- 6. entry_locations (immutable MVP Entry-to-Location associations)
 CREATE TABLE entry_locations (
@@ -118,9 +107,6 @@ CREATE INDEX entry_locations_location_id_idx ON entry_locations(location_id);
 CREATE UNIQUE INDEX entry_locations_user_entry_location_uidx ON entry_locations(user_id, entry_id, location_id);
 
 ALTER TABLE entry_locations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_entry_locations" ON entry_locations FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_entry_locations" ON entry_locations FOR SELECT USING (TRUE);
-CREATE POLICY "backend_delete_entry_locations" ON entry_locations FOR DELETE USING (TRUE);
 
 -- 7. tag_categories, tags, vocabulary, and immutable Entry-to-Tag associations
 CREATE TABLE tag_categories (
@@ -136,10 +122,6 @@ CREATE INDEX tag_categories_user_id_idx ON tag_categories(user_id);
 CREATE UNIQUE INDEX tag_categories_user_slug_uidx ON tag_categories(user_id, slug);
 
 ALTER TABLE tag_categories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_tag_categories" ON tag_categories FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_tag_categories" ON tag_categories FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_tag_categories" ON tag_categories FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_tag_categories" ON tag_categories FOR DELETE USING (TRUE);
 
 CREATE TABLE tags (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -160,10 +142,6 @@ CREATE UNIQUE INDEX tags_user_id_local_id_uidx ON tags(user_id, local_id) WHERE 
 CREATE UNIQUE INDEX tags_user_category_label_uidx ON tags(user_id, category_id, normalized_label);
 
 ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_tags" ON tags FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_tags" ON tags FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_tags" ON tags FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_tags" ON tags FOR DELETE USING (TRUE);
 
 CREATE TABLE tag_vocabulary (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -181,10 +159,6 @@ CREATE INDEX tag_vocabulary_last_used_at_idx ON tag_vocabulary(last_used_at DESC
 CREATE UNIQUE INDEX tag_vocabulary_user_tag_uidx ON tag_vocabulary(user_id, tag_id);
 
 ALTER TABLE tag_vocabulary ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_tag_vocabulary" ON tag_vocabulary FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_tag_vocabulary" ON tag_vocabulary FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_tag_vocabulary" ON tag_vocabulary FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_tag_vocabulary" ON tag_vocabulary FOR DELETE USING (TRUE);
 
 CREATE TABLE entry_tags (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -200,9 +174,6 @@ CREATE INDEX entry_tags_tag_id_idx   ON entry_tags(tag_id);
 CREATE UNIQUE INDEX entry_tags_user_entry_tag_uidx ON entry_tags(user_id, entry_id, tag_id);
 
 ALTER TABLE entry_tags ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_entry_tags" ON entry_tags FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_entry_tags" ON entry_tags FOR SELECT USING (TRUE);
-CREATE POLICY "backend_delete_entry_tags" ON entry_tags FOR DELETE USING (TRUE);
 
 CREATE OR REPLACE FUNCTION increment_tag_vocabulary(
   p_user_id TEXT,
@@ -210,6 +181,7 @@ CREATE OR REPLACE FUNCTION increment_tag_vocabulary(
 )
 RETURNS VOID
 LANGUAGE plpgsql
+SET search_path = jobdone, public
 AS $$
 BEGIN
   INSERT INTO jobdone.tag_vocabulary (user_id, tag_id, use_count, accepted_count, rejected_count, last_used_at)
@@ -252,10 +224,6 @@ CREATE INDEX contacts_normalized_emails_idx ON contacts USING GIN (normalized_em
 CREATE UNIQUE INDEX contacts_user_id_local_id_uidx ON contacts(user_id, local_id) WHERE local_id IS NOT NULL;
 
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_contacts" ON contacts FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_contacts" ON contacts FOR SELECT USING (TRUE);
-CREATE POLICY "backend_update_contacts" ON contacts FOR UPDATE USING (TRUE);
-CREATE POLICY "backend_delete_contacts" ON contacts FOR DELETE USING (TRUE);
 
 -- 9. entry_contacts (immutable MVP Entry-to-Contact associations)
 CREATE TABLE entry_contacts (
@@ -272,9 +240,6 @@ CREATE INDEX entry_contacts_contact_id_idx ON entry_contacts(contact_id);
 CREATE UNIQUE INDEX entry_contacts_user_entry_contact_uidx ON entry_contacts(user_id, entry_id, contact_id);
 
 ALTER TABLE entry_contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_entry_contacts" ON entry_contacts FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_entry_contacts" ON entry_contacts FOR SELECT USING (TRUE);
-CREATE POLICY "backend_delete_entry_contacts" ON entry_contacts FOR DELETE USING (TRUE);
 
 -- 10. queries (persisted Recall questions)
 CREATE TABLE queries (
@@ -287,8 +252,6 @@ CREATE TABLE queries (
 CREATE INDEX queries_user_id_idx ON queries(user_id);
 
 ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_queries" ON queries FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_queries" ON queries FOR SELECT USING (TRUE);
 
 -- 11. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
@@ -309,9 +272,6 @@ CREATE INDEX feedback_abuse_key_hash_idx       ON feedback(abuse_key_hash);
 CREATE INDEX feedback_created_at_idx           ON feedback(created_at DESC);
 
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "backend_insert_feedback" ON feedback FOR INSERT WITH CHECK (TRUE);
-CREATE POLICY "backend_select_feedback" ON feedback FOR SELECT USING (TRUE);
-CREATE POLICY "backend_delete_feedback" ON feedback FOR DELETE USING (TRUE);
 
 -- 11. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
@@ -329,6 +289,7 @@ RETURNS TABLE (
   similarity           FLOAT
 )
 LANGUAGE sql STABLE
+SET search_path = jobdone, public
 AS $$
   SELECT
     e.id,
@@ -345,5 +306,28 @@ AS $$
   LIMIT p_match_count;
 $$;
 
-GRANT ALL ON ALL TABLES IN SCHEMA jobdone TO anon, authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO anon, authenticated, service_role;
+DO $$
+DECLARE
+  table_record RECORD;
+BEGIN
+  FOR table_record IN
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'jobdone'
+  LOOP
+    EXECUTE format(
+      'CREATE POLICY %I ON %I.%I FOR ALL USING (false) WITH CHECK (false)',
+      'deny_all_direct_access',
+      'jobdone',
+      table_record.tablename
+    );
+  END LOOP;
+END;
+$$;
+
+REVOKE ALL ON SCHEMA jobdone FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA jobdone TO service_role;
+REVOKE ALL ON ALL TABLES IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA jobdone TO service_role;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO service_role;
