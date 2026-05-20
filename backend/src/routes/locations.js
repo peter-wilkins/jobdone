@@ -1,7 +1,9 @@
 import { createAddressLookupService } from '../services/addressLookup.js';
+import { checkCostlyRouteRateLimit, sendRateLimitReply } from '../services/routeRateLimit.js';
 
 export async function registerLocationRoutes(fastify, deps = {}) {
   const addressLookup = deps.addressLookup ?? createAddressLookupService();
+  const rateLimit = deps.checkCostlyRouteRateLimit ?? checkCostlyRouteRateLimit;
 
   fastify.get('/api/locations/lookup', async (request, reply) => {
     const query = String(request.query?.q || '').trim();
@@ -10,6 +12,9 @@ export async function registerLocationRoutes(fastify, deps = {}) {
     }
 
     try {
+      const limit = rateLimit(request, { routeType: 'locations_lookup' });
+      if (!limit.allowed) return sendRateLimitReply(reply, limit);
+
       const result = await addressLookup.search(query);
       return {
         success: true,

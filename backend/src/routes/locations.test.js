@@ -11,6 +11,13 @@ async function buildApp(addressLookup) {
   return app;
 }
 
+async function buildAppWithDeps(deps = {}) {
+  const app = Fastify({ logger: false });
+  await app.register(registerLocationRoutes, deps);
+  await app.ready();
+  return app;
+}
+
 describe('LocationRoutes address lookup', () => {
   test('normalizes provider results into selectable address candidates', () => {
     const candidates = normalizeAddressLookupResults([{
@@ -93,5 +100,28 @@ describe('LocationRoutes address lookup', () => {
 
     assert.equal(res.statusCode, 502);
     assert.equal(JSON.parse(res.body).error, 'Address lookup is unavailable right now');
+  });
+
+  test('rate limits address lookup before calling provider', async () => {
+    let lookupCalls = 0;
+    const app = await buildAppWithDeps({
+      checkCostlyRouteRateLimit: () => ({ allowed: false, retryAfterSeconds: 45 }),
+      addressLookup: {
+        search: async () => {
+          lookupCalls += 1;
+          return { candidates: [] };
+        },
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/locations/lookup?q=AB1%202CD',
+    });
+
+    assert.equal(res.statusCode, 429);
+    assert.equal(res.headers['retry-after'], '45');
+    assert.equal(JSON.parse(res.body).error, 'Too many requests');
+    assert.equal(lookupCalls, 0);
   });
 });

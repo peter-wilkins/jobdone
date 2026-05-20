@@ -1,6 +1,7 @@
 import { EmptyTranscriptionError, transcribeAudio, validateAudioBuffer } from '../services/transcription.js';
 import { summarizeAndExtract } from '../services/summarization.js';
 import { classify } from '../services/classify.js';
+import { checkCostlyRouteRateLimit, sendRateLimitReply } from '../services/routeRateLimit.js';
 
 /**
  * Register audio processing routes
@@ -9,6 +10,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
   const transcriber = deps.transcribeAudio ?? transcribeAudio;
   const summarizer = deps.summarizeAndExtract ?? summarizeAndExtract;
   const classifier = deps.classify ?? classify;
+  const rateLimit = deps.checkCostlyRouteRateLimit ?? checkCostlyRouteRateLimit;
 
   /**
    * Health check
@@ -33,6 +35,9 @@ export async function registerAudioRoutes(fastify, deps = {}) {
    */
   fastify.post('/api/transcribe', async (request, reply) => {
     try {
+      const limit = rateLimit(request, { routeType: 'transcribe' });
+      if (!limit.allowed) return sendRateLimitReply(reply, limit);
+
       const parts = request.parts();
       let audioBuffer = null;
       let fileName = 'audio.webm';
@@ -112,6 +117,9 @@ export async function registerAudioRoutes(fastify, deps = {}) {
    */
   fastify.post('/api/summarize', async (request, reply) => {
     try {
+      const limit = rateLimit(request, { routeType: 'summarize' });
+      if (!limit.allowed) return sendRateLimitReply(reply, limit);
+
       const { transcript } = request.body;
 
       if (!transcript || typeof transcript !== 'string') {
