@@ -49,10 +49,26 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
 # Optional; defaults to jobdone
 SUPABASE_DB_SCHEMA=jobdone
+
+# Required for agent-run SQL tasks.
+# Use the Supabase Postgres direct/session-pooler URL.
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
 EOF
 ```
 
-## 5. Test Connection
+## 5. Agent-run Schema Tasks
+
+Once `DATABASE_URL` is set, the agent can apply the checked-in schema without
+copy-pasting into SQL Editor:
+
+```bash
+npm --prefix backend run db:apply -- --yes
+```
+
+This runs [docs/schema.sql](./schema.sql). It is destructive while JobDone is in
+clean-slate mode.
+
+## 6. Test Connection
 
 ```bash
 npm run dev
@@ -65,7 +81,7 @@ You should see:
 
 No error about Supabase means it's connected.
 
-## 6. Wire Frontend to Sync
+## 7. Wire Frontend to Sync
 
 Once backend is set up, frontend will:
 1. Record audio locally
