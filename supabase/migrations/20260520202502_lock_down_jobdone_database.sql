@@ -51,9 +51,9 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO service_role;
 
 ALTER FUNCTION jobdone.increment_tag_vocabulary(TEXT, UUID)
-  SET search_path = jobdone, public;
+  SET search_path = jobdone, extensions, public;
 
-ALTER FUNCTION jobdone.match_entries(TEXT, vector(1024), INT, DOUBLE PRECISION)
-  SET search_path = jobdone, public;
+ALTER FUNCTION jobdone.match_entries(TEXT, extensions.vector(1024), INT, DOUBLE PRECISION)
+  SET search_path = jobdone, extensions, public;
 
 CREATE INDEX IF NOT EXISTS tag_vocabulary_tag_id_idx ON jobdone.tag_vocabulary(tag_id);

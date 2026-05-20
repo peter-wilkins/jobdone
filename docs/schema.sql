@@ -1,13 +1,15 @@
 -- JobDone schema rewrite (clean slate — no production data)
 -- Run in Supabase SQL Editor.
 
--- 1. Enable pgvector in public; keep JobDone-owned objects in jobdone.
-CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+-- 1. Enable pgvector in extensions; keep JobDone-owned objects in jobdone.
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+ALTER EXTENSION vector SET SCHEMA extensions;
 
 -- 2. Drop old app objects if present (clean rewrite)
 DROP SCHEMA IF EXISTS jobdone CASCADE;
-DROP FUNCTION IF EXISTS public.match_entries(TEXT, vector(1024), INT, FLOAT);
-DROP FUNCTION IF EXISTS public.match_entries(TEXT, vector, INT, DOUBLE PRECISION);
+DROP FUNCTION IF EXISTS public.match_entries(TEXT, extensions.vector(1024), INT, FLOAT);
+DROP FUNCTION IF EXISTS public.match_entries(TEXT, extensions.vector, INT, DOUBLE PRECISION);
 DROP FUNCTION IF EXISTS public.increment_tag_vocabulary(TEXT, UUID);
 DROP TABLE IF EXISTS public.jobs CASCADE;
 DROP TABLE IF EXISTS public.context_clues CASCADE;
@@ -26,7 +28,7 @@ DROP TABLE IF EXISTS public.queries CASCADE;
 
 CREATE SCHEMA jobdone;
 GRANT USAGE ON SCHEMA jobdone TO service_role;
-SET search_path = jobdone, public;
+SET search_path = jobdone, extensions, public;
 
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
 CREATE TABLE entries (
@@ -35,7 +37,7 @@ CREATE TABLE entries (
   capture_id           TEXT,
   transcript           TEXT NOT NULL,
   summary              TEXT NOT NULL,
-  embedding            vector(1024),
+  embedding            extensions.vector(1024),
   embedding_model      TEXT,
   created_at           TIMESTAMPTZ NOT NULL,
   synced_at            TIMESTAMPTZ DEFAULT NOW()
@@ -43,7 +45,7 @@ CREATE TABLE entries (
 
 CREATE INDEX entries_user_id_idx         ON entries(user_id);
 CREATE INDEX entries_created_at_idx      ON entries(created_at DESC);
-CREATE INDEX entries_embedding_idx       ON entries USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX entries_embedding_idx       ON entries USING ivfflat (embedding extensions.vector_cosine_ops) WITH (lists = 100);
 CREATE UNIQUE INDEX entries_user_id_capture_id_uidx ON entries(user_id, capture_id) WHERE capture_id IS NOT NULL;
 CREATE UNIQUE INDEX entries_user_id_created_at_uidx ON entries(user_id, created_at) WHERE capture_id IS NULL;
 
@@ -181,7 +183,7 @@ CREATE OR REPLACE FUNCTION increment_tag_vocabulary(
 )
 RETURNS VOID
 LANGUAGE plpgsql
-SET search_path = jobdone, public
+SET search_path = jobdone, extensions, public
 AS $$
 BEGIN
   INSERT INTO jobdone.tag_vocabulary (user_id, tag_id, use_count, accepted_count, rejected_count, last_used_at)
@@ -276,7 +278,7 @@ ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 -- 11. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
-  p_query_embedding  vector(1024),
+  p_query_embedding  extensions.vector(1024),
   p_match_count      INT     DEFAULT 10,
   p_similarity_floor FLOAT   DEFAULT 0.3
 )
@@ -289,7 +291,7 @@ RETURNS TABLE (
   similarity           FLOAT
 )
 LANGUAGE sql STABLE
-SET search_path = jobdone, public
+SET search_path = jobdone, extensions, public
 AS $$
   SELECT
     e.id,

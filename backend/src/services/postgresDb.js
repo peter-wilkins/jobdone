@@ -99,7 +99,7 @@ class JobDoneDb {
     try {
       if (name === 'match_entries') {
         const result = await this.pool.query(
-          `select * from ${quoteIdent(this.schema)}.match_entries($1, $2::vector(1024), $3, $4)`,
+          `select * from ${quoteIdent(this.schema)}.match_entries($1, $2::extensions.vector(1024), $3, $4)`,
           [args.p_user_id, args.p_query_embedding, args.p_match_count, args.p_similarity_floor]
         );
         return { data: result.rows, error: null };
