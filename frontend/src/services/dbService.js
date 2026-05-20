@@ -1969,6 +1969,7 @@ export class DBService {
       audioSize: audioBlob.size,
       audioDuration: meta.duration,
       diagnosticBundle: meta.diagnosticBundle || null,
+      triage: meta.triage || null,
       status: 'recording',
       syncStatus: 'pending',
       errorMessage: null,
@@ -1983,7 +1984,7 @@ export class DBService {
     });
   }
 
-  async createFeedbackTextReport({ transcript, diagnosticBundle }) {
+  async createFeedbackTextReport({ transcript, diagnosticBundle, triage }) {
     const db = await this.ensureDb();
     const item = {
       id: `fb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -1991,6 +1992,7 @@ export class DBService {
       audioSize: 0,
       audioDuration: 0,
       diagnosticBundle: diagnosticBundle || null,
+      triage: triage || null,
       status: 'ready_for_review',
       syncStatus: 'pending',
       errorMessage: null,

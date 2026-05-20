@@ -4,10 +4,77 @@ import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { authService } from './services/authService';
 import { diagnosticService } from './services/diagnosticService';
+import {
+  canCreateTextFeedback,
+  defaultTranscriptForTriage,
+  FEEDBACK_DATA_LOSS,
+  FEEDBACK_IMPACTS,
+  FEEDBACK_KINDS,
+  feedbackTriageSummary,
+  normalizeFeedbackTriage,
+  parseFeedbackTriageFromLocation,
+} from './services/feedbackTriageService';
 import { formatTime } from './mockData';
 import { FloatingRecordButton } from './FloatingRecordButton';
 
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
+
+function optionLabel(options, value) {
+  return options.find(option => option.value === value)?.label || value;
+}
+
+function SegmentedButtons({ label, options, value, onChange, tone = 'gray' }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {options.map(option => {
+          const selected = option.value === value;
+          const selectedClass = tone === 'red'
+            ? 'border-red-500 bg-red-50 text-red-800'
+            : 'border-gray-900 bg-gray-900 text-white';
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`min-h-10 rounded border px-3 py-2 text-sm font-medium transition ${
+                selected ? selectedClass : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TriageSummary({ triage }) {
+  if (!triage) return null;
+  const normalized = normalizeFeedbackTriage(triage);
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+        {optionLabel(FEEDBACK_KINDS, normalized.kind)}
+      </span>
+      <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+        {optionLabel(FEEDBACK_IMPACTS, normalized.impact)}
+      </span>
+      <span className={`rounded px-2 py-1 text-xs ${
+        normalized.data_loss === 'yes' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+      }`}>
+        Data loss: {optionLabel(FEEDBACK_DATA_LOSS, normalized.data_loss)}
+      </span>
+      {normalized.surface && (
+        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+          {normalized.surface}
+        </span>
+      )}
+    </div>
+  );
+}
 
 function DiagnosticPreview({ bundle }) {
   if (!bundle) return null;
@@ -68,6 +135,11 @@ export function FeedbackScreen({ onBack, onRecord }) {
   const [isLoading, setIsLoading] = useState(true);
   const [typedReport, setTypedReport] = useState('');
   const [backendAvailable, setBackendAvailable] = useState(null);
+  const [triage, setTriage] = useState(() => parseFeedbackTriageFromLocation());
+
+  const updateTriage = useCallback((updates) => {
+    setTriage(current => normalizeFeedbackTriage({ ...current, ...updates }));
+  }, []);
 
   const friendlyError = (err) => {
     const msg = err?.message || '';
@@ -88,14 +160,18 @@ export function FeedbackScreen({ onBack, onRecord }) {
     return { recording };
   }, []);
 
-  const buildDiagnosticBundle = useCallback(async () => {
+  const buildDiagnosticBundle = useCallback(async (triageState = triage) => {
     const isAvailable = await apiService.checkHealth();
     setBackendAvailable(isAvailable);
-    return diagnosticService.buildBundle({
+    const bundle = await diagnosticService.buildBundle({
       screen: 'report_issue',
       backendAvailable: isAvailable,
     });
-  }, []);
+    return {
+      ...bundle,
+      feedback: feedbackTriageSummary(triageState),
+    };
+  }, [triage]);
 
   const processFeedback = useCallback(async (id) => {
     try {
@@ -134,6 +210,9 @@ export function FeedbackScreen({ onBack, onRecord }) {
       transcript: item.transcript,
       created_at: item.created_at,
       diagnostic_bundle: item.diagnosticBundle,
+      kind: item.triage?.kind,
+      impact: item.triage?.impact,
+      data_loss: item.triage?.data_loss,
     });
     return dbService.markFeedbackSynced(item.id);
   }, []);
@@ -185,11 +264,16 @@ export function FeedbackScreen({ onBack, onRecord }) {
         setIsRecording(false);
         const audioData = await audioService.stopRecording();
         if (audioData) {
-          diagnosticService.record('issue_report_record_stop', { duration: audioData.duration });
-          const diagnosticBundle = await buildDiagnosticBundle();
+          const currentTriage = normalizeFeedbackTriage(triage);
+          diagnosticService.record('issue_report_record_stop', {
+            duration: audioData.duration,
+            ...feedbackTriageSummary(currentTriage),
+          });
+          const diagnosticBundle = await buildDiagnosticBundle(currentTriage);
           const id = await dbService.createFeedback({
             duration: audioData.duration,
             diagnosticBundle,
+            triage: currentTriage,
           }, audioData.blob);
           const newItem = await dbService.getFeedbackItem(id);
           setInProgress(prev => [newItem, ...prev]);
@@ -206,18 +290,23 @@ export function FeedbackScreen({ onBack, onRecord }) {
 
   const handleTypedSubmit = async () => {
     const trimmed = typedReport.trim();
-    if (!trimmed) {
+    const currentTriage = normalizeFeedbackTriage(triage);
+    if (!canCreateTextFeedback({ text: trimmed, triage: currentTriage })) {
       setError('Describe the issue before creating a report.');
       return;
     }
 
     try {
       setError(null);
-      diagnosticService.record('issue_report_typed_created', { length: trimmed.length });
-      const diagnosticBundle = await buildDiagnosticBundle();
+      diagnosticService.record('issue_report_typed_created', {
+        length: trimmed.length,
+        ...feedbackTriageSummary(currentTriage),
+      });
+      const diagnosticBundle = await buildDiagnosticBundle(currentTriage);
       const id = await dbService.createFeedbackTextReport({
-        transcript: trimmed,
+        transcript: trimmed || defaultTranscriptForTriage(currentTriage),
         diagnosticBundle,
+        triage: currentTriage,
       });
       const newItem = await dbService.getFeedbackItem(id);
       setTypedReport('');
@@ -252,6 +341,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
         source: item.audioDuration ? 'audio' : 'typed',
         synced: syncSuccess,
         identity: authService.isLoggedIn() ? 'signed_in' : 'anonymous',
+        ...feedbackTriageSummary(item.triage),
       });
     } catch (err) {
       console.error('Failed to confirm feedback:', err);
@@ -329,19 +419,53 @@ export function FeedbackScreen({ onBack, onRecord }) {
       <div className="flex-1 overflow-y-auto">
         {/* Report input */}
         <div className="p-8 flex flex-col gap-4">
+          <div className={`rounded border p-4 ${
+            triage.data_loss === 'yes' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
+          }`}>
+            <div className="space-y-4">
+              <SegmentedButtons
+                label="Kind"
+                options={FEEDBACK_KINDS}
+                value={triage.kind}
+                onChange={(kind) => updateTriage({ kind })}
+                tone={triage.kind === 'data_loss' ? 'red' : 'gray'}
+              />
+              <SegmentedButtons
+                label="Impact"
+                options={FEEDBACK_IMPACTS}
+                value={triage.impact}
+                onChange={(impact) => updateTriage({ impact })}
+              />
+              <SegmentedButtons
+                label="Lost work or missing data?"
+                options={FEEDBACK_DATA_LOSS}
+                value={triage.data_loss}
+                onChange={(data_loss) => updateTriage({
+                  data_loss,
+                  kind: data_loss === 'yes'
+                    ? 'data_loss'
+                    : triage.kind === 'data_loss' ? 'bug' : triage.kind,
+                })}
+                tone={triage.data_loss === 'yes' ? 'red' : 'gray'}
+              />
+            </div>
+          </div>
+
           <textarea
             value={typedReport}
             onChange={(event) => setTypedReport(event.target.value)}
             rows={4}
             className="w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
-            placeholder="What went wrong?"
+            placeholder={triage.data_loss === 'yes' ? 'What is missing? (optional)' : 'What went wrong?'}
           />
           <button
             onClick={handleTypedSubmit}
-            className="w-full rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:bg-gray-300"
-            disabled={!typedReport.trim()}
+            className={`w-full rounded px-4 py-2 text-sm font-medium text-white transition disabled:bg-gray-300 ${
+              triage.data_loss === 'yes' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-900 hover:bg-gray-700'
+            }`}
+            disabled={!canCreateTextFeedback({ text: typedReport, triage })}
           >
-            Create report
+            {triage.data_loss === 'yes' ? 'Create data-loss report' : 'Create report'}
           </button>
           <div className="flex flex-col items-center gap-3 pt-4">
             <button
@@ -405,12 +529,15 @@ export function FeedbackScreen({ onBack, onRecord }) {
 
                 {item.status === 'ready_for_review' && (
                   <>
+                    <TriageSummary triage={item.triage} />
                     <p className="text-gray-900 mb-4 whitespace-pre-wrap">{item.transcript}</p>
                     <DiagnosticPreview bundle={item.diagnosticBundle} />
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleConfirm(item.id)}
-                        className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
+                        className={`flex-1 px-4 py-2 text-white text-sm font-medium rounded transition ${
+                          item.triage?.data_loss === 'yes' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-500 hover:bg-blue-600'
+                        }`}
                       >
                         Send report
                       </button>
@@ -462,6 +589,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
             <div className="space-y-4">
               {submitted.map(item => (
                 <div key={item.id} className="py-3 border-b border-gray-200 last:border-b-0">
+                  <TriageSummary triage={item.triage} />
                   <p className="text-sm text-gray-900">{item.transcript}</p>
                   <div className="mt-1 flex items-center justify-between gap-3">
                     <p className="text-xs text-gray-400">{formatTime(new Date(item.created_at))}</p>
