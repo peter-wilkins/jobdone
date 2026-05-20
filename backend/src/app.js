@@ -10,6 +10,7 @@ import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
 import { registerRequestIdHooks } from './services/requestId.js';
+import { createCorsOriginValidator } from './services/cors.js';
 
 export function createApp(options = {}) {
   const fastify = Fastify({
@@ -18,7 +19,7 @@ export function createApp(options = {}) {
   });
 
   fastify.register(cors, {
-    origin: true,
+    origin: createCorsOriginValidator(options.allowedCorsOrigins),
   });
 
   fastify.register(multipart, {
