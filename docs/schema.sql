@@ -1,27 +1,32 @@
 -- JobDone schema rewrite (clean slate — no production data)
 -- Run in Supabase SQL Editor.
 
--- 1. Enable pgvector
-CREATE EXTENSION IF NOT EXISTS vector;
+-- 1. Enable pgvector in public; keep JobDone-owned objects in jobdone.
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
 
--- 2. Drop old tables if present (clean rewrite)
-DROP FUNCTION IF EXISTS match_entries(TEXT, vector(1024), INT, FLOAT);
-DROP FUNCTION IF EXISTS match_entries(TEXT, vector, INT, DOUBLE PRECISION);
-DROP FUNCTION IF EXISTS increment_tag_vocabulary(TEXT, UUID);
-DROP TABLE IF EXISTS jobs CASCADE;
-DROP TABLE IF EXISTS context_clues CASCADE;
-DROP TABLE IF EXISTS entry_contacts CASCADE;
-DROP TABLE IF EXISTS entry_tags CASCADE;
-DROP TABLE IF EXISTS tag_vocabulary CASCADE;
-DROP TABLE IF EXISTS tags CASCADE;
-DROP TABLE IF EXISTS tag_categories CASCADE;
-DROP TABLE IF EXISTS entry_locations CASCADE;
-DROP TABLE IF EXISTS locations CASCADE;
-DROP TABLE IF EXISTS entries CASCADE;
-DROP TABLE IF EXISTS people CASCADE;
-DROP TABLE IF EXISTS contacts CASCADE;
-DROP TABLE IF EXISTS feedback CASCADE;
-DROP TABLE IF EXISTS queries CASCADE;
+-- 2. Drop old app objects if present (clean rewrite)
+DROP SCHEMA IF EXISTS jobdone CASCADE;
+DROP FUNCTION IF EXISTS public.match_entries(TEXT, vector(1024), INT, FLOAT);
+DROP FUNCTION IF EXISTS public.match_entries(TEXT, vector, INT, DOUBLE PRECISION);
+DROP FUNCTION IF EXISTS public.increment_tag_vocabulary(TEXT, UUID);
+DROP TABLE IF EXISTS public.jobs CASCADE;
+DROP TABLE IF EXISTS public.context_clues CASCADE;
+DROP TABLE IF EXISTS public.entry_contacts CASCADE;
+DROP TABLE IF EXISTS public.entry_tags CASCADE;
+DROP TABLE IF EXISTS public.tag_vocabulary CASCADE;
+DROP TABLE IF EXISTS public.tags CASCADE;
+DROP TABLE IF EXISTS public.tag_categories CASCADE;
+DROP TABLE IF EXISTS public.entry_locations CASCADE;
+DROP TABLE IF EXISTS public.locations CASCADE;
+DROP TABLE IF EXISTS public.entries CASCADE;
+DROP TABLE IF EXISTS public.people CASCADE;
+DROP TABLE IF EXISTS public.contacts CASCADE;
+DROP TABLE IF EXISTS public.feedback CASCADE;
+DROP TABLE IF EXISTS public.queries CASCADE;
+
+CREATE SCHEMA jobdone;
+GRANT USAGE ON SCHEMA jobdone TO anon, authenticated, service_role;
+SET search_path = jobdone, public;
 
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
 CREATE TABLE entries (
@@ -207,12 +212,12 @@ RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  INSERT INTO tag_vocabulary (user_id, tag_id, use_count, accepted_count, rejected_count, last_used_at)
+  INSERT INTO jobdone.tag_vocabulary (user_id, tag_id, use_count, accepted_count, rejected_count, last_used_at)
   VALUES (p_user_id, p_tag_id, 1, 1, 0, NOW())
   ON CONFLICT (user_id, tag_id)
   DO UPDATE SET
-    use_count = tag_vocabulary.use_count + 1,
-    accepted_count = tag_vocabulary.accepted_count + 1,
+    use_count = jobdone.tag_vocabulary.use_count + 1,
+    accepted_count = jobdone.tag_vocabulary.accepted_count + 1,
     last_used_at = NOW();
 END;
 $$;
@@ -332,10 +337,13 @@ AS $$
     e.summary,
     e.created_at,
     1 - (e.embedding <=> p_query_embedding) AS similarity
-  FROM entries e
+  FROM jobdone.entries e
   WHERE e.user_id = p_user_id
     AND e.embedding IS NOT NULL
     AND 1 - (e.embedding <=> p_query_embedding) >= p_similarity_floor
   ORDER BY e.embedding <=> p_query_embedding
   LIMIT p_match_count;
 $$;
+
+GRANT ALL ON ALL TABLES IN SCHEMA jobdone TO anon, authenticated, service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO anon, authenticated, service_role;

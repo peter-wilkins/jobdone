@@ -10,16 +10,22 @@ This guide walks through setting up Supabase for cloud storage and sync.
 4. Choose a name, password, region
 5. Wait for it to provision (~2 min)
 
-## 2. Create the Jobs Table
+## 2. Create the JobDone schema
 
 In the Supabase dashboard:
 
 1. Go to **SQL Editor** (left sidebar)
 2. Click **New Query**
 3. Paste the schema from [docs/schema.sql](./schema.sql)
-
 4. Click **Run**
 5. Should see "Success" message
+
+The SQL creates a dedicated `jobdone` schema for app tables and functions.
+Expose that schema to the API:
+
+1. Go to **Settings** → **API**
+2. Add `jobdone` to **Exposed schemas**
+3. Keep `public` exposed if Supabase requires it for project defaults
 
 ## 3. Get Your Credentials
 
@@ -41,6 +47,8 @@ cd backend
 cat >> .env << 'EOF'
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
+# Optional; defaults to jobdone
+SUPABASE_DB_SCHEMA=jobdone
 EOF
 ```
 
@@ -63,12 +71,23 @@ Once backend is set up, frontend will:
 1. Record audio locally
 2. Get transcript + summary
 3. On confirm, POST to `/api/sync/save` with the job data
-4. Job saves to Supabase cloud
+4. Entry saves to Supabase cloud
 
 ## What's Stored
 
-Each job record contains:
-- `user_id` — anonymous session ID or authenticated user
+JobDone stores app data in the `jobdone` schema:
+
+- `entries`
+- `context_clues`
+- `locations`
+- `contacts`
+- `tag_categories`, `tags`, `tag_vocabulary`
+- `entry_locations`, `entry_contacts`, `entry_tags`
+- `queries`
+- `feedback`
+
+Each Entry record contains:
+- `user_id` — authenticated Supabase user id
 - `transcript` — raw audio transcription
 - `summary` — Claude-generated summary
 - `created_at` — when the job was logged
@@ -77,13 +96,15 @@ Each job record contains:
 ## Querying Jobs
 
 Via Supabase dashboard:
-1. **Table Editor** → Click `jobs`
-2. See all your data
-3. Filter by user_id to see specific user's jobs
+1. **Table Editor** → choose schema `jobdone`
+2. Click `entries`
+3. See all your data
+4. Filter by user_id to see specific user's jobs
 
 Via API:
 ```bash
-curl "https://your-project.supabase.co/rest/v1/jobs?user_id=eq.anon-123" \
+curl "https://your-project.supabase.co/rest/v1/entries?user_id=eq.USER_ID" \
+  -H "Accept-Profile: jobdone" \
   -H "Authorization: Bearer YOUR_ANON_KEY"
 ```
 

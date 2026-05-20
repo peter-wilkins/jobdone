@@ -1,10 +1,17 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  JOBDONE_DB_SCHEMA,
   buildContactLocationCooccurrences,
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
 } from './database.js';
+
+describe('Database schema binding', () => {
+  test('defaults cloud persistence to the jobdone schema', () => {
+    assert.equal(JOBDONE_DB_SCHEMA, 'jobdone');
+  });
+});
 
 describe('Database co-occurrence derivation', () => {
   test('derives Contact-Location counts from confirmed Entry links', () => {
