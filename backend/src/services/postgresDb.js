@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 
 const { Pool } = pg;
+const SUPABASE_CA_CERT_PATH = new URL('../../certs/supabase-root-2021-ca.pem', import.meta.url);
 
 function quoteIdent(value) {
   if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
@@ -76,13 +78,23 @@ export function createJobDoneDb({ connectionString, schema = 'jobdone' } = {}) {
   if (!connectionString) return null;
   const pool = new Pool({
     connectionString,
-    ssl: connectionString.includes('supabase.com')
-      ? { rejectUnauthorized: false }
-      : undefined,
+    ssl: sslConfigForConnection(connectionString),
     max: Number(process.env.DB_POOL_MAX || 5),
   });
 
   return new JobDoneDb(pool, schema);
+}
+
+export function sslConfigForConnection(connectionString) {
+  if (!connectionString?.includes('supabase.com')) return undefined;
+
+  const ca = process.env.SUPABASE_DB_CA_CERT?.replace(/\\n/g, '\n') ||
+    readFileSync(SUPABASE_CA_CERT_PATH, 'utf8');
+
+  return {
+    rejectUnauthorized: true,
+    ca,
+  };
 }
 
 class JobDoneDb {

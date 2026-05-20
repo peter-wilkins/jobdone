@@ -6,10 +6,18 @@ import {
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
 } from './database.js';
+import { sslConfigForConnection } from './postgresDb.js';
 
 describe('Database schema binding', () => {
   test('defaults cloud persistence to the jobdone schema', () => {
     assert.equal(JOBDONE_DB_SCHEMA, 'jobdone');
+  });
+
+  test('verifies Supabase database TLS with a trusted CA', () => {
+    const ssl = sslConfigForConnection('postgresql://user:pass@aws-0-eu-west-1.pooler.supabase.com:5432/postgres');
+
+    assert.equal(ssl.rejectUnauthorized, true);
+    assert.match(ssl.ca, /BEGIN CERTIFICATE/);
   });
 });
 
