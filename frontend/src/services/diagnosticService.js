@@ -23,6 +23,15 @@ const PRIVATE_KEYS = new Set([
   'transcript',
 ]);
 
+const FEEDBACK_EVENT_PREFIXES = [
+  'report_issue_',
+  'issue_report_',
+];
+
+function isFeedbackEvent(event) {
+  return FEEDBACK_EVENT_PREFIXES.some(prefix => String(event || '').startsWith(prefix));
+}
+
 function loadEvents() {
   try {
     const parsed = JSON.parse(localStorage.getItem(EVENT_STORAGE_KEY) || '[]');
@@ -82,11 +91,16 @@ export const diagnosticService = {
     saveEvents(events);
   },
 
-  recentEvents(limit = 25) {
-    return loadEvents().slice(-limit);
+  recentEvents(limit = 25, { excludeFeedbackEvents = false } = {}) {
+    const events = loadEvents();
+    const filtered = excludeFeedbackEvents
+      ? events.filter(event => !isFeedbackEvent(event.event))
+      : events;
+    return filtered.slice(-limit);
   },
 
   async buildBundle({ screen, backendAvailable = null } = {}) {
+    const isFeedbackReport = screen === 'report_issue';
     return {
       captured_at: new Date().toISOString(),
       build_id: BUILD_ID,
@@ -99,7 +113,7 @@ export const diagnosticService = {
       backend: {
         available: backendAvailable,
       },
-      recent_events: this.recentEvents(),
+      recent_events: this.recentEvents(25, { excludeFeedbackEvents: isFeedbackReport }),
       recent_api_requests: recentApiRequests(),
       privacy: {
         excludes: [

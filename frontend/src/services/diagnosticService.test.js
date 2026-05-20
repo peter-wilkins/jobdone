@@ -57,3 +57,37 @@ test('includes recent API request ids in diagnostic bundle', async () => {
 
   removeBrowserGlobals();
 });
+
+test('excludes feedback flow events from feedback report bundles', async () => {
+  installBrowserGlobals();
+  diagnosticService.record('capture_started', { source: 'home' });
+  diagnosticService.record('report_issue_opened');
+  diagnosticService.record('issue_report_typed_created', { length: 12 });
+  diagnosticService.record('sync_failed', { status: 500 });
+
+  const bundle = await diagnosticService.buildBundle({
+    screen: 'report_issue',
+    backendAvailable: false,
+  });
+
+  assert.deepEqual(bundle.recent_events.map(event => event.event), [
+    'capture_started',
+    'sync_failed',
+  ]);
+
+  removeBrowserGlobals();
+});
+
+test('keeps feedback flow events for non-feedback bundles', async () => {
+  installBrowserGlobals();
+  diagnosticService.record('report_issue_opened');
+
+  const bundle = await diagnosticService.buildBundle({
+    screen: 'home',
+    backendAvailable: true,
+  });
+
+  assert.deepEqual(bundle.recent_events.map(event => event.event), ['report_issue_opened']);
+
+  removeBrowserGlobals();
+});
