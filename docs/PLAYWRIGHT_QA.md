@@ -18,6 +18,9 @@ Run against a local frontend:
 npm --prefix frontend run qa:smoke
 ```
 
+When `QA_BASE_URL` is unset, Playwright starts JobDone's Vite dev server on
+`127.0.0.1:5174` by default. Set `QA_PORT` if that port is busy.
+
 Run against production:
 
 ```bash
@@ -34,6 +37,10 @@ release check rather than a blocker for the code change.
 
 The current smoke tests cover anonymous app load and anonymous feedback submit.
 They intentionally avoid login.
+
+QA runs are text-first: assertions, request payloads, logs, and feedback records.
+Screenshots, videos, traces, and HTML reports are disabled by default because
+they create noisy artifacts that are unlikely to be reviewed during MVP.
 
 ## Disposable Feature Spikes
 
