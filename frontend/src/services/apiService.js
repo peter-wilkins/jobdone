@@ -7,8 +7,13 @@ import { normalizeRecallEntry } from './entryMapper.js';
 import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL
-  || (import.meta.env.PROD ? 'https://jobdone-gamma.vercel.app' : 'http://localhost:3000');
+function defaultApiBaseUrl() {
+  const hostname = globalThis.window?.location?.hostname || '';
+  if (hostname.endsWith('.vercel.app')) return 'https://jobdone-gamma.vercel.app';
+  return 'http://localhost:3000';
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || defaultApiBaseUrl();
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 const AUDIO_UPLOAD_TIMEOUT_MS = 60000;
 
