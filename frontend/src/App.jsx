@@ -113,6 +113,8 @@ function App() {
   }
 
   useEffect(() => {
+    diagnosticService.record('screen_open', { screen: screenFromLocation(), source: 'initial_load' });
+
     const stopCrashReporting = crashReportService.start({
       api: apiService,
       onStatus: setCrashNotice,

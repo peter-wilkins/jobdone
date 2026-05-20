@@ -1,4 +1,5 @@
 const API_REQUEST_STORAGE_KEY = 'jobdone-api-request-diagnostics';
+const DEBUG_STORAGE_KEY = 'jobdone-debug-logs';
 const MAX_REQUESTS = 40;
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{12,80}$/;
 
@@ -36,6 +37,16 @@ function saveRequests(requests) {
   }
 }
 
+function debugLogsEnabled() {
+  try {
+    return localStorage.getItem(DEBUG_STORAGE_KEY) === 'true'
+      || window.__JOBDONE_QA_DEBUG__ === true
+      || import.meta.env?.VITE_DEBUG_LOGS === 'true';
+  } catch {
+    return import.meta.env?.VITE_DEBUG_LOGS === 'true';
+  }
+}
+
 function nowMs() {
   return globalThis.performance?.now?.() ?? Date.now();
 }
@@ -58,8 +69,7 @@ export function recordApiRequest({
   failureKind = null,
 } = {}) {
   if (!isValidRequestId(requestId)) return;
-  const requests = loadRequests();
-  requests.push({
+  const diagnostic = {
     request_id: requestId,
     endpoint: String(endpoint || 'unknown').slice(0, 120),
     method: String(method || 'GET').toUpperCase().slice(0, 12),
@@ -68,8 +78,13 @@ export function recordApiRequest({
     duration_ms: Number.isFinite(durationMs) ? Math.round(durationMs) : null,
     failure_kind: failureKind ? String(failureKind).slice(0, 80) : null,
     at: new Date().toISOString(),
-  });
+  };
+  const requests = loadRequests();
+  requests.push(diagnostic);
   saveRequests(requests);
+  if (debugLogsEnabled()) {
+    console.info('[JobDone debug]', 'api_request', JSON.stringify(diagnostic));
+  }
 }
 
 export function recentApiRequests(limit = 25) {

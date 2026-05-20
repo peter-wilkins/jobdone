@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { enableDebugLogs, expectDebugLog } from '../helpers/debugLogs.js';
 
 const CRASH_STORAGE_KEY = 'jobdone-crash-reports';
 
 test('crash report spike: pending crash auto-sends and shows status bar', async ({ page }) => {
+  const debugLogs = await enableDebugLogs(page);
   const capturedRequests = [];
 
   await page.route('**/api/crash-reports', async route => {
@@ -50,4 +52,6 @@ test('crash report spike: pending crash auto-sends and shows status bar', async 
   expect(body.diagnostic_bundle.report_type).toBe('crash_report');
   expect(body.diagnostic_bundle.privacy.excludes).toContain('auth/session data');
   expect(body.diagnostic_bundle.privacy.excludes).toContain('IndexedDB dumps');
+  await expectDebugLog(debugLogs, /diagnostic_event screen_open/);
+  await expectDebugLog(debugLogs, /api_request .*\/api\/crash-reports/);
 });

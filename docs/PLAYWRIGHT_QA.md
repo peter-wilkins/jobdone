@@ -42,6 +42,12 @@ QA runs are text-first: assertions, request payloads, logs, and feedback records
 Screenshots, videos, traces, and HTML reports are disabled by default because
 they create noisy artifacts that are unlikely to be reviewed during MVP.
 
+QA tests enable `jobdone-debug-logs` before app load and should assert the happy
+path emitted the expected `[JobDone debug]` console logs. Normal production
+sessions stay quiet unless that debug flag is explicitly set. Local smoke tests
+may stub backend writes; production smoke with `QA_BASE_URL` set should hit the
+real backend.
+
 ## Disposable Feature Spikes
 
 For fresh feature work, agents may add a focused Playwright spike under:

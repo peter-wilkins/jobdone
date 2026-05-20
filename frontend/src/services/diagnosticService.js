@@ -1,6 +1,7 @@
 import { recentApiRequests } from './requestDiagnosticsService.js';
 
 const EVENT_STORAGE_KEY = 'jobdone-diagnostic-events';
+const DEBUG_STORAGE_KEY = 'jobdone-debug-logs';
 const MAX_EVENTS = 40;
 const ENV = import.meta.env || {};
 const BUILD_ID = ENV.VITE_DEPLOYMENT_ID || ENV.VITE_BUILD_ID || 'dev';
@@ -49,6 +50,16 @@ function saveEvents(events) {
   }
 }
 
+function debugLogsEnabled() {
+  try {
+    return localStorage.getItem(DEBUG_STORAGE_KEY) === 'true'
+      || window.__JOBDONE_QA_DEBUG__ === true
+      || ENV.VITE_DEBUG_LOGS === 'true';
+  } catch {
+    return ENV.VITE_DEBUG_LOGS === 'true';
+  }
+}
+
 function sanitizeDetail(detail = {}) {
   return Object.fromEntries(
     Object.entries(detail || {})
@@ -80,15 +91,19 @@ function browserInfo() {
 
 export const diagnosticService = {
   record(event, detail = {}) {
+    const sanitizedDetail = sanitizeDetail(detail);
     const events = loadEvents();
     events.push({
       event,
-      detail: sanitizeDetail(detail),
+      detail: sanitizedDetail,
       path: window.location.pathname,
       hash: window.location.hash,
       at: new Date().toISOString(),
     });
     saveEvents(events);
+    if (debugLogsEnabled()) {
+      console.info('[JobDone debug]', 'diagnostic_event', event, JSON.stringify(sanitizedDetail));
+    }
   },
 
   recentEvents(limit = 25, { excludeFeedbackEvents = false } = {}) {
