@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test src/**/*.test.js",
-    "db:apply": "node scripts/apply-schema.js"
+    "test": "node --test src/**/*.test.js"
   },
   "keywords": [
     "plumber",
@@ -27,7 +26,6 @@
     "dotenv": "^16.4.5",
     "fastify": "^4.26.0",
     "form-data": "^4.0.5",
-    "openai": "^6.38.0",
-    "pg": "^8.21.0"
+    "openai": "^6.38.0"
   }
 }

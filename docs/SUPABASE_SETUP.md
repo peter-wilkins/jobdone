@@ -12,11 +12,21 @@ This guide walks through setting up Supabase for cloud storage and sync.
 
 ## 2. Create the JobDone schema
 
-In the Supabase dashboard:
+Apply the checked-in migration with the shared Supabase pooler URL from
+`~/.profile`:
+
+```bash
+. ~/.profile
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260520123000_create_jobdone_schema.sql
+```
+
+This is the same schema-per-prototype workflow used by Continuum.
+
+Manual dashboard fallback:
 
 1. Go to **SQL Editor** (left sidebar)
 2. Click **New Query**
-3. Paste the schema from [docs/schema.sql](./schema.sql)
+3. Paste the migration from [../supabase/migrations/20260520123000_create_jobdone_schema.sql](../supabase/migrations/20260520123000_create_jobdone_schema.sql)
 4. Click **Run**
 5. Should see "Success" message
 
@@ -49,24 +59,8 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
 # Optional; defaults to jobdone
 SUPABASE_DB_SCHEMA=jobdone
-
-# Required for agent-run SQL tasks.
-# Use the Supabase Postgres direct/session-pooler URL.
-DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
 EOF
 ```
-
-## 5. Agent-run Schema Tasks
-
-Once `DATABASE_URL` is set, the agent can apply the checked-in schema without
-copy-pasting into SQL Editor:
-
-```bash
-npm --prefix backend run db:apply -- --yes
-```
-
-This runs [docs/schema.sql](./schema.sql). It is destructive while JobDone is in
-clean-slate mode.
 
 ## 6. Test Connection
 
