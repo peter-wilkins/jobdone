@@ -46,6 +46,8 @@ and backwards compatibility become mandatory.
 - Run targeted checks for the current change.
 - Run broader release smoke checks before production releases, when explicitly
   requested, or when a change touches multiple core flows.
+- Keep Playwright checks disposable during MVP; prefer one or two smoke tests and
+  short-lived feature spikes over a large brittle suite.
 
 ## Agent Defaults
 

@@ -11,6 +11,7 @@ when it is needed.
 - [docs/adr](./docs/adr) — architectural decisions and tradeoffs.
 - [docs/schema.sql](./docs/schema.sql) — clean Supabase schema for the current cloud sync model.
 - [docs/MVP_RULES.md](./docs/MVP_RULES.md) — MVP engineering defaults and prototype constraints.
+- [docs/PLAYWRIGHT_QA.md](./docs/PLAYWRIGHT_QA.md) — small disposable Playwright smoke/spike rules.
 - [AGENTS.md](./AGENTS.md) — repo-specific agent workflow rules.
 - [docs/agents](./docs/agents) — issue tracker, triage labels, and domain-doc conventions for agents.
 

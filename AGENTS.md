@@ -38,6 +38,11 @@ core flows. Backend-only changes should prefer API/database smoke checks over
 broad UI testing. Frontend-visible changes should include a targeted visual
 spot-check when practical.
 
+Playwright QA lives under `frontend/qa/` and is intentionally disposable during
+MVP. Keep release smoke coverage to one or two tests. Feature-specific
+end-to-end spike tests may be written while a change is fresh, but if they become
+stale, disable or delete them rather than maintaining a brittle framework.
+
 If the work needs a critical non-visual check that the agent cannot perform, such
 as running new SQL, testing a PWA install/share target on a real device, or
 checking another logged-in device, include it under `Suggested manual checks`.
