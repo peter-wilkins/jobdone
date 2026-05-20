@@ -52,5 +52,17 @@ Rules:
 - If disabled, leave a short note in this doc or the issue describing what it
   used to cover, so it can inform the future production suite.
 
+Run current spikes explicitly:
+
+```bash
+npm --prefix frontend run qa:spikes
+```
+
+Current spikes:
+
+- `crash-report-spike.spec.js` seeds a pending crash report, verifies the app
+  auto-posts it to `/api/crash-reports`, checks the red status bar appears, and
+  checks the sent diagnostic excludes private storage/auth dumps.
+
 When JobDone exits MVP mode, replace these disposable spikes with a deliberate
 stable acceptance suite.
