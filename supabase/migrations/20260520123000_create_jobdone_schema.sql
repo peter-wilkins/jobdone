@@ -30,6 +30,17 @@ CREATE SCHEMA jobdone;
 GRANT USAGE ON SCHEMA jobdone TO service_role;
 SET search_path = jobdone, extensions, public;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jobdone_backend') THEN
+    CREATE ROLE jobdone_backend NOLOGIN;
+  END IF;
+END;
+$$;
+
+GRANT USAGE ON SCHEMA extensions TO jobdone_backend;
+GRANT USAGE ON SCHEMA jobdone TO jobdone_backend;
+
 -- 3. entries (1024-dim embeddings from voyage-3-lite)
 CREATE TABLE entries (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -323,6 +334,14 @@ BEGIN
       'jobdone',
       table_record.tablename
     );
+
+    EXECUTE format(
+      'CREATE POLICY %I ON %I.%I FOR ALL TO %I USING (true) WITH CHECK (true)',
+      'backend_direct_access',
+      'jobdone',
+      table_record.tablename,
+      'jobdone_backend'
+    );
   END LOOP;
 END;
 $$;
@@ -331,5 +350,13 @@ REVOKE ALL ON SCHEMA jobdone FROM PUBLIC, anon, authenticated;
 GRANT USAGE ON SCHEMA jobdone TO service_role;
 REVOKE ALL ON ALL TABLES IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA jobdone TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA jobdone TO jobdone_backend;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA jobdone TO jobdone_backend;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA jobdone
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO jobdone_backend;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA jobdone
+  GRANT EXECUTE ON FUNCTIONS TO jobdone_backend;
