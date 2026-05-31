@@ -1,13 +1,11 @@
 import { requireAuth } from '../services/auth.js';
 import { recallEntries } from '../services/database.js';
-import { getEmbeddingService } from '../services/embedding.js';
 
 export async function registerRecallRoutes(fastify) {
   /**
    * POST /api/recall
    * Accepts { query: string }.
-   * Returns the top-10 Entries ranked by cosine similarity for the authenticated user.
-   * Entries below a similarity floor of ~0.3 are excluded.
+   * Returns the top Entries ranked by deterministic SQL matches for the authenticated user.
    */
   fastify.post('/api/recall', async (request, reply) => {
     const user = await requireAuth(request, reply);
@@ -20,10 +18,8 @@ export async function registerRecallRoutes(fastify) {
     }
 
     try {
-      const svc = getEmbeddingService();
       const trimmedQuery = query.trim();
-      const queryEmbedding = await svc.embedText(trimmedQuery);
-      const rows = await recallEntries(user.id, queryEmbedding, { query: trimmedQuery });
+      const rows = await recallEntries(user.id, { query: trimmedQuery });
 
       return { entries: rows };
     } catch (error) {

@@ -1,6 +1,10 @@
+import { recentApiRequests } from './requestDiagnosticsService.js';
+
 const EVENT_STORAGE_KEY = 'jobdone-diagnostic-events';
+const DEBUG_STORAGE_KEY = 'jobdone-debug-logs';
 const MAX_EVENTS = 40;
-const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
+const ENV = import.meta.env || {};
+const BUILD_ID = ENV.VITE_DEPLOYMENT_ID || ENV.VITE_BUILD_ID || 'dev';
 
 const PRIVATE_KEYS = new Set([
   'audio',
@@ -20,6 +24,15 @@ const PRIVATE_KEYS = new Set([
   'transcript',
 ]);
 
+const FEEDBACK_EVENT_PREFIXES = [
+  'report_issue_',
+  'issue_report_',
+];
+
+function isFeedbackEvent(event) {
+  return FEEDBACK_EVENT_PREFIXES.some(prefix => String(event || '').startsWith(prefix));
+}
+
 function loadEvents() {
   try {
     const parsed = JSON.parse(localStorage.getItem(EVENT_STORAGE_KEY) || '[]');
@@ -34,6 +47,16 @@ function saveEvents(events) {
     localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(events.slice(-MAX_EVENTS)));
   } catch {
     // Diagnostics should never break capture or reporting.
+  }
+}
+
+function debugLogsEnabled() {
+  try {
+    return localStorage.getItem(DEBUG_STORAGE_KEY) === 'true'
+      || window.__JOBDONE_QA_DEBUG__ === true
+      || ENV.VITE_DEBUG_LOGS === 'true';
+  } catch {
+    return ENV.VITE_DEBUG_LOGS === 'true';
   }
 }
 
@@ -68,22 +91,31 @@ function browserInfo() {
 
 export const diagnosticService = {
   record(event, detail = {}) {
+    const sanitizedDetail = sanitizeDetail(detail);
     const events = loadEvents();
     events.push({
       event,
-      detail: sanitizeDetail(detail),
+      detail: sanitizedDetail,
       path: window.location.pathname,
       hash: window.location.hash,
       at: new Date().toISOString(),
     });
     saveEvents(events);
+    if (debugLogsEnabled()) {
+      console.info('[JobDone debug]', 'diagnostic_event', event, JSON.stringify(sanitizedDetail));
+    }
   },
 
-  recentEvents(limit = 25) {
-    return loadEvents().slice(-limit);
+  recentEvents(limit = 25, { excludeFeedbackEvents = false } = {}) {
+    const events = loadEvents();
+    const filtered = excludeFeedbackEvents
+      ? events.filter(event => !isFeedbackEvent(event.event))
+      : events;
+    return filtered.slice(-limit);
   },
 
   async buildBundle({ screen, backendAvailable = null } = {}) {
+    const isFeedbackReport = screen === 'report_issue';
     return {
       captured_at: new Date().toISOString(),
       build_id: BUILD_ID,
@@ -96,7 +128,8 @@ export const diagnosticService = {
       backend: {
         available: backendAvailable,
       },
-      recent_events: this.recentEvents(),
+      recent_events: this.recentEvents(25, { excludeFeedbackEvents: isFeedbackReport }),
+      recent_api_requests: recentApiRequests(),
       privacy: {
         excludes: [
           'entry content',

@@ -9,6 +9,8 @@ import { registerRecallRoutes } from './routes/recall.js';
 import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
+import { registerRequestIdHooks } from './services/requestId.js';
+import { createCorsOriginValidator } from './services/cors.js';
 
 export function createApp(options = {}) {
   const fastify = Fastify({
@@ -17,7 +19,7 @@ export function createApp(options = {}) {
   });
 
   fastify.register(cors, {
-    origin: true,
+    origin: createCorsOriginValidator(options.allowedCorsOrigins),
   });
 
   fastify.register(multipart, {
@@ -25,6 +27,8 @@ export function createApp(options = {}) {
       fileSize: 25 * 1024 * 1024,
     },
   });
+
+  registerRequestIdHooks(fastify);
 
   fastify.register(registerAudioRoutes);
   fastify.register(registerSyncRoutes);
@@ -47,7 +51,13 @@ export function createApp(options = {}) {
   });
 
   fastify.setErrorHandler((error, request, reply) => {
-    fastify.log.error(error);
+    fastify.log.error({
+      err: error,
+      request_id: request.requestId,
+      method: request.method,
+      route: request.routeOptions?.url || request.routerPath || request.url,
+      error_kind: error.code || error.name || 'Error',
+    }, 'request_failed');
     reply.status(500).send({
       error: 'Internal server error',
       message: process.env.NODE_ENV === 'development' ? error.message : undefined,

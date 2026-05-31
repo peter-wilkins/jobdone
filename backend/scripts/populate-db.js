@@ -18,15 +18,25 @@ dotenv.config();
 import readline from 'readline';
 import { createClient } from '@supabase/supabase-js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../src/services/embedding.js';
+import { createJobDoneDb } from '../src/services/postgresDb.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+const postgresUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error('SUPABASE_URL and SUPABASE_KEY required');
 }
 
+if (!postgresUrl) {
+  throw new Error('SUPABASE_DB_URL or DATABASE_URL required');
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
+const jobdoneDb = createJobDoneDb({
+  connectionString: postgresUrl,
+  schema: process.env.SUPABASE_DB_SCHEMA || 'jobdone',
+});
 const embeddingService = getEmbeddingService();
 
 // ---------------------------------------------------------------------------
@@ -126,7 +136,7 @@ async function resetEntriesTable() {
   
   try {
     // Delete all existing entries
-    const { error } = await supabase
+    const { error } = await jobdoneDb
       .from('entries')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
@@ -399,7 +409,7 @@ async function main() {
     }));
 
     try {
-      const { error } = await supabase.from('entries').insert(formattedBatch);
+      const { error } = await jobdoneDb.from('entries').insert(formattedBatch);
       if (error) throw error;
 
       inserted += batch.length;
@@ -431,7 +441,7 @@ async function main() {
   console.log('🧪 Testing query recall...');
   const testQuery = 'tap replacement';
   const testEmbedding = await embeddingService.embedText(testQuery);
-  const results = await supabase.rpc('match_entries', {
+  const results = await jobdoneDb.rpc('match_entries', {
     p_user_id: userId,
     p_query_embedding: `[${testEmbedding.join(',')}]`,
     p_match_count: 5,

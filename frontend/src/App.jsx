@@ -12,6 +12,7 @@ import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { diagnosticService } from './services/diagnosticService';
+import { crashReportService } from './services/crashReportService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -31,6 +32,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [recordRequestId, setRecordRequestId] = useState(0);
+  const [crashNotice, setCrashNotice] = useState(null);
 
   /**
    * Push unsynced local confirmed data to cloud, then pull cloud data not yet on this device.
@@ -111,6 +113,13 @@ function App() {
   }
 
   useEffect(() => {
+    diagnosticService.record('screen_open', { screen: screenFromLocation(), source: 'initial_load' });
+
+    const stopCrashReporting = crashReportService.start({
+      api: apiService,
+      onStatus: setCrashNotice,
+    });
+
     // Restore existing session on load
     authService.init().then(session => {
       setUser(session?.user || null);
@@ -134,7 +143,10 @@ function App() {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      stopCrashReporting();
+    };
   }, []);
 
   // Handle browser back button
@@ -178,39 +190,57 @@ function App() {
     setScreen('home');
   };
 
+  const crashStatusBar = crashNotice ? (
+    <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white shadow-sm">
+      <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
+        <span className="text-sm font-medium flex-1">{crashNotice.message}</span>
+        <button
+          type="button"
+          className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
+          onClick={() => setCrashNotice(null)}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (screen === 'feedback') {
-    return <FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <>{crashStatusBar}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'inbox') {
-    return <InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <>{crashStatusBar}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'contacts') {
-    return <ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <>{crashStatusBar}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'locations') {
-    return <LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} />;
+    return <>{crashStatusBar}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'share-target') {
-    return <ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
+    return <>{crashStatusBar}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'login') {
-    return <LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} />;
+    return <>{crashStatusBar}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   return (
-    <HomeScreen
-      onNavigate={navigateTo}
-      user={user}
-      refreshKey={refreshKey}
-      canAutoStart={canAutoStartHome}
-      recordRequestId={recordRequestId}
-      onRecordRequestHandled={handleRecordRequestHandled}
-    />
+    <>
+      {crashStatusBar}
+      <HomeScreen
+        onNavigate={navigateTo}
+        user={user}
+        refreshKey={refreshKey}
+        canAutoStart={canAutoStartHome}
+        recordRequestId={recordRequestId}
+        onRecordRequestHandled={handleRecordRequestHandled}
+      />
+    </>
   );
 }
 

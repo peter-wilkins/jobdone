@@ -1,16 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
-import { rankStructuredRecallResults } from './recallRanking.js';
+import { createJobDoneDb } from './postgresDb.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+const postgresUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+export const JOBDONE_DB_SCHEMA = process.env.SUPABASE_DB_SCHEMA || 'jobdone';
+
+if (!postgresUrl) {
+  console.warn('[Database] Postgres not configured. Cloud sync disabled.');
+}
 
 if (!supabaseUrl || !supabaseKey) {
-  console.warn('[Database] Supabase not configured. Cloud sync disabled.');
+  console.warn('[Database] Supabase Auth not configured. Login disabled.');
 }
 
 const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+export const jobdoneDb = createJobDoneDb({
+  connectionString: postgresUrl,
+  schema: JOBDONE_DB_SCHEMA,
+});
 
 function toVectorLiteral(embedding) {
   if (!Array.isArray(embedding)) return embedding ?? null;
@@ -194,13 +205,13 @@ export function normalizeContextClue(clue = {}) {
  * Save a confirmed entry to Supabase
  */
 export async function saveEntry(userId, entryData) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping save');
     return null;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('entries')
       .insert([
         {
@@ -232,13 +243,13 @@ export async function saveEntry(userId, entryData) {
  * Find an existing confirmed entry by Capture ID.
  */
 export async function getEntryByCaptureId(userId, captureId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return null;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -263,14 +274,14 @@ export async function getEntryByCaptureId(userId, captureId) {
  * This makes cloud sync idempotent for retries from the same device.
  */
 export async function getEntryByCreatedAt(userId, createdAt) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return null;
   }
 
   try {
     const createdAtIso = new Date(createdAt).toISOString();
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -295,43 +306,43 @@ export async function getEntryByCreatedAt(userId, createdAt) {
  * Removes entries, queries, and feedback for the given user.
  */
 export async function deleteUserData(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping delete');
     return null;
   }
 
   try {
-    const { error: entriesErr } = await supabase
+    const { error: entriesErr } = await jobdoneDb
       .from('entries')
       .delete()
       .eq('user_id', userId);
     if (entriesErr) throw entriesErr;
 
-    const { error: contactsErr } = await supabase
+    const { error: contactsErr } = await jobdoneDb
       .from('contacts')
       .delete()
       .eq('user_id', userId);
     if (contactsErr) throw contactsErr;
 
-    const { error: locationsErr } = await supabase
+    const { error: locationsErr } = await jobdoneDb
       .from('locations')
       .delete()
       .eq('user_id', userId);
     if (locationsErr) throw locationsErr;
 
-    const { error: tagCategoriesErr } = await supabase
+    const { error: tagCategoriesErr } = await jobdoneDb
       .from('tag_categories')
       .delete()
       .eq('user_id', userId);
     if (tagCategoriesErr) throw tagCategoriesErr;
 
-    const { error: queriesErr } = await supabase
+    const { error: queriesErr } = await jobdoneDb
       .from('queries')
       .delete()
       .eq('user_id', userId);
     if (queriesErr) throw queriesErr;
 
-    const { error: feedbackErr } = await supabase
+    const { error: feedbackErr } = await jobdoneDb
       .from('feedback')
       .delete()
       .eq('user_id', userId);
@@ -349,13 +360,13 @@ export async function deleteUserData(userId) {
  * Get all entries for a user
  */
 export async function getEntries(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('entries')
       .select('*')
       .eq('user_id', userId)
@@ -369,7 +380,7 @@ export async function getEntries(userId) {
     const entries = data || [];
     if (entries.length === 0) return entries;
 
-    const { data: clues, error: cluesError } = await supabase
+    const { data: clues, error: cluesError } = await jobdoneDb
       .from('context_clues')
       .select('*')
       .eq('user_id', userId)
@@ -387,7 +398,7 @@ export async function getEntries(userId) {
 
     const entryIds = entries.map(entry => entry.id);
 
-    const { data: locationLinks, error: locationsError } = await supabase
+    const { data: locationLinks, error: locationsError } = await jobdoneDb
       .from('entry_locations')
       .select('entry_id, created_at, locations(*)')
       .eq('user_id', userId)
@@ -403,7 +414,7 @@ export async function getEntries(userId) {
       }
     }
 
-    const { data: tagLinks, error: tagsError } = await supabase
+    const { data: tagLinks, error: tagsError } = await jobdoneDb
       .from('entry_tags')
       .select('entry_id, created_at, tags(*, tag_categories(*))')
       .eq('user_id', userId)
@@ -419,7 +430,7 @@ export async function getEntries(userId) {
       }
     }
 
-    const { data: contactLinks, error: contactsError } = await supabase
+    const { data: contactLinks, error: contactsError } = await jobdoneDb
       .from('entry_contacts')
       .select('entry_id, created_at, contacts(*)')
       .eq('user_id', userId)
@@ -483,7 +494,7 @@ export async function getEntries(userId) {
 }
 
 export async function saveContextClues(userId, entryId, clues = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping context clues save');
     return [];
   }
@@ -505,7 +516,7 @@ export async function saveContextClues(userId, entryId, clues = []) {
   const saved = [];
 
   if (rowsWithLocalId.length) {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('context_clues')
       .upsert(rowsWithLocalId, { onConflict: 'user_id,local_id' })
       .select();
@@ -514,7 +525,7 @@ export async function saveContextClues(userId, entryId, clues = []) {
   }
 
   if (rowsWithoutLocalId.length) {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('context_clues')
       .insert(rowsWithoutLocalId)
       .select();
@@ -526,7 +537,7 @@ export async function saveContextClues(userId, entryId, clues = []) {
 }
 
 export async function saveEntryLocations(userId, entryId, locations = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping locations save');
     return [];
   }
@@ -540,8 +551,8 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
 
     let row = null;
     if (location.local_id) {
-      const { data: existing, error: existingError } = await supabase
-        .from('locations')
+      const { data: existing, error: existingError } = await jobdoneDb
+      .from('locations')
         .select('*')
         .eq('user_id', userId)
         .eq('local_id', location.local_id)
@@ -555,8 +566,8 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
     }
 
     if (!row) {
-      const { data, error } = await supabase
-        .from('locations')
+      const { data, error } = await jobdoneDb
+      .from('locations')
         .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
         .select()
         .single();
@@ -564,8 +575,8 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
       row = data;
       existingLocations.push(row);
     } else {
-      const { data, error } = await supabase
-        .from('locations')
+      const { data, error } = await jobdoneDb
+      .from('locations')
         .update({
           status: location.status,
           display_name: location.display_name || row.display_name,
@@ -582,7 +593,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
       row = data;
     }
 
-    const { error: linkError } = await supabase
+    const { error: linkError } = await jobdoneDb
       .from('entry_locations')
       .upsert([{
         user_id: userId,
@@ -599,7 +610,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
 }
 
 export async function saveLocation(userId, input = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping location save');
     return null;
   }
@@ -610,7 +621,7 @@ export async function saveLocation(userId, input = {}) {
   const existingLocations = await getLocations(userId);
   let row = null;
   if (location.local_id) {
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await jobdoneDb
       .from('locations')
       .select('*')
       .eq('user_id', userId)
@@ -625,7 +636,7 @@ export async function saveLocation(userId, input = {}) {
   }
 
   if (!row) {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('locations')
       .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
       .select()
@@ -634,8 +645,8 @@ export async function saveLocation(userId, input = {}) {
     return data;
   }
 
-  const { data, error } = await supabase
-    .from('locations')
+  const { data, error } = await jobdoneDb
+      .from('locations')
     .update({
       status: location.status,
       local_id: row.local_id || location.local_id,
@@ -654,7 +665,7 @@ export async function saveLocation(userId, input = {}) {
 }
 
 export async function saveEntryContacts(userId, entryId, contacts = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping contacts');
     return [];
   }
@@ -674,8 +685,8 @@ export async function saveEntryContacts(userId, entryId, contacts = []) {
     contact_id: contact.id,
   }));
 
-  const { error } = await supabase
-    .from('entry_contacts')
+  const { error } = await jobdoneDb
+      .from('entry_contacts')
     .upsert(rows, { onConflict: 'user_id,entry_id,contact_id' });
 
   if (error) {
@@ -690,7 +701,7 @@ export async function saveEntryContacts(userId, entryId, contacts = []) {
 }
 
 export async function saveEntryTags(userId, entryId, tags = []) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping tags save');
     return [];
   }
@@ -701,7 +712,7 @@ export async function saveEntryTags(userId, entryId, tags = []) {
     const tag = normalizeTag(input);
     if (!tag) continue;
 
-    const { data: category, error: categoryError } = await supabase
+    const { data: category, error: categoryError } = await jobdoneDb
       .from('tag_categories')
       .upsert([{
         user_id: userId,
@@ -715,8 +726,8 @@ export async function saveEntryTags(userId, entryId, tags = []) {
 
     let row = null;
     if (tag.local_id) {
-      const { data: existing, error: existingError } = await supabase
-        .from('tags')
+      const { data: existing, error: existingError } = await jobdoneDb
+      .from('tags')
         .select('*')
         .eq('user_id', userId)
         .eq('local_id', tag.local_id)
@@ -726,8 +737,8 @@ export async function saveEntryTags(userId, entryId, tags = []) {
     }
 
     if (!row) {
-      const { data: existingByLabel, error: existingByLabelError } = await supabase
-        .from('tags')
+      const { data: existingByLabel, error: existingByLabelError } = await jobdoneDb
+      .from('tags')
         .select('*')
         .eq('user_id', userId)
         .eq('category_id', category.id)
@@ -738,8 +749,8 @@ export async function saveEntryTags(userId, entryId, tags = []) {
     }
 
     if (!row) {
-      const { data, error } = await supabase
-        .from('tags')
+      const { data, error } = await jobdoneDb
+      .from('tags')
         .insert([{
           user_id: userId,
           local_id: tag.local_id,
@@ -755,8 +766,8 @@ export async function saveEntryTags(userId, entryId, tags = []) {
       if (error) throw error;
       row = data;
     } else {
-      const { data, error } = await supabase
-        .from('tags')
+      const { data, error } = await jobdoneDb
+      .from('tags')
         .update({
           category_id: category.id,
           label: tag.label,
@@ -771,7 +782,7 @@ export async function saveEntryTags(userId, entryId, tags = []) {
       row = data;
     }
 
-    const { error: linkError } = await supabase
+    const { error: linkError } = await jobdoneDb
       .from('entry_tags')
       .upsert([{
         user_id: userId,
@@ -781,13 +792,13 @@ export async function saveEntryTags(userId, entryId, tags = []) {
       }], { onConflict: 'user_id,entry_id,tag_id' });
     if (linkError) throw linkError;
 
-    const { error: vocabularyError } = await supabase.rpc('increment_tag_vocabulary', {
+    const { error: vocabularyError } = await jobdoneDb.rpc('increment_tag_vocabulary', {
       p_user_id: userId,
       p_tag_id: row.id,
     });
     if (vocabularyError) {
-      const { data: existingVocabulary, error: existingVocabularyError } = await supabase
-        .from('tag_vocabulary')
+      const { data: existingVocabulary, error: existingVocabularyError } = await jobdoneDb
+      .from('tag_vocabulary')
         .select('*')
         .eq('user_id', userId)
         .eq('tag_id', row.id)
@@ -802,8 +813,8 @@ export async function saveEntryTags(userId, entryId, tags = []) {
         accepted_count: (existing?.accepted_count || 0) + 1,
         rejected_count: existing?.rejected_count || 0,
       };
-      const { error: upsertError } = await supabase
-        .from('tag_vocabulary')
+      const { error: upsertError } = await jobdoneDb
+      .from('tag_vocabulary')
         .upsert([payload], { onConflict: 'user_id,tag_id' });
       if (upsertError) throw upsertError;
     }
@@ -821,7 +832,7 @@ export async function saveEntryTags(userId, entryId, tags = []) {
 }
 
 export async function saveContact(userId, contactData) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping contact save');
     return null;
   }
@@ -856,7 +867,7 @@ export async function saveContact(userId, contactData) {
   };
 
   if (!existing) {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('contacts')
       .insert([{ ...payload, created_at: new Date(contactData.created_at || Date.now()).toISOString() }])
       .select()
@@ -881,8 +892,8 @@ export async function saveContact(userId, contactData) {
     source_capture_ids: unique([...(existing.source_capture_ids || []), ...payload.source_capture_ids]),
   };
 
-  const { data, error } = await supabase
-    .from('contacts')
+  const { data, error } = await jobdoneDb
+      .from('contacts')
     .update(merged)
     .eq('id', existing.id)
     .select()
@@ -892,13 +903,13 @@ export async function saveContact(userId, contactData) {
 }
 
 export async function getContacts(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('contacts')
+  const { data, error } = await jobdoneDb
+      .from('contacts')
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'confirmed')
@@ -908,13 +919,13 @@ export async function getContacts(userId) {
 }
 
 export async function getLocations(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('locations')
+  const { data, error } = await jobdoneDb
+      .from('locations')
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'confirmed')
@@ -971,17 +982,17 @@ export function buildContactLocationCooccurrences(contactLinks = [], locationLin
 }
 
 export async function getContactLocationCooccurrences(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   const [{ data: contactLinks, error: contactError }, { data: locationLinks, error: locationError }] = await Promise.all([
-    supabase
+    jobdoneDb
       .from('entry_contacts')
       .select('entry_id, created_at, contacts(id, display_name)')
       .eq('user_id', userId),
-    supabase
+    jobdoneDb
       .from('entry_locations')
       .select('entry_id, created_at, locations(id, display_name, place_text, latitude, longitude)')
       .eq('user_id', userId),
@@ -1007,13 +1018,13 @@ export async function getContactLocationCooccurrences(userId) {
 }
 
 export async function getTagVocabulary(userId) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('tag_vocabulary')
+  const { data, error } = await jobdoneDb
+      .from('tag_vocabulary')
     .select('*, tags(*, tag_categories(*))')
     .eq('user_id', userId)
     .order('last_used_at', { ascending: false })
@@ -1041,30 +1052,67 @@ export function createAnonymousSession() {
 /**
  * Save an issue report to Supabase
  */
-export async function saveFeedback(userId, { transcript, created_at, diagnostic_bundle }) {
-  if (!supabase) {
+export async function saveFeedback(userId, {
+  transcript,
+  created_at,
+  diagnostic_bundle,
+  identity_class = userId ? 'signed_in' : 'anonymous',
+  anonymous_device_id = null,
+  abuse_key_hash = null,
+} = {}) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping feedback save');
     return null;
   }
 
   try {
+    const diagnosticBundle = diagnostic_bundle || {};
     const row = {
       user_id: userId,
+      identity_class,
+      anonymous_device_id,
+      abuse_key_hash,
       transcript,
-      diagnostic_bundle: diagnostic_bundle || {},
-      created_at: new Date(created_at).toISOString(),
+      diagnostic_bundle: diagnosticBundle,
+      created_at: new Date(created_at || Date.now()).toISOString(),
     };
 
-    let { data, error } = await supabase
+    let { data, error } = await jobdoneDb
       .from('feedback')
       .insert([row])
       .select();
 
+    if (error && /identity_class|anonymous_device_id|abuse_key_hash|user_id/i.test(String(error.message || ''))) {
+      console.warn('[DB] feedback identity columns missing; saving compatible report shape');
+      const compatibilityRow = {
+        user_id: userId || `anonymous:${anonymous_device_id || 'unknown'}`,
+        transcript: row.transcript,
+        diagnostic_bundle: {
+          ...diagnosticBundle,
+          feedback_identity: {
+            identity_class,
+            anonymous_device_id,
+          },
+        },
+        created_at: row.created_at,
+      };
+      const retry = await jobdoneDb
+      .from('feedback')
+        .insert([compatibilityRow])
+        .select();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error && String(error.message || '').includes('diagnostic_bundle')) {
       console.warn('[DB] feedback.diagnostic_bundle missing; saving report without diagnostics');
-      const retry = await supabase
-        .from('feedback')
-        .insert([{ user_id: row.user_id, transcript: row.transcript, created_at: row.created_at }])
+      const retry = await jobdoneDb
+      .from('feedback')
+        .insert([{
+          user_id: row.user_id || `anonymous:${anonymous_device_id || 'unknown'}`,
+          transcript: row.transcript,
+          created_at: row.created_at,
+        }])
         .select();
       data = retry.data;
       error = retry.error;
@@ -1084,10 +1132,10 @@ export async function saveFeedback(userId, { transcript, created_at, diagnostic_
  * Get all feedback for a user
  */
 export async function getFeedback(userId) {
-  if (!supabase) return [];
+  if (!jobdoneDb) return [];
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('feedback')
       .select('*')
       .eq('user_id', userId)
@@ -1106,10 +1154,10 @@ export async function getFeedback(userId) {
  * Update an entry's embedding after it has been saved.
  */
 export async function updateEntryEmbedding(entryId, embedding, embeddingModel) {
-  if (!supabase) return;
+  if (!jobdoneDb) return;
 
   try {
-    const { error } = await supabase
+    const { error } = await jobdoneDb
       .from('entries')
       .update({
         embedding: `[${embedding.join(',')}]`,
@@ -1135,8 +1183,8 @@ async function attachEntryStructure(userId, entries = []) {
   let contactLinks = [];
   let tagLinks = [];
 
-  const { data: locationsData, error: locationsError } = await supabase
-    .from('entry_locations')
+  const { data: locationsData, error: locationsError } = await jobdoneDb
+      .from('entry_locations')
     .select('entry_id, created_at, locations(*)')
     .eq('user_id', userId)
     .in('entry_id', entryIds)
@@ -1152,8 +1200,8 @@ async function attachEntryStructure(userId, entries = []) {
     locationLinks = locationsData || [];
   }
 
-  const { data: contactsData, error: contactsError } = await supabase
-    .from('entry_contacts')
+  const { data: contactsData, error: contactsError } = await jobdoneDb
+      .from('entry_contacts')
     .select('entry_id, created_at, contacts(*)')
     .eq('user_id', userId)
     .in('entry_id', entryIds)
@@ -1169,8 +1217,8 @@ async function attachEntryStructure(userId, entries = []) {
     contactLinks = contactsData || [];
   }
 
-  const { data: tagsData, error: tagsError } = await supabase
-    .from('entry_tags')
+  const { data: tagsData, error: tagsError } = await jobdoneDb
+      .from('entry_tags')
     .select('entry_id, created_at, tags(*, tag_categories(*))')
     .eq('user_id', userId)
     .in('entry_id', entryIds)
@@ -1189,7 +1237,7 @@ async function attachEntryStructure(userId, entries = []) {
   const locationsByEntryId = new Map();
   for (const link of locationLinks) {
     const location = link.locations;
-    if (!location) continue;
+    if (!location || location.status !== 'confirmed') continue;
     if (!locationsByEntryId.has(link.entry_id)) locationsByEntryId.set(link.entry_id, []);
     locationsByEntryId.get(link.entry_id).push(location);
   }
@@ -1197,7 +1245,7 @@ async function attachEntryStructure(userId, entries = []) {
   const tagsByEntryId = new Map();
   for (const link of tagLinks) {
     const tag = link.tags;
-    if (!tag) continue;
+    if (!tag || tag.status !== 'confirmed') continue;
     if (!tagsByEntryId.has(link.entry_id)) tagsByEntryId.set(link.entry_id, []);
     tagsByEntryId.get(link.entry_id).push(tag);
   }
@@ -1205,7 +1253,7 @@ async function attachEntryStructure(userId, entries = []) {
   const contactsByEntryId = new Map();
   for (const link of contactLinks) {
     const contact = link.contacts;
-    if (!contact) continue;
+    if (!contact || contact.status !== 'confirmed') continue;
     if (!contactsByEntryId.has(link.entry_id)) contactsByEntryId.set(link.entry_id, []);
     contactsByEntryId.get(link.entry_id).push(contact);
   }
@@ -1219,31 +1267,22 @@ async function attachEntryStructure(userId, entries = []) {
 }
 
 /**
- * Recall: cosine-similarity search against a user's entries.
+ * Recall: deterministic SQL search against a user's confirmed Entries.
  *
  * @param {string} userId
- * @param {number[]} queryEmbedding - 1536-dim vector
  * @param {object} opts
+ * @param {string} opts.query - user recall query
  * @param {number} opts.limit - max results (default 10)
- * @param {number} opts.floor - minimum similarity (default 0.3)
- * @returns {Promise<Array>} rows with similarity score
+ * @returns {Promise<Array>} rows with recall_score and match_reasons
  */
-export async function recallEntries(userId, queryEmbedding, { query = '', limit = 10, floor = 0.3 } = {}) {
-  if (!supabase) {
+export async function recallEntries(userId, { query = '', limit = 10 } = {}) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   try {
-    const vectorLiteral = `[${queryEmbedding.join(',')}]`;
-
-    const candidateLimit = Math.max(limit * 5, limit);
-    const { data, error } = await supabase.rpc('match_entries', {
-      p_user_id: userId,
-      p_query_embedding: vectorLiteral,
-      p_match_count: candidateLimit,
-      p_similarity_floor: floor,
-    });
+    const { data, error } = await jobdoneDb.recallEntriesSql({ userId, query, limit });
 
     if (error) {
       console.error('[DB] Recall error:', error);
@@ -1253,8 +1292,7 @@ export async function recallEntries(userId, queryEmbedding, { query = '', limit 
     const candidates = data || [];
     if (candidates.length === 0) return [];
 
-    const structuredCandidates = await attachEntryStructure(userId, candidates);
-    return rankStructuredRecallResults(query, structuredCandidates, { limit });
+    return attachEntryStructure(userId, candidates);
   } catch (err) {
     console.error('[DB] recallEntries failed:', err.message);
     throw err;
@@ -1266,14 +1304,14 @@ export async function recallEntries(userId, queryEmbedding, { query = '', limit 
  * already exists for the user, updates created_at to bubble to top.
  */
 export async function saveQuery(userId, text) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping query save');
     return null;
   }
 
   try {
     // Try to find existing query with same text
-    const { data: existing } = await supabase
+    const { data: existing } = await jobdoneDb
       .from('queries')
       .select('id')
       .eq('user_id', userId)
@@ -1282,8 +1320,8 @@ export async function saveQuery(userId, text) {
 
     if (existing) {
       // Update created_at to bubble to top
-      const { data, error } = await supabase
-        .from('queries')
+      const { data, error } = await jobdoneDb
+      .from('queries')
         .update({ created_at: new Date().toISOString() })
         .eq('id', existing.id)
         .select();
@@ -1294,7 +1332,7 @@ export async function saveQuery(userId, text) {
     }
 
     // Insert new query
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('queries')
       .insert([{ user_id: userId, text }])
       .select();
@@ -1313,13 +1351,13 @@ export async function saveQuery(userId, text) {
  * Returns distinct texts ordered by most recent created_at.
  */
 export async function getQueries(userId, { limit = 50 } = {}) {
-  if (!supabase) {
+  if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await jobdoneDb
       .from('queries')
       .select('*')
       .eq('user_id', userId)
