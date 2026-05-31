@@ -32,3 +32,6 @@ yarn-error.log*
 tmp/
 .vercel
 .env*.local
+
+# Local generated Recall property worlds
+backend/.recall-property-golden*.json

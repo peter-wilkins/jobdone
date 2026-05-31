@@ -239,6 +239,28 @@ plus confirmed Contact, Location, and Tag association tables are the right shape
 for source-grounded tests. The simplification is in the Recall mechanism, not
 the data model.
 
+## Local Property Loop
+
+Run the local-Supabase Recall property loop explicitly:
+
+```bash
+npm --prefix backend run test:recall:integration
+```
+
+The loop reads or creates `backend/.recall-property-golden.json`. That file is
+ignored by git and is the only golden artifact format. Do not silently overwrite
+it; regenerate deliberately with:
+
+```bash
+REGENERATE_RECALL_GOLDEN=1 npm --prefix backend run test:recall:integration
+```
+
+On failure, the loop writes a shrunk JSON repro to
+`tmp/recall-property-failures/latest.json` and includes the Query, oracle
+expectation, actual results, match reasons, and shrunk world. GitHub Actions can
+surface the same summary through `GITHUB_STEP_SUMMARY`, but CI adoption remains
+optional until local Supabase startup is boring.
+
 For SQL-first Recall V1, searchable truth is:
 
 - `entries.summary`
