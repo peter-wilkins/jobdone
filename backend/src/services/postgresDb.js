@@ -42,6 +42,221 @@ function tableRef(schema, table) {
   return `${quoteIdent(schema)}.${quoteIdent(table)}`;
 }
 
+export function normalizeRecallText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const RECALL_STOP_WORDS = new Set([
+  'a',
+  'about',
+  'an',
+  'and',
+  'at',
+  'did',
+  'do',
+  'for',
+  'i',
+  'job',
+  'jobs',
+  'last',
+  'latest',
+  'me',
+  'most',
+  'recent',
+  'show',
+  'the',
+  'time',
+  'to',
+  'what',
+  'when',
+  'where',
+  'with',
+  'work',
+  'worked',
+]);
+
+export function recallQueryTerms(query) {
+  return Array.from(new Set(
+    normalizeRecallText(query)
+      .split(' ')
+      .filter(term => term.length > 1 && !RECALL_STOP_WORDS.has(term))
+  ));
+}
+
+export function isRecencyRecallQuery(query) {
+  return /\b(last time|latest|most recent|recent|last visit)\b/i.test(String(query || ''));
+}
+
+function normalizedSql(expression) {
+  return `btrim(regexp_replace(lower(coalesce(${expression}, '')), '[^[:alnum:]]+', ' ', 'g'))`;
+}
+
+function safeLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 10;
+  return Math.max(1, Math.min(Math.trunc(parsed), 50));
+}
+
+export function buildSqlFirstRecallQuery({
+  schema = 'jobdone',
+  userId,
+  query = '',
+  terms = recallQueryTerms(query),
+  limit = 10,
+  recencyIntent = isRecencyRecallQuery(query),
+} = {}) {
+  const entries = tableRef(schema, 'entries');
+  const entryContacts = tableRef(schema, 'entry_contacts');
+  const contacts = tableRef(schema, 'contacts');
+  const entryLocations = tableRef(schema, 'entry_locations');
+  const locations = tableRef(schema, 'locations');
+  const entryTags = tableRef(schema, 'entry_tags');
+  const tags = tableRef(schema, 'tags');
+  const normalizedQuery = normalizeRecallText(query);
+  const values = [userId, normalizedQuery, terms, safeLimit(limit), Boolean(recencyIntent)];
+  const labelMatches = labelsColumn => `
+    coalesce((
+      select array_agg(label order by label)
+      from unnest(${labelsColumn}) as label
+      where ${normalizedSql('label')} <> ''
+        and (
+          ($2 <> '' and position((' ' || ${normalizedSql('label')} || ' ') in (' ' || $2 || ' ')) > 0)
+          or exists (
+            select 1
+            from unnest($3::text[]) as term
+            where position((' ' || term || ' ') in (' ' || ${normalizedSql('label')} || ' ')) > 0
+          )
+        )
+    ), array[]::text[])
+  `;
+  const reasonsFor = (column, kind, score) => `
+    coalesce((
+      select jsonb_agg(jsonb_build_object('kind', '${kind}', 'label', label, 'score', ${score}) order by label)
+      from unnest(${column}) as label
+    ), '[]'::jsonb)
+  `;
+
+  const sql = `
+    with base as (
+      select
+        e.id,
+        e.user_id,
+        e.capture_id,
+        e.transcript,
+        e.summary,
+        e.created_at,
+        coalesce((
+          select array_agg(distinct c.display_name order by c.display_name)
+          from ${entryContacts} ec
+          join ${contacts} c on c.id = ec.contact_id and c.user_id = ec.user_id
+          where ec.user_id = e.user_id
+            and ec.entry_id = e.id
+            and c.status = 'confirmed'
+            and c.display_name <> ''
+        ), array[]::text[]) as contact_labels,
+        coalesce((
+          select array_agg(distinct label order by label)
+          from ${entryLocations} el
+          join ${locations} l on l.id = el.location_id and l.user_id = el.user_id
+          cross join lateral (values (l.display_name), (l.place_text), (l.address_text)) as labels(label)
+          where el.user_id = e.user_id
+            and el.entry_id = e.id
+            and l.status = 'confirmed'
+            and label <> ''
+        ), array[]::text[]) as location_labels,
+        coalesce((
+          select array_agg(distinct t.label order by t.label)
+          from ${entryTags} et
+          join ${tags} t on t.id = et.tag_id and t.user_id = et.user_id
+          where et.user_id = e.user_id
+            and et.entry_id = e.id
+            and t.status = 'confirmed'
+            and t.label <> ''
+        ), array[]::text[]) as tag_labels
+      from ${entries} e
+      where e.user_id = $1
+    ),
+    normalized as (
+      select
+        base.*,
+        ${normalizedSql('base.summary')} as summary_norm
+      from base
+    ),
+    matched as (
+      select
+        normalized.*,
+        ${labelMatches('contact_labels')} as matched_contacts,
+        ${labelMatches('location_labels')} as matched_locations,
+        ${labelMatches('tag_labels')} as matched_tags,
+        coalesce((
+          select array_agg(term order by term)
+          from unnest($3::text[]) as term
+          where position((' ' || term || ' ') in (' ' || summary_norm || ' ')) > 0
+        ), array[]::text[]) as matched_summary_terms,
+        ($2 <> '' and position((' ' || $2 || ' ') in (' ' || summary_norm || ' ')) > 0) as matched_summary_phrase
+      from normalized
+    ),
+    scored as (
+      select
+        matched.*,
+        (
+          cardinality(matched_contacts) * 4.0 +
+          cardinality(matched_locations) * 4.0 +
+          cardinality(matched_tags) * 2.0 +
+          cardinality(matched_summary_terms) * 1.0 +
+          case when matched_summary_phrase then 1.5 else 0 end
+        ) as lexical_score
+      from matched
+    ),
+    ranked as (
+      select
+        scored.*,
+        case
+          when $5::boolean and lexical_score > 0
+            then greatest(0, 0.5 - ((dense_rank() over (order by created_at desc) - 1) * 0.05))
+          else 0
+        end as recency_score
+      from scored
+    )
+    select
+      id,
+      user_id,
+      capture_id,
+      transcript,
+      summary,
+      created_at,
+      (lexical_score + recency_score)::float as recall_score,
+      (lexical_score + recency_score)::float as similarity,
+      lexical_score::float as lexical_score,
+      recency_score::float as recency_score,
+      ${reasonsFor('matched_contacts', 'contact', '4.0')} ||
+      ${reasonsFor('matched_locations', 'location', '4.0')} ||
+      ${reasonsFor('matched_tags', 'tag', '2.0')} ||
+      ${reasonsFor('matched_summary_terms', 'summary', '1.0')} ||
+      case
+        when matched_summary_phrase
+          then jsonb_build_array(jsonb_build_object('kind', 'summary_phrase', 'label', $2, 'score', 1.5))
+        else '[]'::jsonb
+      end ||
+      case
+        when recency_score > 0
+          then jsonb_build_array(jsonb_build_object('kind', 'recency', 'label', created_at, 'score', recency_score))
+        else '[]'::jsonb
+      end as match_reasons
+    from ranked
+    where lexical_score > 0
+    order by recall_score desc, created_at desc, id asc
+    limit $4
+  `;
+
+  return [sql, values];
+}
+
 function buildWhere(filters, values) {
   if (!filters.length) return '';
   const clauses = filters.map(filter => {
@@ -128,6 +343,20 @@ class JobDoneDb {
       throw new Error(`Unsupported RPC: ${name}`);
     } catch (error) {
       return { data: null, error: normalizePgError(error) };
+    }
+  }
+
+  async recallEntriesSql({ userId, query = '', limit = 10 } = {}) {
+    try {
+      const result = await this.pool.query(...buildSqlFirstRecallQuery({
+        schema: this.schema,
+        userId,
+        query,
+        limit,
+      }));
+      return { data: result.rows, error: null };
+    } catch (error) {
+      return { data: [], error: normalizePgError(error) };
     }
   }
 }

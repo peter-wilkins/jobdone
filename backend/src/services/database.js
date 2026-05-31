@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { rankStructuredRecallResults } from './recallRanking.js';
 import { createJobDoneDb } from './postgresDb.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -1238,7 +1237,7 @@ async function attachEntryStructure(userId, entries = []) {
   const locationsByEntryId = new Map();
   for (const link of locationLinks) {
     const location = link.locations;
-    if (!location) continue;
+    if (!location || location.status !== 'confirmed') continue;
     if (!locationsByEntryId.has(link.entry_id)) locationsByEntryId.set(link.entry_id, []);
     locationsByEntryId.get(link.entry_id).push(location);
   }
@@ -1246,7 +1245,7 @@ async function attachEntryStructure(userId, entries = []) {
   const tagsByEntryId = new Map();
   for (const link of tagLinks) {
     const tag = link.tags;
-    if (!tag) continue;
+    if (!tag || tag.status !== 'confirmed') continue;
     if (!tagsByEntryId.has(link.entry_id)) tagsByEntryId.set(link.entry_id, []);
     tagsByEntryId.get(link.entry_id).push(tag);
   }
@@ -1254,7 +1253,7 @@ async function attachEntryStructure(userId, entries = []) {
   const contactsByEntryId = new Map();
   for (const link of contactLinks) {
     const contact = link.contacts;
-    if (!contact) continue;
+    if (!contact || contact.status !== 'confirmed') continue;
     if (!contactsByEntryId.has(link.entry_id)) contactsByEntryId.set(link.entry_id, []);
     contactsByEntryId.get(link.entry_id).push(contact);
   }
@@ -1268,31 +1267,22 @@ async function attachEntryStructure(userId, entries = []) {
 }
 
 /**
- * Recall: cosine-similarity search against a user's entries.
+ * Recall: deterministic SQL search against a user's confirmed Entries.
  *
  * @param {string} userId
- * @param {number[]} queryEmbedding - 1536-dim vector
  * @param {object} opts
+ * @param {string} opts.query - user recall query
  * @param {number} opts.limit - max results (default 10)
- * @param {number} opts.floor - minimum similarity (default 0.3)
- * @returns {Promise<Array>} rows with similarity score
+ * @returns {Promise<Array>} rows with recall_score and match_reasons
  */
-export async function recallEntries(userId, queryEmbedding, { query = '', limit = 10, floor = 0.3 } = {}) {
+export async function recallEntries(userId, { query = '', limit = 10 } = {}) {
   if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
   try {
-    const vectorLiteral = `[${queryEmbedding.join(',')}]`;
-
-    const candidateLimit = Math.max(limit * 5, limit);
-    const { data, error } = await jobdoneDb.rpc('match_entries', {
-      p_user_id: userId,
-      p_query_embedding: vectorLiteral,
-      p_match_count: candidateLimit,
-      p_similarity_floor: floor,
-    });
+    const { data, error } = await jobdoneDb.recallEntriesSql({ userId, query, limit });
 
     if (error) {
       console.error('[DB] Recall error:', error);
@@ -1302,8 +1292,7 @@ export async function recallEntries(userId, queryEmbedding, { query = '', limit 
     const candidates = data || [];
     if (candidates.length === 0) return [];
 
-    const structuredCandidates = await attachEntryStructure(userId, candidates);
-    return rankStructuredRecallResults(query, structuredCandidates, { limit });
+    return attachEntryStructure(userId, candidates);
   } catch (err) {
     console.error('[DB] recallEntries failed:', err.message);
     throw err;

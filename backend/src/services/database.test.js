@@ -6,7 +6,12 @@ import {
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
 } from './database.js';
-import { sslConfigForConnection } from './postgresDb.js';
+import {
+  buildSqlFirstRecallQuery,
+  isRecencyRecallQuery,
+  recallQueryTerms,
+  sslConfigForConnection,
+} from './postgresDb.js';
 
 describe('Database schema binding', () => {
   test('defaults cloud persistence to the jobdone schema', () => {
@@ -112,5 +117,44 @@ describe('Location identity matching', () => {
       { display_name: '14 Bell Street', latitude: 51.5, longitude: -0.1 },
       { displayName: '16 Bell Street', latitude: 51.50001, longitude: -0.10001 }
     ), false);
+  });
+});
+
+describe('SQL-first Recall', () => {
+  test('normalizes useful query terms and detects recency intent', () => {
+    assert.deepEqual(recallQueryTerms('What did I do for Sarah at Bell Street?'), [
+      'sarah',
+      'bell',
+      'street',
+    ]);
+    assert.equal(isRecencyRecallQuery('last time at Bell Street'), true);
+    assert.equal(isRecencyRecallQuery('Bell Street boiler'), false);
+  });
+
+  test('builds a deterministic SQL query without vector or transcript matching', () => {
+    const [sql, values] = buildSqlFirstRecallQuery({
+      schema: 'jobdone',
+      userId: 'user-1',
+      query: 'last time Sarah boiler',
+      limit: 5,
+    });
+    const lowerSql = sql.toLowerCase();
+
+    assert.equal(values[0], 'user-1');
+    assert.equal(values[1], 'last time sarah boiler');
+    assert.deepEqual(values[2], ['sarah', 'boiler']);
+    assert.equal(values[3], 5);
+    assert.equal(values[4], true);
+
+    assert.match(lowerSql, /from "jobdone"\."entries"/);
+    assert.match(lowerSql, /c\.status = 'confirmed'/);
+    assert.match(lowerSql, /l\.status = 'confirmed'/);
+    assert.match(lowerSql, /t\.status = 'confirmed'/);
+    assert.match(lowerSql, /base\.summary/);
+    assert.match(lowerSql, /match_reasons/);
+    assert.doesNotMatch(lowerSql, /match_entries/);
+    assert.doesNotMatch(lowerSql, /embedding/);
+    assert.doesNotMatch(lowerSql, /to_tsvector|websearch_to_tsquery/);
+    assert.doesNotMatch(lowerSql, /coalesce\(.*transcript/);
   });
 });
