@@ -13,6 +13,22 @@ function includesPhrase(haystack, phrase) {
   return ` ${normalize(haystack)} `.includes(` ${normalizedPhrase} `);
 }
 
+function isRecencyQuery(query) {
+  return /\b(last time|latest|most recent|recent|last visit)\b/i.test(String(query || ''));
+}
+
+function recencyScores(entries = []) {
+  const times = entries.map(entry => Date.parse(entry.created_at || entry.createdAt || '') || 0);
+  const datedTimes = times.filter(Boolean);
+  if (!datedTimes.length) return times.map(() => 0);
+
+  const min = Math.min(...datedTimes);
+  const max = Math.max(...datedTimes);
+  if (min === max) return times.map(time => time ? 0.15 : 0);
+
+  return times.map(time => time ? ((time - min) / (max - min)) * 0.15 : 0);
+}
+
 function structureLabels(entry = {}) {
   const locations = (entry.locations || []).map(location =>
     location.display_name || location.displayName || location.place_text || location.placeText
@@ -47,6 +63,9 @@ export function scoreStructureMatch(query, entry) {
 }
 
 export function rankStructuredRecallResults(query, entries = [], { limit = 10 } = {}) {
+  const recencyIntent = isRecencyQuery(query);
+  const recency = recencyIntent ? recencyScores(entries) : entries.map(() => 0);
+
   return [...entries]
     .map((entry, index) => {
       const structure = scoreStructureMatch(query, entry);
@@ -55,12 +74,17 @@ export function rankStructuredRecallResults(query, entries = [], { limit = 10 } 
         ...entry,
         structure_similarity: structure.score,
         structure_matches: structure.matched,
-        recall_score: similarity + structure.score,
+        recency_similarity: recency[index],
+        recall_score: similarity + structure.score + recency[index],
         _rankIndex: index,
       };
     })
     .filter(entry => entry.similarity > 0 || entry.structure_similarity > 0)
-    .sort((a, b) => b.recall_score - a.recall_score || a._rankIndex - b._rankIndex)
+    .sort((a, b) =>
+      b.recall_score - a.recall_score ||
+      (recencyIntent ? (Date.parse(b.created_at || '') || 0) - (Date.parse(a.created_at || '') || 0) : 0) ||
+      a._rankIndex - b._rankIndex
+    )
     .slice(0, limit)
     .map(({ _rankIndex, ...entry }) => entry);
 }
