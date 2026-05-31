@@ -6,11 +6,15 @@ import {
   runV0RecallProperties,
 } from '../src/services/recallPropertyHarness.js';
 
-function escapeGitHubCommand(value) {
+function escapeGitHubData(value) {
   return String(value || '')
     .replace(/%/g, '%25')
     .replace(/\r/g, '%0D')
-    .replace(/\n/g, '%0A')
+    .replace(/\n/g, '%0A');
+}
+
+function escapeGitHubProperty(value) {
+  return escapeGitHubData(value)
     .replace(/:/g, '%3A')
     .replace(/,/g, '%2C');
 }
@@ -24,7 +28,7 @@ function writeJobSummary(markdown) {
 
 function annotateFailure(failure) {
   const repro = failure.repro || {};
-  const title = escapeGitHubCommand('Recall property failure');
+  const title = escapeGitHubProperty('Recall property failure');
   const message = [
     `${failure.case}: ${failure.property}`,
     `query=${repro.query || ''}`,
@@ -32,7 +36,22 @@ function annotateFailure(failure) {
     `actual=${(repro.actualSources || []).join(', ') || 'none'}`,
   ].join(' | ');
 
-  console.error(`::error file=backend/src/services/recallRanking.js,title=${title}::${escapeGitHubCommand(message)}`);
+  console.error(`::error file=backend/src/services/recallRanking.js,title=${title}::${escapeGitHubData(message)}`);
+}
+
+function logFailure(failures) {
+  if (!process.env.GITHUB_ACTIONS) {
+    console.error(formatRecallPropertyFailures(failures));
+    return;
+  }
+
+  const failure = failures[0];
+  const repro = failure.repro || {};
+  console.error(`Recall property failed: ${failure.case} / ${failure.property}`);
+  console.error(`Query: ${repro.query || ''}`);
+  console.error(`Expected sources: ${(repro.expectedSources || []).join(', ') || 'none'}`);
+  console.error(`Actual sources: ${(repro.actualSources || []).join(', ') || 'none'}`);
+  console.error('See the GitHub Actions job summary for the minimal repro JSON and likely next step.');
 }
 
 const result = runV0RecallProperties();
@@ -46,5 +65,5 @@ if (!result.failures.length) {
 }
 
 annotateFailure(result.failures[0]);
-console.error(formatRecallPropertyFailures(result.failures));
+logFailure(result.failures);
 process.exit(1);
