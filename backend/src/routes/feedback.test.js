@@ -190,3 +190,68 @@ describe('FeedbackRoute POST /api/crash-reports', () => {
     assert.equal(res.statusCode, 400);
   });
 });
+
+describe('FeedbackRoute triage queue', () => {
+  test('returns normalized triage records prioritized for agent review', async () => {
+    const app = await buildApp({
+      getFeedbackTriageRows: async () => [
+        {
+          id: 'feedback-1',
+          user_id: null,
+          identity_class: 'anonymous',
+          anonymous_device_id: 'fbd_abcdefghijkl',
+          transcript: 'Lost my timeline entry.',
+          created_at: '2026-05-31T10:00:00.000Z',
+          diagnostic_bundle: {
+            build_id: 'build-1',
+            route: { screen: 'timeline' },
+            feedback: { kind: 'data_loss', impact: 'blocked', data_loss: 'yes', surface: 'timeline' },
+            recent_api_requests: [{ request_id: 'req_abcdefghijkl', ok: false, endpoint: '/api/sync/save' }],
+          },
+        },
+      ],
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/feedback/triage' });
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.records[0].id, 'feedback-1');
+    assert.equal(body.records[0].priority, 'p0_data_loss');
+    assert.equal(body.records[0].data_loss, 'yes');
+    assert.deepEqual(body.records[0].recent_request_ids, ['req_abcdefghijkl']);
+    assert.equal(body.records[0].suggested_summary.label, 'suggested_not_authoritative');
+  });
+
+  test('prepares a redacted issue draft without creating a GitHub issue', async () => {
+    const app = await buildApp({
+      getFeedbackTriageRows: async () => [
+        {
+          id: 'feedback-1',
+          user_id: 'user-1',
+          identity_class: 'signed_in',
+          transcript: 'Recording spinner stuck.',
+          created_at: '2026-05-31T10:00:00.000Z',
+          diagnostic_bundle: {
+            build_id: 'build-1',
+            route: { screen: 'home' },
+            feedback: { kind: 'bug', impact: 'degraded', data_loss: 'no', surface: 'recording' },
+            environment: { userAgent: 'private browser detail' },
+          },
+        },
+      ],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/feedback/triage/feedback-1/issue-draft',
+    });
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.match(body.issue.title, /Feedback: recording/);
+    assert.match(body.issue.body, /Recording spinner stuck/);
+    assert.match(body.issue.body, /Suggested, not authoritative/);
+    assert.doesNotMatch(body.issue.body, /private browser detail/);
+  });
+});

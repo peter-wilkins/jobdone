@@ -1,6 +1,11 @@
-import { saveFeedback, getFeedback } from '../services/database.js';
+import { saveFeedback, getFeedback, getFeedbackTriageRows } from '../services/database.js';
 import { optionalAuth, requireAuth } from '../services/auth.js';
 import { checkAnonymousFeedbackRateLimit } from '../services/feedbackRateLimit.js';
+import {
+  normalizeFeedbackTriageRecord,
+  prepareFeedbackIssueDraft,
+  sortFeedbackTriageRecords,
+} from '../services/feedbackTriage.js';
 
 const MAX_CRASH_STACK_CHARS = 3000;
 const MAX_CRASH_MESSAGE_CHARS = 300;
@@ -54,6 +59,7 @@ export async function registerFeedbackRoutes(fastify, deps = {}) {
   const optional = deps.optionalAuth || optionalAuth;
   const save = deps.saveFeedback || saveFeedback;
   const get = deps.getFeedback || getFeedback;
+  const getTriageRows = deps.getFeedbackTriageRows || getFeedbackTriageRows;
   const rateLimit = deps.checkAnonymousFeedbackRateLimit || checkAnonymousFeedbackRateLimit;
   /**
    * POST /api/feedback/save
@@ -184,6 +190,45 @@ export async function registerFeedbackRoutes(fastify, deps = {}) {
     } catch (error) {
       console.error('Feedback fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch feedback' });
+    }
+  });
+
+  /**
+   * GET /api/feedback/triage
+   * Maintainer/agent queue over normalized Feedback and Crash Reports.
+   */
+  fastify.get('/api/feedback/triage', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const rows = await getTriageRows({ limit: request.query?.limit });
+      const records = sortFeedbackTriageRecords(rows.map(normalizeFeedbackTriageRecord));
+      return { success: true, records };
+    } catch (error) {
+      console.error('Feedback triage fetch error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to fetch feedback triage queue' });
+    }
+  });
+
+  /**
+   * POST /api/feedback/triage/:id/issue-draft
+   * Deliberately prepares, but does not create, a redacted GitHub Issue draft.
+   */
+  fastify.post('/api/feedback/triage/:id/issue-draft', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const rows = await getTriageRows({ limit: 500 });
+      const row = rows.find(item => String(item.id) === String(request.params.id));
+      if (!row) return reply.status(404).send({ error: 'feedback triage record not found' });
+
+      const record = normalizeFeedbackTriageRecord(row);
+      return { success: true, issue: prepareFeedbackIssueDraft(record), record };
+    } catch (error) {
+      console.error('Feedback issue draft error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to prepare issue draft' });
     }
   });
 }

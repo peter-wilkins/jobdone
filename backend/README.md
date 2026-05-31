@@ -62,6 +62,8 @@ npm test
 - `POST /api/queries`
 - `POST /api/feedback/save`
 - `POST /api/crash-reports`
+- `GET /api/feedback/triage`
+- `POST /api/feedback/triage/:id/issue-draft`
 - `POST /api/structure/predict`
 - `GET /api/locations/lookup`
 

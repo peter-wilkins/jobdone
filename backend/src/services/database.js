@@ -1150,6 +1150,25 @@ export async function getFeedback(userId) {
   }
 }
 
+export async function getFeedbackTriageRows({ limit = 100 } = {}) {
+  if (!jobdoneDb) return [];
+
+  try {
+    const { data, error } = await jobdoneDb
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(Math.max(1, Math.min(Number(limit) || 100, 500)));
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error('[DB] Failed to fetch feedback triage rows:', error.message);
+    throw error;
+  }
+}
+
 /**
  * Update an entry's embedding after it has been saved.
  */
