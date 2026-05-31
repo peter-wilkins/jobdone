@@ -181,6 +181,11 @@ _Avoid_: Search bar, Input field, Record button
 - Calendar integration is deferred until capture-time Location clues and Contact correction are working. If added before a native shell exists, Google Calendar OAuth is the preferred first route because it works across web and devices
 - Current device location can be captured at capture time as a Location Context Clue when permission exists or is granted in context. JobDone does not require background location history for MVP, and captured location remains review-only until Confirmation
 - **Recall** returns Entries only; linked Contacts, Locations, and Tags can improve matching but are not returned as Timeline results
+- **Recall** correctness is grounded in Entry source IDs and explicit exclusions, not generated answer text
+- SQL-first **Recall** V1 searches Entry summaries and confirmed Contact, Location, and Tag labels; transcripts remain source/debug material rather than matching truth
+- SQL-first **Recall** V1 uses deterministic token/phrase matching before Postgres full-text search or vector reranking
+- Current **Recall Property Testing** work is focused on the developer feedback loop, not user-facing Recall explanation UI
+- The next **Recall Property Testing** slice uses local Supabase, generated cases, and shrinking against the production SQL-first Recall path
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
 - Transcripts are excluded from MVP Share Packs because they may contain incidental personal data
@@ -247,3 +252,4 @@ _Avoid_: Search bar, Input field, Record button
 - Photos were originally deferred post-MVP — resolved: shared photos can be accepted as attachments through Captures, but do not become standalone Timeline items.
 - Current code stores pre-confirmation recordings in an `entries` IndexedDB store — resolved: these are domain **Captures** and should move to separate Capture storage as PWA/share-target work proceeds.
 - No explicit Customer or Property entity exists in MVP. **Contact** exists only as a contactable human, not a billing/account owner. **Location** covers where work happened or is about without implying property ownership. Customer context is carried through Contacts, Locations, Tags, and Entry summaries rather than a Customer account model.
+- "Retrieval Property Testing", "RecallPropertyTest", and "V0 Recall property harness" were used interchangeably — resolved: the discipline is **Recall Property Testing**; the current deterministic slice is the **V0 Recall Property Harness**.

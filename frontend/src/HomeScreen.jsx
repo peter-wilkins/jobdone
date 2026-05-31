@@ -19,6 +19,7 @@ import {
   listenForInstallPrompt,
   requestInstall,
 } from './services/installPromptService';
+import { predictionSourcePresentation } from './services/predictionSourceService';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -140,6 +141,7 @@ export function HomeScreen({
   const [reviewTags, setReviewTags] = useState({});
   const [reviewStructure, setReviewStructure] = useState({});
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
+  const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
   const [confirmingIds, setConfirmingIds] = useState(new Set());
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
@@ -197,6 +199,42 @@ export function HomeScreen({
       else selected.add(tagId);
       return { ...prev, [entryId]: Array.from(selected) };
     });
+  };
+
+  const candidateExplanationKey = (entryId, kind, candidate) =>
+    `${entryId}:${kind}:${candidate.id || candidate.label}`;
+
+  const toggleCandidateExplanation = (entryId, kind, candidate) => {
+    const key = candidateExplanationKey(entryId, kind, candidate);
+    setReviewExplanationKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderCandidateSource = (entryId, kind, candidate, colorClass = 'text-gray-500') => {
+    const presentation = predictionSourcePresentation(candidate, kind);
+    const key = candidateExplanationKey(entryId, kind, candidate);
+    const isOpen = Boolean(reviewExplanationKeys[key]);
+
+    return (
+      <div className="mt-1">
+        <div className={`flex items-center gap-2 text-left text-xs ${colorClass}`}>
+          <span>{presentation.hint}</span>
+          <button
+            type="button"
+            onClick={() => toggleCandidateExplanation(entryId, kind, candidate)}
+            aria-expanded={isOpen}
+            aria-label={`Why suggested: ${candidate.label}`}
+            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-[10px] font-semibold"
+          >
+            ?
+          </button>
+        </div>
+        {isOpen && (
+          <p className="mt-1 max-w-56 text-left text-xs leading-snug text-gray-500">
+            {presentation.explanation}
+          </p>
+        )}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -1431,17 +1469,22 @@ export function HomeScreen({
               {locationCandidates.length > 0 && (
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {locationCandidates.map(candidate => (
-                    <button
+                    <div
                       key={candidate.id}
-                      type="button"
-                      onClick={() => {
-                        setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
-                        setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
-                      }}
-                      className="shrink-0 rounded border border-emerald-200 px-2.5 py-1 text-sm text-emerald-700"
+                      className="shrink-0 rounded border border-emerald-200 bg-white px-2.5 py-1 text-emerald-700"
                     >
-                      {candidate.label}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
+                          setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
+                        }}
+                        className="block max-w-56 text-left text-sm font-medium"
+                      >
+                        <span className="block truncate">{candidate.label}</span>
+                      </button>
+                      {renderCandidateSource(entry.id, 'location', candidate, 'text-emerald-600')}
+                    </div>
                   ))}
                 </div>
               )}
@@ -1484,18 +1527,23 @@ export function HomeScreen({
                 {contactCandidates.length > 0 ? (
                   <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
                     {contactCandidates.map(candidate => (
-                      <button
+                      <div
                         key={candidate.id}
-                        type="button"
-                        onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }))}
-                        className={`shrink-0 rounded border px-2.5 py-1 text-sm ${
+                        className={`shrink-0 rounded border bg-white px-2.5 py-1 ${
                           reviewContacts[entry.id] === candidate.id
                             ? 'border-violet-300 bg-violet-50 text-violet-700'
                             : 'border-gray-200 text-gray-700'
                         }`}
                       >
-                        {candidate.label}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }))}
+                          className="block max-w-56 text-left text-sm font-medium"
+                        >
+                          <span className="block truncate">{candidate.label}</span>
+                        </button>
+                        {renderCandidateSource(entry.id, 'contact', candidate, 'text-violet-600')}
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -1607,18 +1655,25 @@ export function HomeScreen({
                     <p className="mb-1 text-xs font-medium text-gray-400">{category}</p>
                     <div className="flex flex-wrap gap-2">
                       {tags.map(tag => (
-                        <button
+                        <div
                           key={tag.id}
-                          type="button"
-                          onClick={() => togglePredictedTag(entry.id, tag.id)}
-                          className={`rounded px-2.5 py-1 text-sm ${
+                          className={`rounded px-2.5 py-1 ${
                             selectedTagIds.has(tag.id)
                               ? 'bg-sky-50 text-sky-700'
                               : 'border border-gray-200 text-gray-700'
                           }`}
                         >
-                          {tag.label}{selectedTagIds.has(tag.id) ? ' x' : ''}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => togglePredictedTag(entry.id, tag.id)}
+                            className="block max-w-56 text-left text-sm font-medium"
+                          >
+                            <span className="block truncate">
+                              {tag.label}{selectedTagIds.has(tag.id) ? ' x' : ''}
+                            </span>
+                          </button>
+                          {renderCandidateSource(entry.id, 'tag', tag, 'text-sky-600')}
+                        </div>
                       ))}
                     </div>
                   </div>
