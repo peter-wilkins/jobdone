@@ -14,7 +14,7 @@ function includesPhrase(haystack, phrase) {
 }
 
 function isRecencyQuery(query) {
-  return false;
+  return /\b(last time|latest|most recent|recent|last visit)\b/i.test(String(query || ''));
 }
 
 function recencyScores(entries = []) {
@@ -81,8 +81,8 @@ export function rankStructuredRecallResults(query, entries = [], { limit = 10 } 
     })
     .filter(entry => entry.similarity > 0 || entry.structure_similarity > 0)
     .sort((a, b) =>
-      a.recall_score - b.recall_score ||
-      (recencyIntent ? (Date.parse(a.created_at || '') || 0) - (Date.parse(b.created_at || '') || 0) : 0) ||
+      b.recall_score - a.recall_score ||
+      (recencyIntent ? (Date.parse(b.created_at || '') || 0) - (Date.parse(a.created_at || '') || 0) : 0) ||
       a._rankIndex - b._rankIndex
     )
     .slice(0, limit)
