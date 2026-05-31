@@ -65,4 +65,26 @@ describe('structure-aware Recall ranking', () => {
     assert.equal(result.score, 0.35);
     assert.deepEqual(result.matched, [{ kind: 'contact', label: 'Sarah Jenkins' }]);
   });
+
+  test('uses recency as a tie-breaker when Query asks for last time', () => {
+    const ranked = rankStructuredRecallResults('Sarah Jenkins last time', [
+      {
+        id: 'older-entry',
+        summary: 'Serviced boiler',
+        similarity: 0.5,
+        created_at: '2026-01-10T09:00:00.000Z',
+        contacts: [{ display_name: 'Sarah Jenkins' }],
+      },
+      {
+        id: 'newer-entry',
+        summary: 'Returned with part',
+        similarity: 0.5,
+        created_at: '2026-03-15T11:30:00.000Z',
+        contacts: [{ display_name: 'Sarah Jenkins' }],
+      },
+    ]);
+
+    assert.equal(ranked[0].id, 'newer-entry');
+    assert.equal(ranked[0].recency_similarity > ranked[1].recency_similarity, true);
+  });
 });

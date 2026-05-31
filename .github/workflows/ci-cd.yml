@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Recall property diagnostics
+        run: npm run test:recall:properties
+
       - name: Run tests
         run: npm test
 
