@@ -12,6 +12,17 @@ If the user starts a side quest while a feature is in progress, challenge the
 scope shift. Prefer capturing the side quest as one or more GitHub issues, then
 return to the current feature unless the user explicitly reprioritizes.
 
+If the request appears to belong to another registered agent or project, do not
+absorb it into JobDone context. From this machine, run:
+
+```bash
+agent route jobdone "<user request>" --copy
+```
+
+If the route result is `redirect` or `new-context`, decline the work in this
+lane, tell Peter which agent/project should handle it, and note that the
+original request has been copied for pasting into the right lane.
+
 ### Issue tracker
 
 Issues live in GitHub Issues (`peter-wilkins/jobdone`). See `docs/agents/issue-tracker.md`.
