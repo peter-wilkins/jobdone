@@ -10,6 +10,7 @@ when it is needed.
 - [CONTEXT.md](./CONTEXT.md) — product language, domain model, current behaviour, and platform decisions.
 - [docs/adr](./docs/adr) — architectural decisions and tradeoffs.
 - [docs/schema.sql](./docs/schema.sql) — clean Supabase schema for the current cloud sync model.
+- [docs/retrieval-property-testing.md](./docs/retrieval-property-testing.md) — retrieval benchmark and synthetic-world test strategy.
 - [AGENTS.md](./AGENTS.md) — repo-specific agent workflow rules.
 - [docs/agents](./docs/agents) — issue tracker, triage labels, and domain-doc conventions for agents.
 
