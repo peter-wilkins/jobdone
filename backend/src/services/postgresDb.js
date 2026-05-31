@@ -126,10 +126,13 @@ export function buildSqlFirstRecallQuery({
       where ${normalizedSql('label')} <> ''
         and (
           ($2 <> '' and position((' ' || ${normalizedSql('label')} || ' ') in (' ' || $2 || ' ')) > 0)
-          or exists (
+          or (
+            cardinality($3::text[]) > 0
+            and not exists (
             select 1
             from unnest($3::text[]) as term
-            where position((' ' || term || ' ') in (' ' || ${normalizedSql('label')} || ' ')) > 0
+            where position((' ' || term || ' ') in (' ' || ${normalizedSql('label')} || ' ')) = 0
+            )
           )
         )
     ), array[]::text[])
@@ -197,6 +200,14 @@ export function buildSqlFirstRecallQuery({
           select array_agg(term order by term)
           from unnest($3::text[]) as term
           where position((' ' || term || ' ') in (' ' || summary_norm || ' ')) > 0
+            and (
+              cardinality($3::text[]) = 1
+              or not exists (
+                select 1
+                from unnest($3::text[]) as missing_term
+                where position((' ' || missing_term || ' ') in (' ' || summary_norm || ' ')) = 0
+              )
+            )
         ), array[]::text[]) as matched_summary_terms,
         ($2 <> '' and position((' ' || $2 || ' ') in (' ' || summary_norm || ' ')) > 0) as matched_summary_phrase
       from normalized
