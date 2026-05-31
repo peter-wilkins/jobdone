@@ -12,11 +12,6 @@ If the user starts a side quest while a feature is in progress, challenge the
 scope shift. Prefer capturing the side quest as one or more GitHub issues, then
 return to the current feature unless the user explicitly reprioritizes.
 
-If the request clearly belongs to another registered agent or project, do not
-absorb it into JobDone context. Say no briefly and name the likely lane, for
-example Workflow Manager or Continuum. Do not run routing tools or prepare a
-handoff unless Peter explicitly asks for the context guard or clipboard path.
-
 ### Issue tracker
 
 Issues live in GitHub Issues (`peter-wilkins/jobdone`). See `docs/agents/issue-tracker.md`.
