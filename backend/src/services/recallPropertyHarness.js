@@ -319,3 +319,71 @@ export function formatRecallPropertyFailures(failures = []) {
     `${failure.case}: ${failure.property}\n${JSON.stringify(failure.repro, null, 2)}`
   ).join('\n\n');
 }
+
+function formatList(values = []) {
+  return values.length ? values.map(value => `\`${value}\``).join(', ') : '_none_';
+}
+
+function suggestedNextStep(failure = {}) {
+  if (failure.property === 'first_source_matches_latest_oracle') {
+    return 'Check recency-intent detection and latest-first tie-breaking in `backend/src/services/recallRanking.js`.';
+  }
+
+  if (failure.property === 'expected_source_returned') {
+    return 'Check Recall candidate filtering and scoring did not drop an expected confirmed Entry.';
+  }
+
+  if (failure.property === 'excluded_source_not_returned') {
+    return 'Check user, status, ambiguity, and scope filters before ranking.';
+  }
+
+  return 'Inspect the minimal repro and compare the oracle against Recall routing/ranking.';
+}
+
+export function formatRecallPropertyFailureMarkdown(failures = []) {
+  if (!failures.length) {
+    return [
+      '## Recall property diagnostics',
+      '',
+      'No Recall property failures.',
+      '',
+    ].join('\n');
+  }
+
+  const [failure] = failures;
+  const repro = failure.repro || {};
+  const expectedFirst = failure.expected || repro.expectedSources?.[0] || null;
+  const actualFirst = failure.actual || repro.actualSources?.[0] || null;
+
+  const lines = [
+    '## Recall property diagnostics',
+    '',
+    `Shrunk/minimal failing repro: \`${failure.case}\``,
+    '',
+    `- Property: \`${failure.property}\``,
+    `- Query: \`${repro.query || ''}\``,
+    `- Expected sources: ${formatList(repro.expectedSources)}`,
+    `- Excluded sources: ${formatList(repro.excludedSources)}`,
+    `- Actual sources: ${formatList(repro.actualSources)}`,
+    `- Expected first source: ${expectedFirst ? `\`${expectedFirst}\`` : '_none_'}`,
+    `- Actual first source: ${actualFirst ? `\`${actualFirst}\`` : '_none_'}`,
+    '',
+    `Likely next step: ${suggestedNextStep(failure)}`,
+    '',
+    '<details>',
+    '<summary>Minimal repro JSON</summary>',
+    '',
+    '```json',
+    JSON.stringify(repro, null, 2),
+    '```',
+    '',
+    '</details>',
+    '',
+  ];
+
+  if (failures.length > 1) {
+    lines.push(`_Additional Recall property failures: ${failures.length - 1}_`, '');
+  }
+
+  return lines.join('\n');
+}
