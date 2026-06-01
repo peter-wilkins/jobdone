@@ -12,6 +12,12 @@ import {
   pickContact,
   validateContactDraftForCreation,
 } from './services/contactPickerService';
+import {
+  FRICTION_EVENTS,
+  dismissContextSourcePrompt,
+  getActiveContextSourcePrompts,
+  recordContextSourceFriction,
+} from './services/contextSourcePromptService';
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
 import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import {
@@ -142,6 +148,7 @@ export function HomeScreen({
   const [reviewStructure, setReviewStructure] = useState({});
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
+  const [contextSourcePrompts, setContextSourcePrompts] = useState(() => getActiveContextSourcePrompts());
   const [confirmingIds, setConfirmingIds] = useState(new Set());
   const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
@@ -190,6 +197,20 @@ export function HomeScreen({
     setReviewContactPanels(prev => ({ ...prev, [entryId]: false }));
     setReviewContactSearch(prev => ({ ...prev, [entryId]: '' }));
     setReviewManualContacts(prev => ({ ...prev, [entryId]: { displayName: '', phone: '', email: '' } }));
+  };
+
+  const refreshContextSourcePrompts = () => {
+    setContextSourcePrompts(getActiveContextSourcePrompts());
+  };
+
+  const recordSourceFriction = (event) => {
+    recordContextSourceFriction(event);
+    refreshContextSourcePrompts();
+  };
+
+  const handleDismissContextSourcePrompt = (promptId) => {
+    dismissContextSourcePrompt(promptId);
+    refreshContextSourcePrompts();
   };
 
   const togglePredictedTag = (entryId, tagId) => {
@@ -656,6 +677,11 @@ export function HomeScreen({
       const tags = tagValidations.map(result => ({ label: result.label, categoryName: result.categoryName || 'General' }));
       const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags });
       let timelineEntry = { ...entry, ...confirmedEntry };
+      if (!locationText) {
+        recordSourceFriction(FRICTION_EVENTS.BLANK_LOCATION);
+      } else if (!selectedLocationDraft) {
+        recordSourceFriction(FRICTION_EVENTS.MANUAL_LOCATION);
+      }
 
       // Try to sync to cloud (optional - don't block if it fails)
       if (timelineEntry && timelineEntry.transcript && timelineEntry.summary) {
@@ -879,6 +905,7 @@ export function HomeScreen({
   };
 
   const openContactCorrection = async (entryId) => {
+    recordSourceFriction(FRICTION_EVENTS.CONTACT_CORRECTION);
     setReviewContactPanels(prev => ({ ...prev, [entryId]: true }));
     setReviewManualContacts(prev => ({
       ...prev,
@@ -994,6 +1021,20 @@ export function HomeScreen({
     } catch (err) {
       console.error('Failed to strengthen Location:', err);
       setError('Current location is unavailable right now.');
+    }
+  };
+
+  const handleContextSourcePromptAction = async (prompt, entry) => {
+    if (prompt.id === 'location') {
+      await handleUseCurrentLocation(entry);
+      return;
+    }
+    if (prompt.id === 'contact') {
+      if (isContactPickerSupported()) {
+        await handlePickNativeContact(entry.id);
+      } else {
+        await openContactCorrection(entry.id);
+      }
     }
   };
 
@@ -1404,6 +1445,35 @@ export function HomeScreen({
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              {contextSourcePrompts.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {contextSourcePrompts.map(prompt => (
+                    <div key={prompt.id} className="rounded border border-blue-100 bg-blue-50 px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-blue-900">{prompt.title}</p>
+                          <p className="mt-1 text-xs leading-snug text-blue-700">{prompt.body}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissContextSourcePrompt(prompt.id)}
+                          className="shrink-0 text-xs text-blue-500 underline"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleContextSourcePromptAction(prompt, entry)}
+                        disabled={prompt.disabled}
+                        className="mt-2 rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:bg-gray-200 disabled:text-gray-500"
+                      >
+                        {prompt.action}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="mb-3 flex flex-wrap gap-2">
                 {reviewLocations[entry.id] ? (
                   <button
