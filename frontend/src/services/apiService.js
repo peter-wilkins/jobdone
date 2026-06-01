@@ -372,6 +372,17 @@ export class APIService {
     return response.json();
   }
 
+  async getChoremoreChildState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/child`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Choremore`);
+    }
+    return response.json();
+  }
+
   async createChoremoreBacklogItem({ description, points }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items`, {
       method: 'POST',
@@ -406,6 +417,31 @@ export class APIService {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || `HTTP ${response.status}: Failed to delete Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async claimChoremoreBacklogItem(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}/claim`, {
+      method: 'POST',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to claim Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async submitChoremoreEvidence(id, evidenceText) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ evidence_text: evidenceText }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to submit evidence`);
     }
     return response.json();
   }

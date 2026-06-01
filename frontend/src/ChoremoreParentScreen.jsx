@@ -165,11 +165,18 @@ export function ChoremoreParentScreen({ onBack, onNavigate }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-light text-gray-900 leading-5">Choremore</h1>
           <p className="text-xs text-gray-500">Parent backlog</p>
           <ProductSwitcher currentProduct="choremore" onSwitch={onNavigate} />
         </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('choremore-child')}
+          className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+        >
+          Child
+        </button>
       </div>
 
       {error && (
