@@ -1,21 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const appUrl = import.meta.env.VITE_APP_URL;
+const env = import.meta.env || {};
+const supabaseUrl = env.VITE_SUPABASE_URL;
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
+const appUrl = env.VITE_APP_URL;
 
 // Supabase client — null if env vars not set (auth disabled)
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-class AuthService {
-  constructor() {
+export function defaultAuthRedirectTo() {
+  return appUrl || globalThis.window?.location?.origin || 'http://localhost:5173';
+}
+
+export class AuthService {
+  constructor({ supabaseClient = supabase, redirectTo = defaultAuthRedirectTo } = {}) {
+    this.supabase = supabaseClient;
+    this.redirectTo = redirectTo;
     this.session = null;
     this._listeners = new Set();
 
-    if (supabase) {
-      supabase.auth.onAuthStateChange((event, session) => {
+    if (this.supabase) {
+      this.supabase.auth.onAuthStateChange((event, session) => {
         this.session = session;
         this._listeners.forEach(fn => fn(event, session));
       });
@@ -24,32 +31,28 @@ class AuthService {
 
   /** Call once on app load — restores existing session */
   async init() {
-    if (!supabase) return null;
-    const { data: { session } } = await supabase.auth.getSession();
+    if (!this.supabase) return null;
+    const { data: { session } } = await this.supabase.auth.getSession();
     this.session = session;
     return session;
   }
 
-  /**
-   * Send a magic link to the given email.
-   * If a Supabase account already exists it signs in; otherwise creates one.
-   */
-  async sendMagicLink(email) {
-    if (!supabase) throw new Error('Auth not configured');
-    const redirectTo = appUrl || window.location.origin;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
+  async signInWithGoogle() {
+    if (!this.supabase) throw new Error('Auth not configured');
+    const { error } = await this.supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: this.redirectTo() },
     });
     if (error) throw error;
   }
 
   async signOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (!this.supabase) return;
+    await this.supabase.auth.signOut();
     this.session = null;
   }
 
+  isConfigured() { return !!this.supabase; }
   isLoggedIn()  { return !!this.session?.user; }
   getUser()     { return this.session?.user || null; }
   getUserId()   { return this.session?.user?.id || null; }
