@@ -231,7 +231,7 @@ function App() {
   }
 
   if (screen === 'choremore-parent') {
-    return <>{crashStatusBar}<ChoremoreParentScreen onBack={() => navigateTo('home')} /></>;
+    return <>{crashStatusBar}<ChoremoreParentScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} /></>;
   }
 
   return (
