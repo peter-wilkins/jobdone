@@ -1933,6 +1933,12 @@ export function HomeScreen({
                 Locations
               </button>
               <button
+                onClick={() => { setMenuOpen(false); onNavigate('choremore-parent'); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Choremore parent
+              </button>
+              <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
