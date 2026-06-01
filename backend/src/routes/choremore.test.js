@@ -10,6 +10,12 @@ async function buildApp(deps = {}) {
       openBacklogItems: [],
       submittedApprovalRequests: [],
     }),
+    getChildChoremoreState: async () => ({
+      claimedItems: [],
+      openBacklogItems: [],
+      approvedThisWeek: [],
+      weeklyPoints: 0,
+    }),
     createBacklogItem: async (input) => ({
       id: 'item-1',
       description: input.description.trim(),
@@ -23,6 +29,26 @@ async function buildApp(deps = {}) {
       status: 'open',
     }),
     deleteOpenBacklogItem: async () => ({ success: true }),
+    claimBacklogItem: async (id) => ({
+      id,
+      description: 'Empty dishwasher',
+      points: 2,
+      status: 'claimed',
+    }),
+    submitBacklogItemEvidence: async (id, input) => ({
+      backlogItem: {
+        id,
+        description: 'Empty dishwasher',
+        points: 2,
+        status: 'submitted',
+      },
+      approvalRequest: {
+        id: 'approval-1',
+        backlog_item_id: id,
+        status: 'submitted',
+        evidence_text: input.evidence_text,
+      },
+    }),
     decideApprovalRequest: async (id, decision) => ({
       id,
       status: decision,
@@ -75,6 +101,26 @@ describe('Choremore parent routes', () => {
     assert.equal(body.backlogItem.status, 'open');
   });
 
+  test('returns child work queue sections and weekly points', async () => {
+    const app = await buildApp({
+      getChildChoremoreState: async () => ({
+        claimedItems: [{ id: 'item-claimed', status: 'submitted', points: 3 }],
+        openBacklogItems: [{ id: 'item-open', status: 'open', points: 2 }],
+        approvedThisWeek: [{ id: 'item-approved', status: 'approved', points: 4 }],
+        weeklyPoints: 4,
+      }),
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/choremore/child' });
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.claimedItems[0].status, 'submitted');
+    assert.equal(body.openBacklogItems[0].status, 'open');
+    assert.equal(body.approvedThisWeek[0].status, 'approved');
+    assert.equal(body.weeklyPoints, 4);
+  });
+
   test('edits an open Backlog Item', async () => {
     let editArgs;
     const app = await buildApp({
@@ -110,6 +156,56 @@ describe('Choremore parent routes', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(deletedId, 'item-1');
     assert.equal(JSON.parse(res.body).success, true);
+  });
+
+  test('claims an open Backlog Item for the child flow', async () => {
+    let claimedId;
+    const app = await buildApp({
+      claimBacklogItem: async (id) => {
+        claimedId = id;
+        return { id, description: 'Empty dishwasher', points: 2, status: 'claimed' };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/choremore/backlog-items/item-1/claim',
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(claimedId, 'item-1');
+    assert.equal(JSON.parse(res.body).backlogItem.status, 'claimed');
+  });
+
+  test('submits text evidence for a claimed Backlog Item', async () => {
+    let submitArgs;
+    const app = await buildApp({
+      submitBacklogItemEvidence: async (id, input) => {
+        submitArgs = { id, input };
+        return {
+          backlogItem: { id, description: 'Empty dishwasher', points: 2, status: 'submitted' },
+          approvalRequest: {
+            id: 'approval-1',
+            backlog_item_id: id,
+            status: 'submitted',
+            evidence_text: input.evidence_text,
+          },
+        };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/choremore/backlog-items/item-1/submit',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ evidence_text: 'I emptied it and put plates away.' }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(submitArgs.id, 'item-1');
+    assert.equal(submitArgs.input.evidence_text, 'I emptied it and put plates away.');
+    assert.equal(JSON.parse(res.body).backlogItem.status, 'submitted');
+    assert.equal(JSON.parse(res.body).approvalRequest.status, 'submitted');
   });
 
   test('records approval decisions', async () => {
