@@ -82,14 +82,13 @@ function OpenItem({ item, pointsEnabled, onClaim, busy }) {
   );
 }
 
-function FinishedItem({ item, pointsEnabled, usesManualApproval }) {
+function FinishedItem({ item, pointsEnabled }) {
   const request = item.approval_request || {};
+  const points = pointsText(item, pointsEnabled);
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
-      <p className="mt-1 text-xs text-gray-500">
-        {[statusText(item.status, usesManualApproval), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
-      </p>
+      {points && <p className="mt-1 text-xs text-gray-500">{points}</p>}
       {request.evidence_text && (
         <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
       )}
@@ -244,7 +243,6 @@ export function TeamWorkScreen({ onBack }) {
                     key={item.id}
                     item={item}
                     pointsEnabled={pointsEnabled}
-                    usesManualApproval={usesManualApproval}
                   />
                 ))
               )}

@@ -8,6 +8,7 @@ import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { TeamSetupScreen } from './TeamSetupScreen';
 import { TeamWorkScreen } from './TeamWorkScreen';
+import { GlobalMenu } from './GlobalMenu';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
@@ -206,37 +207,40 @@ function App() {
       </div>
     </div>
   ) : null;
+  const globalMenu = screen === 'home'
+    ? null
+    : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} />;
 
   if (screen === 'feedback') {
-    return <>{crashStatusBar}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{crashStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'inbox') {
-    return <>{crashStatusBar}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{crashStatusBar}{globalMenu}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'contacts') {
-    return <>{crashStatusBar}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{crashStatusBar}{globalMenu}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'locations') {
-    return <>{crashStatusBar}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{crashStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'share-target') {
-    return <>{crashStatusBar}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{crashStatusBar}{globalMenu}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'login') {
-    return <>{crashStatusBar}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{crashStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'team-setup') {
-    return <>{crashStatusBar}<TeamSetupScreen onBack={() => navigateTo('home')} /></>;
+    return <>{crashStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'team-work') {
-    return <>{crashStatusBar}<TeamWorkScreen onBack={() => navigateTo('home')} /></>;
+    return <>{crashStatusBar}{globalMenu}<TeamWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 
   return (
