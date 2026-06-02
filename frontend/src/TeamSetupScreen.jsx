@@ -118,6 +118,10 @@ function InviteRow({ invite, onCopy, onResend, onRemove, busy }) {
 
 export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [team, setTeam] = useState(DEFAULT_TEAM);
+  const [ownedTeams, setOwnedTeams] = useState([]);
+  const [memberTeams, setMemberTeams] = useState([]);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [isCreatingNewTeam, setIsCreatingNewTeam] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
@@ -132,12 +136,16 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [inviteCopyMessage, setInviteCopyMessage] = useState('');
   const [error, setError] = useState(null);
 
-  async function loadTeamState() {
+  async function loadTeamState(teamId = selectedTeamId) {
     setIsLoading(true);
     setError(null);
     try {
-      const state = await apiService.getTeamSetupState();
+      const state = await apiService.getTeamSetupState(teamId);
       setTeam(state.team || DEFAULT_TEAM);
+      setOwnedTeams(state.ownedTeams || []);
+      setMemberTeams(state.memberTeams || []);
+      setSelectedTeamId(state.team?.id || null);
+      setIsCreatingNewTeam(false);
       setCanManage(Boolean(state.canManage));
       setPendingTeamInvites(state.pendingTeamInvites || []);
       setOpenBacklogItems(state.openBacklogItems || []);
@@ -154,10 +162,30 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     // Initial screen load is the synchronization point for Team backlog state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTeamState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pointsEnabled = Boolean(team.points_enabled);
   const hasManagedTeam = Boolean(team.id);
+  const selectedOwnedTeamId = hasManagedTeam ? team.id : selectedTeamId;
+
+  const selectOwnedTeam = async (ownedTeam) => {
+    setSelectedTeamId(ownedTeam.id);
+    setIsCreatingNewTeam(false);
+    resetForm();
+    await loadTeamState(ownedTeam.id);
+  };
+
+  const startCreateTeam = () => {
+    setTeam(DEFAULT_TEAM);
+    setSelectedTeamId(null);
+    setIsCreatingNewTeam(true);
+    setPendingTeamInvites([]);
+    setOpenBacklogItems([]);
+    setSubmittedApprovalRequests([]);
+    resetForm();
+    setError(null);
+  };
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -169,18 +197,15 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setIsSaving(true);
     setError(null);
     try {
-      let result;
-      try {
-        result = await apiService.updateTeamSetup({ name: team.name, template: team.template });
-      } catch (err) {
-        if (!hasManagedTeam && err.status === 409 && window.confirm(err.message)) {
-          result = await apiService.updateTeamSetup({ name: team.name, template: team.template, allowSeparateTeam: true });
-        } else {
-          throw err;
-        }
-      }
+      const result = await apiService.updateTeamSetup({
+        id: hasManagedTeam ? team.id : null,
+        name: team.name,
+        template: team.template,
+        createNewTeam: isCreatingNewTeam || !hasManagedTeam,
+      });
       setTeam(result.team || team);
-      await loadTeamState();
+      setSelectedTeamId(result.team?.id || null);
+      await loadTeamState(result.team?.id || null);
     } catch (err) {
       setError(err.message || 'Could not save Team');
     } finally {
@@ -195,11 +220,13 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     try {
       if (editingId) {
         await apiService.updateTeamBacklogItem(editingId, {
+          teamId: selectedOwnedTeamId,
           description: form.description,
           points: pointsEnabled ? form.points : null,
         });
       } else {
         await apiService.createTeamBacklogItem({
+          teamId: selectedOwnedTeamId,
           description: form.description,
           points: pointsEnabled ? form.points : null,
         });
@@ -221,7 +248,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const deleteItem = async (item) => {
     setError(null);
     try {
-      await apiService.deleteTeamBacklogItem(item.id);
+      await apiService.deleteTeamBacklogItem(item.id, selectedOwnedTeamId);
       await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not delete Backlog Item');
@@ -232,7 +259,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setBusyApprovalId(request.id);
     setError(null);
     try {
-      await apiService.decideTeamApprovalRequest(request.id, decision);
+      await apiService.decideTeamApprovalRequest(request.id, decision, selectedOwnedTeamId);
       await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not update Approval Request');
@@ -247,7 +274,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     setInviteCopyMessage('');
     try {
-      const result = await apiService.createTeamInvite({ email: inviteEmail });
+      const result = await apiService.createTeamInvite({ teamId: selectedOwnedTeamId, email: inviteEmail });
       const invitedEmail = result.invite?.email || inviteEmail;
       setInviteEmail('');
       await loadTeamState();
@@ -274,7 +301,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     setInviteCopyMessage('');
     try {
-      const result = await apiService.resendTeamInvite(invite.id);
+      const result = await apiService.resendTeamInvite(invite.id, selectedOwnedTeamId);
       const invitedEmail = result.invite?.email || invite.email;
       setInviteCopyMessage(`Invite email resent to ${invitedEmail}`);
       await loadTeamState();
@@ -290,7 +317,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     setInviteCopyMessage('');
     try {
-      await apiService.revokeTeamInvite(invite.id);
+      await apiService.revokeTeamInvite(invite.id, selectedOwnedTeamId);
       await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not remove invite');
@@ -313,7 +340,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">Team Setup</h1>
+          <h1 className="text-xl font-light text-gray-900 leading-5">Team Edit</h1>
           <p className="text-xs text-gray-500">{isLoading ? 'Loading...' : (team.name || 'Create Team')}</p>
         </div>
       </div>
@@ -351,6 +378,42 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
           </section>
         ) : (
           <>
+        <section>
+          <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
+            <h2 className="text-sm font-semibold text-gray-900">Teams</h2>
+            <button
+              type="button"
+              onClick={startCreateTeam}
+              className="text-xs font-medium text-gray-700 hover:text-gray-900"
+            >
+              Create new
+            </button>
+          </div>
+          {ownedTeams.length === 0 && memberTeams.length === 0 ? (
+            <p className="py-3 text-sm text-gray-400">No Teams yet.</p>
+          ) : (
+            <div className="py-2 space-y-2">
+              {ownedTeams.map(ownedTeam => (
+                <button
+                  key={ownedTeam.id}
+                  type="button"
+                  onClick={() => selectOwnedTeam(ownedTeam)}
+                  className={`w-full rounded border px-3 py-2 text-left ${ownedTeam.id === selectedOwnedTeamId && !isCreatingNewTeam ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  <span className="block text-sm font-medium text-gray-900">{ownedTeam.name}</span>
+                  <span className="block text-xs text-gray-500">Owner</span>
+                </button>
+              ))}
+              {memberTeams.map(({ team: memberTeam, role }) => (
+                <div key={memberTeam.id} className="rounded border border-gray-100 px-3 py-2">
+                  <span className="block text-sm font-medium text-gray-500">{memberTeam.name}</span>
+                  <span className="block text-xs text-gray-400">{role || 'Member'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <form onSubmit={saveTeam} className="space-y-3">
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">

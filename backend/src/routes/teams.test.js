@@ -141,7 +141,7 @@ describe('Team setup routes', () => {
 
     assert.equal(res.statusCode, 200);
     assert.equal(savedArgs.input.name, ' Family team ');
-    assert.deepEqual(savedArgs.context, { ownerEmail: 'owner@example.com' });
+    assert.deepEqual(savedArgs.context, { ownerEmail: 'owner@example.com', teamId: null });
     assert.equal(JSON.parse(res.body).team.name, 'Family team');
   });
 
@@ -201,7 +201,7 @@ describe('Team setup routes', () => {
     const app = await buildApp({
       createBacklogItem: async (input, context) => {
         savedInput = input;
-        assert.deepEqual(context, { ownerEmail: 'owner@example.com' });
+        assert.deepEqual(context, { ownerEmail: 'owner@example.com', teamId: null });
         return { id: 'item-1', description: input.description.trim(), points: input.points, status: 'open' };
       },
     });
@@ -439,7 +439,7 @@ describe('Team setup routes', () => {
     const res = await app.inject({ method: 'DELETE', url: '/api/teams/invites/invite-1' });
 
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(revokeArgs, { id: 'invite-1', context: { ownerEmail: 'owner@example.com' } });
+    assert.deepEqual(revokeArgs, { id: 'invite-1', context: { ownerEmail: 'owner@example.com', teamId: null } });
     assert.equal(JSON.parse(res.body).invite.status, 'revoked');
   });
 
@@ -467,7 +467,7 @@ describe('Team setup routes', () => {
     assert.equal(res.statusCode, 200);
     assert.deepEqual(resendArgs, {
       id: 'invite-1',
-      context: { ownerEmail: 'owner@example.com', appBaseUrl: 'https://frontend.example' },
+      context: { ownerEmail: 'owner@example.com', teamId: null, appBaseUrl: 'https://frontend.example' },
     });
     assert.equal(JSON.parse(res.body).invite.email, 'worker@example.com');
   });

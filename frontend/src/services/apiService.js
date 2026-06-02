@@ -361,8 +361,9 @@ export class APIService {
     }
   }
 
-  async getTeamSetupState() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
+  async getTeamSetupState(teamId = null) {
+    const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup${query}`, {
       headers: authHeader(),
     });
     if (!response.ok) {
@@ -372,11 +373,11 @@ export class APIService {
     return response.json();
   }
 
-  async updateTeamSetup({ name, template, allowSeparateTeam = false }) {
+  async updateTeamSetup({ id = null, name, template, createNewTeam = false }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ name, template, allow_separate_team: allowSeparateTeam }),
+      body: JSON.stringify({ team_id: id, name, template, create_new_team: createNewTeam }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -398,11 +399,11 @@ export class APIService {
     return response.json();
   }
 
-  async createTeamBacklogItem({ description, points }) {
+  async createTeamBacklogItem({ teamId, description, points }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ description, points }),
+      body: JSON.stringify({ team_id: teamId, description, points }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -411,11 +412,11 @@ export class APIService {
     return response.json();
   }
 
-  async updateTeamBacklogItem(id, { description, points }) {
+  async updateTeamBacklogItem(id, { teamId, description, points }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ description, points }),
+      body: JSON.stringify({ team_id: teamId, description, points }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -424,8 +425,9 @@ export class APIService {
     return response.json();
   }
 
-  async deleteTeamBacklogItem(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
+  async deleteTeamBacklogItem(id, teamId = null) {
+    const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}${query}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -461,11 +463,11 @@ export class APIService {
     return response.json();
   }
 
-  async decideTeamApprovalRequest(id, decision) {
+  async decideTeamApprovalRequest(id, decision, teamId = null) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/approval-requests/${id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({ team_id: teamId, decision }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -474,11 +476,11 @@ export class APIService {
     return response.json();
   }
 
-  async createTeamInvite({ email }) {
+  async createTeamInvite({ teamId, email }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ team_id: teamId, email }),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -487,8 +489,9 @@ export class APIService {
     return response.json();
   }
 
-  async revokeTeamInvite(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}`, {
+  async revokeTeamInvite(id, teamId = null) {
+    const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}${query}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -499,8 +502,9 @@ export class APIService {
     return response.json();
   }
 
-  async resendTeamInvite(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}/resend`, {
+  async resendTeamInvite(id, teamId = null) {
+    const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}/resend${query}`, {
       method: 'POST',
       headers: authHeader(),
     });

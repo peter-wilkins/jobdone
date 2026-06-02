@@ -394,7 +394,7 @@ _Avoid_: Search bar, Input field, Record button
 - MVP Team Invite creation should use simple anti-spam guardrails: require login, rate-limit invite creation per owner, and cap pending invites per Team. Bulk company import is deferred until real demand appears.
 - V1 Backlog management is Team Owner-led. Team Workers do not directly create Backlog Items in the first Team Invite/Work slice; they can talk to the Team Owner outside the app or through a later request/conversation path. This keeps Backlog Items intentional: if work is too small to need thought, it may not belong in the Backlog.
 - My Work may offer a Team filter when the aggregate Backlog becomes noisy, but the default worker experience should show everything actionable across Teams without requiring a Team switch first.
-- Team Setup remains per-Team. Multi-Team owner switching and team-list UX are deferred until real use or issue #87 needs them.
+- The setup surface is now **Team Edit**: it summarizes Teams the user owns and Teams they belong to, lets the user select an owned Team to edit, and lets them create a new Team. Team names are not globally unique in V1; users may create same-named Teams and disambiguate through ownership/membership context.
 - Approval Requests are always created when claimed work is submitted. Team settings decide whether they require manual review or use **Auto-Approval**.
 - Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, voice, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
 - **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.

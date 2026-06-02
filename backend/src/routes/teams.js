@@ -28,6 +28,10 @@ function appBaseUrlFromRequest(request) {
   return request.headers.origin || process.env.FRONTEND_URL || process.env.VITE_APP_URL || '';
 }
 
+function teamIdFromRequest(request) {
+  return request.query?.team_id || request.body?.team_id || null;
+}
+
 export async function registerTeamRoutes(fastify, deps = {}) {
   const getSetupState = deps.getTeamSetupState || getTeamSetupState;
   const getWorkState = deps.getMyWorkState || deps.getTeamWorkState || getMyWorkState;
@@ -50,7 +54,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await maybeAuth(request, reply);
       if (reply.sent) return reply;
-      return await getSetupState({ ownerEmail: user?.email || null, appBaseUrl: appBaseUrlFromRequest(request) });
+      return await getSetupState({ ownerEmail: user?.email || null, teamId: teamIdFromRequest(request), appBaseUrl: appBaseUrlFromRequest(request) });
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -60,7 +64,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const team = await updateTeam(request.body || {}, { ownerEmail: user.email });
+      const team = await updateTeam(request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return { team };
     } catch (error) {
       return errorReply(reply, error);
@@ -87,7 +91,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const backlogItem = await createItem(request.body || {}, { ownerEmail: user.email });
+      const backlogItem = await createItem(request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return reply.status(201).send({ backlogItem });
     } catch (error) {
       return errorReply(reply, error);
@@ -98,7 +102,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const backlogItem = await updateItem(request.params.id, request.body || {}, { ownerEmail: user.email });
+      const backlogItem = await updateItem(request.params.id, request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return { backlogItem };
     } catch (error) {
       return errorReply(reply, error);
@@ -109,7 +113,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      return await deleteItem(request.params.id, { ownerEmail: user.email });
+      return await deleteItem(request.params.id, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -136,7 +140,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const approvalRequest = await decideRequest(request.params.id, request.body?.decision, { ownerEmail: user.email });
+      const approvalRequest = await decideRequest(request.params.id, request.body?.decision, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return { approvalRequest };
     } catch (error) {
       return errorReply(reply, error);
@@ -149,6 +153,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       if (!user) return reply;
       const invite = await createInvite(request.body || {}, {
         ownerEmail: user.email,
+        teamId: teamIdFromRequest(request),
         appBaseUrl: appBaseUrlFromRequest(request),
       });
       return reply.status(201).send({ invite });
@@ -161,7 +166,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const invite = await revokeInvite(request.params.id, { ownerEmail: user.email });
+      const invite = await revokeInvite(request.params.id, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return { invite };
     } catch (error) {
       return errorReply(reply, error);
@@ -174,6 +179,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       if (!user) return reply;
       const invite = await resendInvite(request.params.id, {
         ownerEmail: user.email,
+        teamId: teamIdFromRequest(request),
         appBaseUrl: appBaseUrlFromRequest(request),
       });
       return { invite };
