@@ -100,11 +100,34 @@ describe('Team setup routes', () => {
     assert.equal(body.submittedApprovalRequests[0].status, 'submitted');
   });
 
-  test('updates team setup settings', async () => {
-    let savedInput;
+  test('does not expose Team Setup management data to non-owners', async () => {
     const app = await buildApp({
-      updateTeamSettings: async (input) => {
-        savedInput = input;
+      getTeamSetupState: async () => ({
+        team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
+        canManage: false,
+        inviteAccess: { canCreate: false },
+        pendingTeamInvites: [],
+        openBacklogItems: [],
+        submittedApprovalRequests: [],
+      }),
+      optionalAuth: async () => ({ email: 'worker@example.com' }),
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/teams/setup' });
+
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.canManage, false);
+    assert.equal(body.inviteAccess.canCreate, false);
+    assert.deepEqual(body.openBacklogItems, []);
+    assert.deepEqual(body.pendingTeamInvites, []);
+  });
+
+  test('updates team setup settings', async () => {
+    let savedArgs;
+    const app = await buildApp({
+      updateTeamSettings: async (input, context) => {
+        savedArgs = { input, context };
         return { id: 'team-1', name: input.name.trim(), template: input.template, points_enabled: true };
       },
     });
@@ -117,8 +140,29 @@ describe('Team setup routes', () => {
     });
 
     assert.equal(res.statusCode, 200);
-    assert.equal(savedInput.name, ' Family team ');
+    assert.equal(savedArgs.input.name, ' Family team ');
+    assert.deepEqual(savedArgs.context, { ownerEmail: 'owner@example.com' });
     assert.equal(JSON.parse(res.body).team.name, 'Family team');
+  });
+
+  test('rejects Team Setup settings changes from non-owners', async () => {
+    const app = await buildApp({
+      updateTeamSettings: async () => {
+        const error = new Error('Only the Team Owner can manage Team Setup.');
+        error.statusCode = 403;
+        throw error;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/teams/setup',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Worker edit', template: 'high_trust' }),
+    });
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(JSON.parse(res.body).error, 'Only the Team Owner can manage Team Setup.');
   });
 
   test('returns team worker queue sections', async () => {
@@ -155,8 +199,9 @@ describe('Team setup routes', () => {
   test('creates an open Backlog Item with description and points', async () => {
     let savedInput;
     const app = await buildApp({
-      createBacklogItem: async (input) => {
+      createBacklogItem: async (input, context) => {
         savedInput = input;
+        assert.deepEqual(context, { ownerEmail: 'owner@example.com' });
         return { id: 'item-1', description: input.description.trim(), points: input.points, status: 'open' };
       },
     });

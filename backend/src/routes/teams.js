@@ -58,7 +58,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.patch('/api/teams/setup', async (request, reply) => {
     try {
-      const team = await updateTeam(request.body || {});
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const team = await updateTeam(request.body || {}, { ownerEmail: user.email });
       return { team };
     } catch (error) {
       return errorReply(reply, error);
@@ -83,7 +85,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.post('/api/teams/backlog-items', async (request, reply) => {
     try {
-      const backlogItem = await createItem(request.body || {});
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const backlogItem = await createItem(request.body || {}, { ownerEmail: user.email });
       return reply.status(201).send({ backlogItem });
     } catch (error) {
       return errorReply(reply, error);
@@ -92,7 +96,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.patch('/api/teams/backlog-items/:id', async (request, reply) => {
     try {
-      const backlogItem = await updateItem(request.params.id, request.body || {});
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const backlogItem = await updateItem(request.params.id, request.body || {}, { ownerEmail: user.email });
       return { backlogItem };
     } catch (error) {
       return errorReply(reply, error);
@@ -101,7 +107,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.delete('/api/teams/backlog-items/:id', async (request, reply) => {
     try {
-      return await deleteItem(request.params.id);
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      return await deleteItem(request.params.id, { ownerEmail: user.email });
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -126,7 +134,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.post('/api/teams/approval-requests/:id/decision', async (request, reply) => {
     try {
-      const approvalRequest = await decideRequest(request.params.id, request.body?.decision);
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const approvalRequest = await decideRequest(request.params.id, request.body?.decision, { ownerEmail: user.email });
       return { approvalRequest };
     } catch (error) {
       return errorReply(reply, error);

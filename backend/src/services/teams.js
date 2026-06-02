@@ -239,6 +239,72 @@ async function ensureTeamOwner(db, teamId, ownerEmail) {
   return data;
 }
 
+async function ownedTeamForEmail(db, ownerEmail) {
+  const email = normalizedEmail(ownerEmail);
+  if (!email) return null;
+  const { data, error } = await db.query(
+    `select t.*
+       from ${db.schema}.team_members tm
+       join ${db.schema}.teams t on t.id = tm.team_id
+      where tm.normalized_email = $1
+        and tm.role = 'owner'
+        and not exists (
+          select 1
+            from ${db.schema}.team_invites ti
+           where ti.team_id = tm.team_id
+             and ti.normalized_email = tm.normalized_email
+             and ti.status = 'accepted'
+        )
+      order by t.created_at asc
+      limit 1`,
+    [email]
+  );
+  if (error) throw error;
+  return (data || [])[0] || null;
+}
+
+async function isTeamOwner(db, teamId, ownerEmail) {
+  const email = normalizedEmail(ownerEmail);
+  if (!email) return false;
+  const { data, error } = await db.query(
+    `select tm.id
+       from ${db.schema}.team_members tm
+      where tm.team_id = $1
+        and tm.normalized_email = $2
+        and tm.role = 'owner'
+        and not exists (
+          select 1
+            from ${db.schema}.team_invites ti
+           where ti.team_id = tm.team_id
+             and ti.normalized_email = tm.normalized_email
+             and ti.status = 'accepted'
+        )
+      limit 1`,
+    [teamId, email]
+  );
+  if (error) throw error;
+  return Boolean((data || []).length);
+}
+
+async function assertTeamOwner(db, teamId, ownerEmail) {
+  const allowed = await isTeamOwner(db, teamId, ownerEmail);
+  if (!allowed) {
+    const error = new Error('Only the Team Owner can manage Team Setup.');
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+async function requireOwnedTeam(db, ownerEmail) {
+  const team = await ownedTeamForEmail(db, ownerEmail);
+  if (!team) {
+    const error = new Error('Create a Team first.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return team;
+}
+
 async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
   const { data, error } = await db
     .from('team_invites')
@@ -251,14 +317,19 @@ async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
 }
 
 export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail = null, appBaseUrl = '' } = {}) {
-  if (!db) return { team: null, openBacklogItems: [], submittedApprovalRequests: [] };
-  const team = await ensureDogfoodTeam(db);
-  if (ownerEmail) await ensureTeamOwner(db, teamId, ownerEmail);
+  const empty = { team: null, inviteAccess: { canCreate: false }, canManage: false, pendingTeamInvites: [], openBacklogItems: [], submittedApprovalRequests: [] };
+  if (!db) return empty;
+  if (!ownerEmail) return empty;
+  const team = await ownedTeamForEmail(db, ownerEmail);
+  if (!team) {
+    return { ...empty, canManage: true };
+  }
+  const setupTeamId = team.id || teamId;
 
   const { data: openRows, error: openError } = await db
     .from('backlog_items')
     .select('*')
-    .eq('team_id', teamId)
+    .eq('team_id', setupTeamId)
     .eq('status', 'open')
     .order('created_at', { ascending: false });
   if (openError) throw openError;
@@ -266,7 +337,7 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
   const { data: requestRows, error: requestError } = await db
     .from('approval_requests')
     .select('*')
-    .eq('team_id', teamId)
+    .eq('team_id', setupTeamId)
     .eq('status', 'submitted')
     .order('submitted_at', { ascending: false });
   if (requestError) throw requestError;
@@ -277,7 +348,7 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
     const { data: backlogRows, error: backlogError } = await db
       .from('backlog_items')
       .select('*')
-      .eq('team_id', teamId)
+      .eq('team_id', setupTeamId)
       .in('id', backlogIds);
     if (backlogError) throw backlogError;
     for (const row of backlogRows || []) {
@@ -287,8 +358,9 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
 
   return {
     team: presentTeam(team),
-    pendingTeamInvites: ownerEmail ? await pendingInvitesForTeam(db, teamId, appBaseUrl) : [],
-    inviteAccess: { canCreate: Boolean(ownerEmail) },
+    canManage: true,
+    pendingTeamInvites: await pendingInvitesForTeam(db, setupTeamId, appBaseUrl),
+    inviteAccess: { canCreate: true },
     openBacklogItems: (openRows || []).map(presentBacklogItem),
     submittedApprovalRequests: (requestRows || []).map(row => presentApprovalRequest(row, backlogById.get(row.backlog_item_id))),
   };
@@ -345,25 +417,38 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID 
   };
 }
 
-export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
-  await ensureDogfoodTeam(db);
   const values = validateTeamInput(input);
+  const ownedTeam = await ownedTeamForEmail(db, ownerEmail);
+  if (!ownedTeam) {
+    const id = crypto.randomUUID();
+    const { data: team, error: teamError } = await db
+      .from('teams')
+      .insert([{ id, ...values }])
+      .select('*')
+      .single();
+    if (teamError) throw teamError;
+    await ensureTeamOwner(db, id, ownerEmail);
+    return presentTeam(team);
+  }
+  const setupTeamId = ownedTeam.id || teamId;
+  await assertTeamOwner(db, setupTeamId, ownerEmail);
   const { data, error } = await db
     .from('teams')
     .update(values)
-    .eq('id', teamId)
+    .eq('id', setupTeamId)
     .select('*')
     .single();
   if (error) throw error;
   return presentTeam(data);
 }
 
-export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail, appBaseUrl = '' } = {}) {
+export async function createTeamInvite(input, { db = jobdoneDb, ownerEmail, appBaseUrl = '' } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
@@ -371,8 +456,8 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
   }
   const email = validateEmail(input.email);
   const invitedByEmail = validateEmail(ownerEmail);
-  await ensureDogfoodTeam(db);
-  await ensureTeamOwner(db, teamId, invitedByEmail);
+  const ownedTeam = await requireOwnedTeam(db, invitedByEmail);
+  const teamId = ownedTeam.id;
 
   const { data: existingMemberRows, error: existingMemberError } = await db
     .from('team_members')
@@ -459,15 +544,15 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
   return invite;
 }
 
-export async function resendTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail, appBaseUrl = '' } = {}) {
+export async function resendTeamInvite(id, { db = jobdoneDb, ownerEmail, appBaseUrl = '' } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
   const invitedByEmail = validateEmail(ownerEmail);
-  await ensureDogfoodTeam(db);
-  await ensureTeamOwner(db, teamId, invitedByEmail);
+  const ownedTeam = await requireOwnedTeam(db, invitedByEmail);
+  const teamId = ownedTeam.id;
 
   const { data, error } = await db
     .from('team_invites')
@@ -489,15 +574,15 @@ export async function resendTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TE
   return invite;
 }
 
-export async function revokeTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail } = {}) {
+export async function revokeTeamInvite(id, { db = jobdoneDb, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
   const invitedByEmail = validateEmail(ownerEmail);
-  await ensureDogfoodTeam(db);
-  await ensureTeamOwner(db, teamId, invitedByEmail);
+  const ownedTeam = await requireOwnedTeam(db, invitedByEmail);
+  const teamId = ownedTeam.id;
   const { data, error } = await db
     .from('team_invites')
     .update({ status: 'revoked', revoked_at: nowIso(), updated_at: nowIso() })
@@ -598,13 +683,14 @@ export async function acceptTeamInvite(token, { db = jobdoneDb, userEmail } = {}
   };
 }
 
-export async function createBacklogItem(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function createBacklogItem(input, { db = jobdoneDb, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
-  await ensureDogfoodTeam(db);
+  const ownedTeam = await requireOwnedTeam(db, ownerEmail);
+  const teamId = ownedTeam.id;
   const values = validateBacklogItemInput(input);
   const { data, error } = await db
     .from('backlog_items')
@@ -615,12 +701,14 @@ export async function createBacklogItem(input, { db = jobdoneDb, teamId = DOGFOO
   return presentBacklogItem(data);
 }
 
-export async function updateOpenBacklogItem(id, input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function updateOpenBacklogItem(id, input, { db = jobdoneDb, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
+  const ownedTeam = await requireOwnedTeam(db, ownerEmail);
+  const teamId = ownedTeam.id;
   const values = validateBacklogItemInput(input);
   const { data, error } = await db
     .from('backlog_items')
@@ -639,12 +727,14 @@ export async function updateOpenBacklogItem(id, input, { db = jobdoneDb, teamId 
   return presentBacklogItem(data);
 }
 
-export async function deleteOpenBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function deleteOpenBacklogItem(id, { db = jobdoneDb, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
+  const ownedTeam = await requireOwnedTeam(db, ownerEmail);
+  const teamId = ownedTeam.id;
   const { data: existing, error: existingError } = await db
     .from('backlog_items')
     .select('id')
@@ -756,12 +846,14 @@ export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb,
   };
 }
 
-export async function decideApprovalRequest(id, decision, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function decideApprovalRequest(id, decision, { db = jobdoneDb, ownerEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
+  const ownedTeam = await requireOwnedTeam(db, ownerEmail);
+  const teamId = ownedTeam.id;
   if (!['approved', 'needs_more_evidence'].includes(decision)) {
     const error = new Error('Decision must be approved or needs_more_evidence');
     error.statusCode = 400;

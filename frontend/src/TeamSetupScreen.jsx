@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 const EMPTY_FORM = { description: '', points: 3 };
-const DEFAULT_TEAM = { name: 'Dogfood Team', template: 'high_trust', points_enabled: false };
+const DEFAULT_TEAM = { name: 'My Team', template: 'high_trust', points_enabled: false };
 
 const TEAM_TEMPLATES = [
   { value: 'high_trust', label: 'High Trust', hint: 'Fast coordination, auto-approval, no points.' },
@@ -124,6 +124,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
   const [submittedApprovalRequests, setSubmittedApprovalRequests] = useState([]);
+  const [canManage, setCanManage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
@@ -137,10 +138,12 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     try {
       const state = await apiService.getTeamSetupState();
       setTeam(state.team || DEFAULT_TEAM);
+      setCanManage(Boolean(state.canManage));
       setPendingTeamInvites(state.pendingTeamInvites || []);
       setOpenBacklogItems(state.openBacklogItems || []);
       setSubmittedApprovalRequests(state.submittedApprovalRequests || []);
     } catch (err) {
+      setCanManage(false);
       setError(err.message || 'Could not load Team');
     } finally {
       setIsLoading(false);
@@ -154,6 +157,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   }, []);
 
   const pointsEnabled = Boolean(team.points_enabled);
+  const hasManagedTeam = Boolean(team.id);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -312,6 +316,32 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       )}
 
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-gray-400">Loading...</div>
+        ) : !canManage ? (
+          <section className="py-8">
+            <h2 className="text-sm font-semibold text-gray-900">
+              {user ? 'Team Setup is owner-only' : 'Log in to create a Team'}
+            </h2>
+            {user ? (
+              <p className="mt-2 text-sm leading-5 text-gray-500">
+                You can do Team work from My Work, but only the Team Owner can change settings, invites, Backlog Items, and approvals.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm leading-5 text-gray-500">
+                Log in so JobDone can attach the Team to your email.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => onNavigate?.(user ? 'my-work' : 'login')}
+              className="mt-4 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800"
+            >
+              {user ? 'Go to My Work' : 'Log in'}
+            </button>
+          </section>
+        ) : (
+          <>
         <form onSubmit={saveTeam} className="space-y-3">
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
@@ -357,10 +387,11 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             disabled={isSaving || !String(team.name || '').trim()}
             className="w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
           >
-            Save Team
+            {hasManagedTeam ? 'Save Team' : 'Create Team'}
           </button>
         </form>
 
+        {hasManagedTeam && (
         <section>
           <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
             <h2 className="text-sm font-semibold text-gray-900">Team Invites</h2>
@@ -421,7 +452,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             </>
           )}
         </section>
+        )}
 
+        {hasManagedTeam && (
         <form onSubmit={saveBacklogItem} className="space-y-3">
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
@@ -470,11 +503,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             )}
           </div>
         </form>
+        )}
 
-        {isLoading ? (
-          <div className="py-8 text-center text-sm text-gray-400">Loading...</div>
-        ) : (
-          <>
+            {hasManagedTeam && (
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
                 <h2 className="text-sm font-semibold text-gray-900">Open Backlog Items</h2>
@@ -496,7 +527,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                 </div>
               )}
             </section>
+            )}
 
+            {hasManagedTeam && (
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
                 <h2 className="text-sm font-semibold text-gray-900">Submitted For Approval</h2>
@@ -517,6 +550,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                 </div>
               )}
             </section>
+            )}
           </>
         )}
       </main>
