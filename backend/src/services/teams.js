@@ -55,8 +55,8 @@ export function validateBacklogItemInput(input = {}) {
   return { description, points };
 }
 
-export function presentBacklogItem(row = {}) {
-  return {
+export function presentBacklogItem(row = {}, team = null) {
+  const item = {
     id: row.id,
     team_id: row.team_id,
     description: row.description,
@@ -66,6 +66,10 @@ export function presentBacklogItem(row = {}) {
     updated_at: row.updated_at,
     approval_request: row.approval_request || null,
   };
+  if (team) {
+    item.team = presentTeam(team);
+  }
+  return item;
 }
 
 export function presentTeam(row = {}) {
@@ -194,11 +198,11 @@ async function latestApprovalRequestsByBacklogId(db, teamId, backlogIds = []) {
   return byBacklogId;
 }
 
-function withApprovalRequest(item, approvalByBacklogId) {
+function withApprovalRequest(item, approvalByBacklogId, team = null) {
   return presentBacklogItem({
     ...item,
     approval_request: approvalByBacklogId.get(item.id) || null,
-  });
+  }, team);
 }
 
 export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
@@ -220,9 +224,9 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID 
 
   return {
     team: presentTeam(team),
-    inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId)),
-    openBacklogItems: (rows || []).filter(row => row.status === 'open').map(presentBacklogItem),
-    approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId)),
+    inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId, team)),
+    openBacklogItems: (rows || []).filter(row => row.status === 'open').map(row => presentBacklogItem(row, team)),
+    approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId, team)),
   };
 }
 

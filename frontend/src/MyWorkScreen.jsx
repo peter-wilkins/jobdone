@@ -6,6 +6,19 @@ function pointsText(item, pointsEnabled) {
   return `${item.points} point${item.points === 1 ? '' : 's'}`;
 }
 
+function teamLabel(item) {
+  return item.team?.name || 'Team';
+}
+
+function itemPointsEnabled(item, fallback) {
+  return item.team?.points_enabled ?? fallback;
+}
+
+function itemUsesManualApproval(item, fallback) {
+  if (!item.team?.approval_mode) return fallback;
+  return item.team.approval_mode === 'manual';
+}
+
 function statusText(status, usesManualApproval = true) {
   if (status === 'needs_more_evidence') return 'Needs more evidence';
   if (status === 'submitted') return 'Submitted';
@@ -17,13 +30,15 @@ function statusText(status, usesManualApproval = true) {
 function WorkItem({ item, pointsEnabled, usesManualApproval, onSubmit, busy }) {
   const [evidenceText, setEvidenceText] = useState('');
   const request = item.approval_request || {};
+  const rowPointsEnabled = itemPointsEnabled(item, pointsEnabled);
+  const rowUsesManualApproval = itemUsesManualApproval(item, usesManualApproval);
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {[statusText(item.status, usesManualApproval), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
+            {[teamLabel(item), statusText(item.status, rowUsesManualApproval), pointsText(item, rowPointsEnabled)].filter(Boolean).join(' · ')}
           </p>
         </div>
       </div>
@@ -60,14 +75,15 @@ function WorkItem({ item, pointsEnabled, usesManualApproval, onSubmit, busy }) {
 }
 
 function OpenItem({ item, pointsEnabled, onClaim, busy }) {
+  const rowPointsEnabled = itemPointsEnabled(item, pointsEnabled);
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
-          {pointsEnabled && item.points && (
-            <p className="mt-1 text-xs text-gray-500">{pointsText(item, pointsEnabled)}</p>
-          )}
+          <p className="mt-1 text-xs text-gray-500">
+            {[teamLabel(item), pointsText(item, rowPointsEnabled)].filter(Boolean).join(' · ')}
+          </p>
         </div>
         <button
           type="button"
@@ -84,11 +100,13 @@ function OpenItem({ item, pointsEnabled, onClaim, busy }) {
 
 function FinishedItem({ item, pointsEnabled }) {
   const request = item.approval_request || {};
-  const points = pointsText(item, pointsEnabled);
+  const points = pointsText(item, itemPointsEnabled(item, pointsEnabled));
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
-      {points && <p className="mt-1 text-xs text-gray-500">{points}</p>}
+      <p className="mt-1 text-xs text-gray-500">
+        {[teamLabel(item), points].filter(Boolean).join(' · ')}
+      </p>
       {request.evidence_text && (
         <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
       )}
@@ -170,7 +188,7 @@ export function MyWorkScreen({ onBack }) {
         </button>
         <div>
           <h1 className="text-xl font-light text-gray-900 leading-5">My Work</h1>
-          <p className="text-xs text-gray-500">{team?.name || 'JobDone Team'}</p>
+          <p className="text-xs text-gray-500">Backlog across your Teams</p>
         </div>
       </div>
 

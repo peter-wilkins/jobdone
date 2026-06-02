@@ -91,9 +91,9 @@ describe('Team setup routes', () => {
     const app = await buildApp({
       getMyWorkState: async () => ({
         team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
-        inProgressItems: [{ id: 'claimed-1', status: 'claimed', description: 'Clean bench' }],
-        openBacklogItems: [{ id: 'open-1', status: 'open', description: 'Sweep floor' }],
-        approvedItems: [{ id: 'done-1', status: 'approved', description: 'Empty bins' }],
+        inProgressItems: [{ id: 'claimed-1', status: 'claimed', description: 'Clean bench', team: { id: 'team-1', name: 'Dogfood Team' } }],
+        openBacklogItems: [{ id: 'open-1', status: 'open', description: 'Sweep floor', team: { id: 'team-1', name: 'Dogfood Team' } }],
+        approvedItems: [{ id: 'done-1', status: 'approved', description: 'Empty bins', team: { id: 'team-1', name: 'Dogfood Team' } }],
       }),
     });
 
@@ -102,8 +102,11 @@ describe('Team setup routes', () => {
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.inProgressItems[0].description, 'Clean bench');
+    assert.equal(body.inProgressItems[0].team.name, 'Dogfood Team');
     assert.equal(body.openBacklogItems[0].description, 'Sweep floor');
+    assert.equal(body.openBacklogItems[0].team.name, 'Dogfood Team');
     assert.equal(body.approvedItems[0].status, 'approved');
+    assert.equal(body.approvedItems[0].team.name, 'Dogfood Team');
   });
 
   test('keeps the old Team Work route as a compatibility alias', async () => {
