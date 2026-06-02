@@ -182,9 +182,13 @@ _Avoid_: Admin Role, Parent, Manager-only
 An invited Team Member using My Work. Team Workers can claim Backlog Items and submit work across the Teams they belong to.
 _Avoid_: Child, Employee, Assignee-only
 
-**Team Setup View**:
-The Team creator/manager surface for naming the Team, inviting Team Members, managing the Backlog, approving submitted work, and choosing Team settings such as whether Points are enabled.
-_Avoid_: Parent View, Admin View
+**Team Edit View**:
+The Team Owner configuration surface for naming the Team, inviting Team Members, choosing Team settings such as whether Points are enabled, and managing open Backlog Items. Team Edit is not the urgent approval queue.
+_Avoid_: Parent View, Admin View, Approval Queue
+
+**Team Review View**:
+The Team Owner operational review surface for submitted Approval Requests that need a decision. Team Review is time-sensitive work and should float submitted work above slower Team configuration.
+_Avoid_: Team Setup, Team Edit, Admin Settings
 
 **My Work View**:
 The Team Member-facing surface for doing work across all Teams they belong to: claimed/in-progress items first, open Backlog Items next, and submitted/done history after that. Items retain their Team context internally and may show a small Team label when useful.
@@ -335,6 +339,8 @@ _Avoid_: Search bar, Input field, Record button
 - Local IndexedDB is the source of truth for the current device experience; Supabase is a sync replica for cross-device continuity
 - The PWA caches the app shell and static assets for offline opening; API responses are not the source of truth
 - Foreground app-open retry is the canonical sync mechanism; browser Background Sync is only an optional optimization
+- Personal Timeline sync and Team queue refresh are separate freshness loops. Personal Timeline, Contact, Location, and Query sync runs for local-first personal data; Team Review and My Work refresh server-backed Team queues when the user enters or refocuses Team surfaces. Later push notifications can improve this, but they should be opt-in and are not required for correctness.
+- If a Team Review or My Work refresh fails, JobDone should keep the last visible Team queue and show a small network/stale-state strip rather than blanking the surface. This mirrors personal Timeline network behaviour: carry on, but make backend freshness visible.
 - Android Chrome is the primary platform for Web Share Target; iOS and desktop PWA support are best-effort
 - A **Native Integration Shell** is only worth prototyping if native OS integration solves concrete PWA pain such as unreliable share targets; App Store / Play Store discoverability alone is not enough justification for MVP
 - JobDone should have one recommended installed surface per platform. If an Android Native Integration Shell becomes viable, it should be the recommended Android install path; the browser-installed PWA remains the desktop/default web path
@@ -350,12 +356,15 @@ _Avoid_: Search bar, Input field, Record button
 - JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
 - JobDone V1 should build a generic Team layer rather than a separate family/kids product. A family Team, work Team, apprentice Team, and solo Team are all Teams with different settings.
 - Team language should be introduced now, but Team management UI should not exceed what the Backlog or Approval slice needs. Implement only the smallest Team-shaped schema/backend needed for the first collaboration workflow, then let Team capabilities grow from real use.
-- The first collaboration tracer bullet should be a dogfoodable Team workflow with the Team Setup View first: Team creation, Backlog Item creation, lightweight Approval Request review, followed by My Work for claiming and evidence flow.
+- The first collaboration tracer bullet should be a dogfoodable Team workflow with Team creation, Backlog Item creation, lightweight Approval Request review, followed by My Work for claiming and evidence flow.
 - The first Team implementation slice can use text-only Backlog Items and text-only submitted evidence. Photos, richer Share Pack editing, and complex instruction support can follow after the Backlog/Approval loop works.
 - The first Team UI can assume one invited Team Worker for dogfooding, while the underlying Team model should remain capable of multiple Team Members. Backlog Items are not assigned; Team Members claim work when they choose to do it.
 - The first Team Backlog should be an Open Backlog only. Dates, weekly scheduling, and Routine generation follow after the Backlog/Approval loop works.
 - Slice 1 Backlog Item creation needs only a description and Points. Description is the simple Backlog Item field for this slice; richer Instructions remain optional later. Titles, assignment, due dates, recurrence, reward choice, photos, and Share Pack-backed Instructions can follow when real use proves the need.
-- The first Team Setup View should keep navigation minimal with two sections: Open Backlog Items and Submitted For Approval.
+- Team Review and Team Edit should be separate surfaces: Team Review handles submitted Approval Requests that need a decision, while Team Edit handles Team configuration, invites, settings, and open Backlog management.
+- The Teams area should default to Team Edit only when the user owns no Teams yet. Once a user owns at least one Team, the Teams area should default to Team Review because approving submitted work is more time-sensitive than editing Team configuration. Team Edit should remain available as a secondary button/link that uses little screen space.
+- Team Review's active queue shows submitted Approval Requests and needs-more-evidence items oldest first. Closed decisions can appear below as lazy-loaded recent history, but they should not compete with active review work.
+- The burger/menu label for the owner-facing Teams area should be **Team Review**. Inside that surface, the main heading can be **Needs Review** with a small **Edit Teams** action.
 - Team Owners can edit a Backlog Item's description and Points, or delete it, only while it is open. Once a Backlog Item is claimed or submitted, V1 avoids edit/delete and uses the approval flow or a new Backlog Item instead.
 - My Work should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and done/history items at the bottom.
 - Submitted-but-not-yet-approved items stay in the claimed/in-progress section with a submitted status rather than moving to a separate pending section.
@@ -365,6 +374,7 @@ _Avoid_: Search bar, Input field, Record button
 - A **Backlog Item** can include an **Instruction**. Instructions start as plain text, but can later reference a Share Pack when a reusable bundle of examples, previous Entries, photos, or context helps explain complex work.
 - Team evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Team-specific evidence object.
 - Teams do not require objective proof before approval. Trust is between the Team Member and Approver; the app records the submitted Entry evidence and approval decision, while "needs more evidence" gives the Approver a lightweight way to ask for more.
+- My Work can suggest recent personal Timeline Entries as possible evidence inside the submit box for a claimed Backlog Item. Suggestions are optional picks based on the Backlog Item title/description and recent Entries; JobDone must not auto-submit evidence without the Team Member choosing it.
 - Teams with Points enabled should include visible Progress Goals: Team Members can track earned points against targets, earn Bonuses for reaching targets, and see minimum Privilege Thresholds. Privilege consequences are managed outside the app in V1; JobDone tracks and communicates them but does not enforce them.
 - Teams can support habit-building through finite Routines that suggest repeated Backlog Items for a limited period, then stop when the behaviour is likely established or the approval burden outweighs value.
 - JobDone should help Team Owners create useful Routines by suggesting sensible habit-building patterns, rather than forcing them to invent every repeated Backlog Item from scratch.
@@ -398,6 +408,7 @@ _Avoid_: Search bar, Input field, Record button
 - Approval Requests are always created when claimed work is submitted. Team settings decide whether they require manual review or use **Auto-Approval**.
 - Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, voice, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
 - **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.
+- Owner self-review is a separate Team setting: by default, when a Team Owner submits their own claimed work, JobDone creates the Approval Request and auto-closes it as approved so the evidence trail exists without self-approval friction. Teams that want stricter process can require Team Owners to manually approve their own work.
 - Team creation should offer simple **Team Templates**. The default should be **High Trust Team** so friction does not accidentally creep into ordinary collaboration.
 - Example Team Templates: High Trust Team can use Auto-Approval and no Points; Low Trust Team can use manual Approval; Family Team can use manual Approval and Points.
 - Team Templates are setup shortcuts, not durable Team types. After creation, Teams morph by changing real settings; for example a Family Team can become a High Trust Team over time by turning off manual review or Points.
