@@ -388,6 +388,18 @@ export class APIService {
     return response.json();
   }
 
+  async deleteTeam(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to delete Team`);
+    }
+    return response.json();
+  }
+
   async getMyWorkState() {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/my-work`, {
       headers: authHeader(),

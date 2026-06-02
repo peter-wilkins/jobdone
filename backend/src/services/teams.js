@@ -356,6 +356,21 @@ async function requireOwnedTeam(db, ownerEmail, teamId = null) {
   return team;
 }
 
+async function teamsForWorkEmail(db, userEmail) {
+  const email = normalizedEmail(userEmail);
+  if (!email) return [];
+  const { data, error } = await db.query(
+    `select t.*
+       from ${db.schema}.team_members tm
+       join ${db.schema}.teams t on t.id = tm.team_id
+      where tm.normalized_email = $1
+      order by t.created_at asc`,
+    [email]
+  );
+  if (error) throw error;
+  return data || [];
+}
+
 async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
   const { data, error } = await db
     .from('team_invites')
@@ -423,14 +438,19 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
   };
 }
 
-async function latestApprovalRequestsByBacklogId(db, teamId, backlogIds = []) {
+async function latestApprovalRequestsByBacklogId(db, teamIds, backlogIds = []) {
   if (!backlogIds.length) return new Map();
-  const { data, error } = await db
+  const query = db
     .from('approval_requests')
     .select('*')
-    .eq('team_id', teamId)
     .in('backlog_item_id', backlogIds)
     .order('submitted_at', { ascending: false });
+  if (Array.isArray(teamIds)) {
+    query.in('team_id', teamIds);
+  } else {
+    query.eq('team_id', teamIds);
+  }
+  const { data, error } = await query;
   if (error) throw error;
 
   const byBacklogId = new Map();
@@ -449,29 +469,69 @@ function withApprovalRequest(item, approvalByBacklogId, team = null) {
   }, team);
 }
 
-export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
   if (!db) return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
-  const team = await ensureDogfoodTeam(db);
+  const teams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
+  const visibleTeams = teams.length ? teams : [];
+  const teamIds = visibleTeams.map(team => team.id);
+  const teamByIdMap = new Map(visibleTeams.map(team => [team.id, team]));
+  if (!teamIds.length) {
+    return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
+  }
 
-  const { data: rows, error } = await db
+  const query = db
     .from('backlog_items')
     .select('*')
-    .eq('team_id', teamId)
     .in('status', ['open', 'claimed', 'submitted', 'needs_more_evidence', 'approved'])
     .order('created_at', { ascending: false });
+  if (userEmail) {
+    query.in('team_id', teamIds);
+  } else {
+    query.eq('team_id', teamId);
+  }
+  const { data: rows, error } = await query;
   if (error) throw error;
 
   const inProgressRows = (rows || []).filter(row => ['claimed', 'submitted', 'needs_more_evidence'].includes(row.status));
   const approvedRows = (rows || []).filter(row => row.status === 'approved');
   const requestBacklogIds = [...inProgressRows, ...approvedRows].map(row => row.id);
-  const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, teamId, requestBacklogIds);
+  const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, userEmail ? teamIds : teamId, requestBacklogIds);
+  const teamForRow = row => teamByIdMap.get(row.team_id) || visibleTeams[0] || null;
 
   return {
-    team: presentTeam(team),
-    inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId, team)),
-    openBacklogItems: (rows || []).filter(row => row.status === 'open').map(row => presentBacklogItem(row, team)),
-    approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId, team)),
+    team: visibleTeams.length === 1 ? presentTeam(visibleTeams[0]) : null,
+    teams: visibleTeams.map(presentTeam),
+    inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId, teamForRow(row))),
+    openBacklogItems: (rows || []).filter(row => row.status === 'open').map(row => presentBacklogItem(row, teamForRow(row))),
+    approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId, teamForRow(row))),
   };
+}
+
+export async function deleteOwnedTeam(id, { db = jobdoneDb, ownerEmail } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  await assertTeamOwner(db, id, ownerEmail);
+  const { data: existing, error: existingError } = await db
+    .from('teams')
+    .select('*')
+    .eq('id', id)
+    .limit(1)
+    .single();
+  if (existingError) throw existingError;
+  if (!existing) {
+    const error = new Error('Team not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const { error } = await db
+    .from('teams')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+  return { success: true, team: presentTeam(existing) };
 }
 
 export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail } = {}) {
@@ -817,28 +877,40 @@ export async function deleteOpenBacklogItem(id, { db = jobdoneDb, ownerEmail, te
   return { success: true };
 }
 
-export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
-  await ensureDogfoodTeam(db);
-  const { data, error } = await db
+  const visibleTeams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
+  const teamIds = visibleTeams.map(team => team.id);
+  if (!teamIds.length) {
+    const notFound = new Error('Open Backlog Item not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+  const query = db
     .from('backlog_items')
     .update({ status: 'claimed', updated_at: nowIso() })
     .eq('id', id)
-    .eq('team_id', teamId)
     .eq('status', 'open')
     .select('*')
     .single();
+  if (userEmail) {
+    query.in('team_id', teamIds);
+  } else {
+    query.eq('team_id', teamId);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   if (!data) {
     const notFound = new Error('Open Backlog Item not found');
     notFound.statusCode = 404;
     throw notFound;
   }
-  return presentBacklogItem(data);
+  const team = visibleTeams.find(candidate => candidate.id === data.team_id) || visibleTeams[0] || null;
+  return presentBacklogItem(data, team);
 }
 
 function validateEvidenceText(value) {
@@ -856,22 +928,50 @@ function validateEvidenceText(value) {
   return evidenceText;
 }
 
-export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
-  const team = await ensureDogfoodTeam(db);
+  const visibleTeams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
+  const teamIds = visibleTeams.map(team => team.id);
+  if (!teamIds.length) {
+    const notFound = new Error('Claimed Backlog Item not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
   const evidenceText = validateEvidenceText(input.evidence_text || input.evidenceText);
-  const nextStatus = team.approval_mode === 'auto' ? 'approved' : 'submitted';
   const timestamp = nowIso();
+
+  const existingQuery = db
+    .from('backlog_items')
+    .select('*')
+    .eq('id', id)
+    .in('status', ['claimed', 'needs_more_evidence'])
+    .limit(1)
+    .single();
+  if (userEmail) {
+    existingQuery.in('team_id', teamIds);
+  } else {
+    existingQuery.eq('team_id', teamId);
+  }
+  const { data: existingBacklogItem, error: existingError } = await existingQuery;
+  if (existingError) throw existingError;
+  if (!existingBacklogItem) {
+    const notFound = new Error('Claimed Backlog Item not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+
+  const team = visibleTeams.find(candidate => candidate.id === existingBacklogItem.team_id) || visibleTeams[0];
+  const nextStatus = team.approval_mode === 'auto' ? 'approved' : 'submitted';
 
   const { data: backlogItem, error: backlogError } = await db
     .from('backlog_items')
     .update({ status: nextStatus, updated_at: timestamp })
     .eq('id', id)
-    .eq('team_id', teamId)
+    .eq('team_id', existingBacklogItem.team_id)
     .in('status', ['claimed', 'needs_more_evidence'])
     .select('*')
     .single();
@@ -885,7 +985,7 @@ export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb,
   const { data: approvalRequest, error: requestError } = await db
     .from('approval_requests')
     .insert([{
-      team_id: teamId,
+      team_id: existingBacklogItem.team_id,
       backlog_item_id: id,
       status: nextStatus === 'approved' ? 'approved' : 'submitted',
       evidence_text: evidenceText,
@@ -898,7 +998,7 @@ export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb,
   if (requestError) throw requestError;
 
   return {
-    backlogItem: presentBacklogItem(backlogItem),
+    backlogItem: presentBacklogItem(backlogItem, team),
     approvalRequest: presentApprovalRequest(approvalRequest, backlogItem),
   };
 }

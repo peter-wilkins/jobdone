@@ -4,6 +4,7 @@ import {
   createTeamInvite,
   createBacklogItem,
   decideApprovalRequest,
+  deleteOwnedTeam,
   deleteOpenBacklogItem,
   getTeamSetupState,
   getMyWorkState,
@@ -38,6 +39,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
   const updateItem = deps.updateOpenBacklogItem || updateOpenBacklogItem;
+  const deleteTeam = deps.deleteOwnedTeam || deleteOwnedTeam;
   const deleteItem = deps.deleteOpenBacklogItem || deleteOpenBacklogItem;
   const claimItem = deps.claimBacklogItem || claimBacklogItem;
   const submitItem = deps.submitClaimedBacklogItem || submitClaimedBacklogItem;
@@ -71,17 +73,31 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.get('/api/my-work', async (_request, reply) => {
+  fastify.get('/api/my-work', async (request, reply) => {
     try {
-      return await getWorkState();
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      return await getWorkState({ userEmail: user?.email || null });
     } catch (error) {
       return errorReply(reply, error);
     }
   });
 
-  fastify.get('/api/teams/work', async (_request, reply) => {
+  fastify.get('/api/teams/work', async (request, reply) => {
     try {
-      return await getWorkState();
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      return await getWorkState({ userEmail: user?.email || null });
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.delete('/api/teams/:id', async (request, reply) => {
+    try {
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      return await deleteTeam(request.params.id, { ownerEmail: user.email });
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -121,7 +137,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.post('/api/teams/backlog-items/:id/claim', async (request, reply) => {
     try {
-      const backlogItem = await claimItem(request.params.id);
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      const backlogItem = await claimItem(request.params.id, { userEmail: user?.email || null });
       return { backlogItem };
     } catch (error) {
       return errorReply(reply, error);
@@ -130,7 +148,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.post('/api/teams/backlog-items/:id/submit', async (request, reply) => {
     try {
-      return await submitItem(request.params.id, request.body || {});
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      return await submitItem(request.params.id, request.body || {}, { userEmail: user?.email || null });
     } catch (error) {
       return errorReply(reply, error);
     }

@@ -132,6 +132,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [canManage, setCanManage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingTeam, setIsDeletingTeam] = useState(false);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [busyInviteId, setBusyInviteId] = useState(null);
   const [inviteCopyMessage, setInviteCopyMessage] = useState('');
@@ -212,6 +213,37 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       setError(err.message || 'Could not save Team');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const deleteTeam = async () => {
+    if (!hasManagedTeam || isCreatingNewTeam) return;
+    const confirmed = window.confirm(
+      `Delete Team "${team.name}"? This removes its Backlog Items, invites, members, and approvals.`
+    );
+    if (!confirmed) return;
+
+    setIsDeletingTeam(true);
+    setError(null);
+    try {
+      await apiService.deleteTeam(team.id);
+      const remainingOwnedTeams = ownedTeams.filter(ownedTeam => ownedTeam.id !== team.id);
+      setOwnedTeams(remainingOwnedTeams);
+      if (remainingOwnedTeams.length) {
+        await loadTeamState(remainingOwnedTeams[0].id);
+      } else {
+        setTeam(DEFAULT_TEAM);
+        setSelectedTeamId(null);
+        setIsCreatingNewTeam(true);
+        setPendingTeamInvites([]);
+        setOpenBacklogItems([]);
+        setSubmittedApprovalRequests([]);
+        resetForm();
+      }
+    } catch (err) {
+      setError(err.message || 'Could not delete Team');
+    } finally {
+      setIsDeletingTeam(false);
     }
   };
 
@@ -445,11 +477,25 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         </section>
 
         <section className="rounded border border-gray-200 px-3 py-3">
-        <div className="mb-3 border-b border-gray-100 pb-2">
-          <h2 className="text-sm font-semibold text-gray-900">{editorTitle}</h2>
-          <p className="text-xs text-gray-500">
-            {hasManagedTeam && !isCreatingNewTeam ? 'Changes apply only to this owned Team.' : 'This creates a separate Team.'}
-          </p>
+        <div className="mb-3 flex items-start justify-between gap-3 border-b border-gray-100 pb-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-gray-900">{editorTitle}</h2>
+            <p className="text-xs text-gray-500">
+              {hasManagedTeam && !isCreatingNewTeam ? 'Changes apply only to this owned Team.' : 'This creates a separate Team.'}
+            </p>
+          </div>
+          {hasManagedTeam && !isCreatingNewTeam && (
+            <button
+              type="button"
+              onClick={deleteTeam}
+              disabled={isDeletingTeam}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              title={`Delete ${team.name}`}
+              aria-label={`Delete ${team.name}`}
+            >
+              x
+            </button>
+          )}
         </div>
 
         <form onSubmit={saveTeam} className="space-y-3">

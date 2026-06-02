@@ -30,6 +30,7 @@ async function buildApp(deps = {}) {
       points: input.points,
       status: 'open',
     }),
+    deleteOwnedTeam: async () => ({ success: true, team: { id: 'team-1', name: 'Dogfood Team' } }),
     deleteOpenBacklogItem: async () => ({ success: true }),
     claimBacklogItem: async (id) => ({ id, description: 'Tidy desk', status: 'claimed' }),
     submitClaimedBacklogItem: async (id, input) => ({
@@ -166,13 +167,18 @@ describe('Team setup routes', () => {
   });
 
   test('returns team worker queue sections', async () => {
+    let workContext;
     const app = await buildApp({
-      getMyWorkState: async () => ({
-        team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
-        inProgressItems: [{ id: 'claimed-1', status: 'claimed', description: 'Clean bench', team: { id: 'team-1', name: 'Dogfood Team' } }],
-        openBacklogItems: [{ id: 'open-1', status: 'open', description: 'Sweep floor', team: { id: 'team-1', name: 'Dogfood Team' } }],
-        approvedItems: [{ id: 'done-1', status: 'approved', description: 'Empty bins', team: { id: 'team-1', name: 'Dogfood Team' } }],
-      }),
+      optionalAuth: async () => ({ email: 'worker@example.com' }),
+      getMyWorkState: async (context) => {
+        workContext = context;
+        return {
+          team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
+          inProgressItems: [{ id: 'claimed-1', status: 'claimed', description: 'Clean bench', team: { id: 'team-1', name: 'Dogfood Team' } }],
+          openBacklogItems: [{ id: 'open-1', status: 'open', description: 'Sweep floor', team: { id: 'team-1', name: 'Dogfood Team' } }],
+          approvedItems: [{ id: 'done-1', status: 'approved', description: 'Empty bins', team: { id: 'team-1', name: 'Dogfood Team' } }],
+        };
+      },
     });
 
     const res = await app.inject({ method: 'GET', url: '/api/my-work' });
@@ -185,6 +191,7 @@ describe('Team setup routes', () => {
     assert.equal(body.openBacklogItems[0].team.name, 'Dogfood Team');
     assert.equal(body.approvedItems[0].status, 'approved');
     assert.equal(body.approvedItems[0].team.name, 'Dogfood Team');
+    assert.deepEqual(workContext, { userEmail: 'worker@example.com' });
   });
 
   test('keeps the old Team Work route as a compatibility alias', async () => {
@@ -256,6 +263,23 @@ describe('Team setup routes', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(deletedId, 'item-1');
     assert.equal(JSON.parse(res.body).success, true);
+  });
+
+  test('deletes an owned Team for the authenticated owner', async () => {
+    let deleteArgs;
+    const app = await buildApp({
+      deleteOwnedTeam: async (id, context) => {
+        deleteArgs = { id, context };
+        return { success: true, team: { id, name: 'Foo' } };
+      },
+    });
+
+    const res = await app.inject({ method: 'DELETE', url: '/api/teams/team-1' });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(deleteArgs, { id: 'team-1', context: { ownerEmail: 'owner@example.com' } });
+    assert.equal(JSON.parse(res.body).success, true);
+    assert.equal(JSON.parse(res.body).team.name, 'Foo');
   });
 
   test('claims an open Backlog Item', async () => {
