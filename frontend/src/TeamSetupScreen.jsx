@@ -94,6 +94,15 @@ function InviteRow({ invite, onCopy, onResend, onRemove, busy }) {
   );
 }
 
+function TeamMemberRow({ member }) {
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <p className="break-all text-sm font-medium leading-5 text-gray-900">{member.email}</p>
+      <p className="mt-1 text-xs text-gray-500">{member.role === 'owner' ? 'Owner' : 'Member'}</p>
+    </div>
+  );
+}
+
 export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [team, setTeam] = useState(DEFAULT_TEAM);
   const [ownedTeams, setOwnedTeams] = useState([]);
@@ -104,6 +113,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
   const [canManage, setCanManage] = useState(false);
@@ -112,6 +122,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [isDeletingTeam, setIsDeletingTeam] = useState(false);
   const [busyInviteId, setBusyInviteId] = useState(null);
   const [inviteCopyMessage, setInviteCopyMessage] = useState('');
+  const [inviteError, setInviteError] = useState(null);
   const [error, setError] = useState(null);
 
   async function loadTeamState(teamId = selectedTeamId) {
@@ -126,6 +137,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       setIsCreatingNewTeam(false);
       setCanManage(Boolean(state.canManage));
       setPendingTeamInvites(state.pendingTeamInvites || []);
+      setTeamMembers(state.teamMembers || []);
       setOpenBacklogItems(state.openBacklogItems || []);
     } catch (err) {
       setCanManage(false);
@@ -159,9 +171,11 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setSelectedTeamId(null);
     setIsCreatingNewTeam(true);
     setPendingTeamInvites([]);
+    setTeamMembers([]);
     setOpenBacklogItems([]);
     resetForm();
     setError(null);
+    setInviteError(null);
   };
 
   const resetForm = () => {
@@ -274,10 +288,11 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       const result = await apiService.createTeamInvite({ teamId: selectedOwnedTeamId, email: inviteEmail });
       const invitedEmail = result.invite?.email || inviteEmail;
       setInviteEmail('');
+      setInviteError(null);
       await loadTeamState();
       setInviteCopyMessage(`Invite email sent to ${invitedEmail}`);
     } catch (err) {
-      setError(err.message || 'Could not create invite');
+      setInviteError(err.message || 'Could not create invite');
     } finally {
       setIsSaving(false);
     }
@@ -296,6 +311,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const resendInvite = async (invite) => {
     setBusyInviteId(invite.id);
     setError(null);
+    setInviteError(null);
     setInviteCopyMessage('');
     try {
       const result = await apiService.resendTeamInvite(invite.id, selectedOwnedTeamId);
@@ -312,6 +328,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const removeInvite = async (invite) => {
     setBusyInviteId(invite.id);
     setError(null);
+    setInviteError(null);
     setInviteCopyMessage('');
     try {
       await apiService.revokeTeamInvite(invite.id, selectedOwnedTeamId);
@@ -548,7 +565,10 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                   <input
                     type="email"
                     value={inviteEmail}
-                    onChange={(event) => setInviteEmail(event.target.value)}
+                    onChange={(event) => {
+                      setInviteEmail(event.target.value);
+                      setInviteError(null);
+                    }}
                     className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
                     placeholder="team.member@example.com"
                   />
@@ -561,6 +581,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                   </button>
                 </div>
                 <p className="text-xs text-gray-400">JobDone emails a sign-in link to the invited address.</p>
+                {inviteError && (
+                  <p className="text-xs text-red-700">{inviteError}</p>
+                )}
               </form>
               {inviteCopyMessage && (
                 <p className="pb-2 text-xs text-gray-500 break-all">{inviteCopyMessage}</p>
@@ -579,6 +602,19 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                   ))}
                 </div>
               )}
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500">Team Members</h3>
+                  <span className="text-xs text-gray-400">{teamMembers.length}</span>
+                </div>
+                {teamMembers.length === 0 ? (
+                  <p className="py-3 text-sm text-gray-400">No accepted members yet.</p>
+                ) : (
+                  teamMembers.map(member => (
+                    <TeamMemberRow key={member.id || member.email} member={member} />
+                  ))
+                )}
+              </div>
             </>
           )}
         </section>

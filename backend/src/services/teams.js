@@ -406,8 +406,18 @@ async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
   return (data || []).map(row => presentTeamInvite(row, appBaseUrl));
 }
 
+async function membersForTeam(db, teamId) {
+  const { data, error } = await db
+    .from('team_members')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(presentTeamMember);
+}
+
 export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail = null, appBaseUrl = '' } = {}) {
-  const empty = { team: null, ownedTeams: [], memberTeams: [], inviteAccess: { canCreate: false }, canManage: false, pendingTeamInvites: [], openBacklogItems: [], submittedApprovalRequests: [] };
+  const empty = { team: null, ownedTeams: [], memberTeams: [], teamMembers: [], inviteAccess: { canCreate: false }, canManage: false, pendingTeamInvites: [], openBacklogItems: [], submittedApprovalRequests: [] };
   if (!db) return empty;
   if (!ownerEmail) return empty;
   const memberships = await teamMembershipsForEmail(db, ownerEmail);
@@ -454,6 +464,7 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
     team: presentTeam(team),
     ownedTeams: memberships.ownedTeams,
     memberTeams: memberships.memberTeams,
+    teamMembers: await membersForTeam(db, setupTeamId),
     canManage: true,
     pendingTeamInvites: await pendingInvitesForTeam(db, setupTeamId, appBaseUrl),
     inviteAccess: { canCreate: true },
@@ -989,8 +1000,8 @@ export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TE
   const { data, error } = await query;
   if (error) throw error;
   if (!data) {
-    const notFound = new Error('Open Backlog Item not found');
-    notFound.statusCode = 404;
+    const notFound = new Error('Someone has already picked this item up.');
+    notFound.statusCode = 409;
     throw notFound;
   }
   const team = visibleTeams.find(candidate => candidate.id === data.team_id) || visibleTeams[0] || null;

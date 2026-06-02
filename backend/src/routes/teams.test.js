@@ -348,6 +348,21 @@ describe('Team setup routes', () => {
     assert.equal(JSON.parse(res.body).backlogItem.status, 'claimed');
   });
 
+  test('returns friendly message when another user already claimed a Backlog Item', async () => {
+    const app = await buildApp({
+      claimBacklogItem: async () => {
+        const error = new Error('Someone has already picked this item up.');
+        error.statusCode = 409;
+        throw error;
+      },
+    });
+
+    const res = await app.inject({ method: 'POST', url: '/api/teams/backlog-items/item-1/claim' });
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(JSON.parse(res.body).error, 'Someone has already picked this item up.');
+  });
+
   test('submits evidence for a claimed Backlog Item', async () => {
     let submitArgs;
     const app = await buildApp({

@@ -154,10 +154,10 @@ export function MyWorkScreen({ onBack }) {
   const [error, setError] = useState(null);
   const [staleError, setStaleError] = useState(null);
 
-  const loadWorkState = useCallback(async ({ showLoading = true } = {}) => {
+  const loadWorkState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
     if (showLoading) {
       setIsLoading(true);
-    } else {
+    } else if (showRefreshing) {
       setIsRefreshing(true);
     }
     setStaleError(null);
@@ -172,7 +172,7 @@ export function MyWorkScreen({ onBack }) {
     } finally {
       if (showLoading) {
         setIsLoading(false);
-      } else {
+      } else if (showRefreshing) {
         setIsRefreshing(false);
       }
     }
@@ -208,6 +208,16 @@ export function MyWorkScreen({ onBack }) {
     };
   }, [loadRecentEntries, loadWorkState]);
 
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadWorkState({ showLoading: false, showRefreshing: false });
+        loadRecentEntries();
+      }
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [loadRecentEntries, loadWorkState]);
+
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
 
@@ -219,6 +229,7 @@ export function MyWorkScreen({ onBack }) {
       await loadWorkState();
     } catch (err) {
       setError(err.message || 'Could not claim Backlog Item');
+      await loadWorkState({ showLoading: false, showRefreshing: false });
     } finally {
       setBusyItemId(null);
     }
