@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
@@ -63,11 +63,17 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
   const [saveMessage, setSaveMessage] = useState('');
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [staleError, setStaleError] = useState(null);
 
-  async function loadReviewState() {
-    setIsLoading(true);
-    setError(null);
+  const loadReviewState = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) {
+      setIsLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
+    setStaleError(null);
     try {
       const state = await apiService.getTeamReviewState();
       const nextOwnedTeams = state.ownedTeams || [];
@@ -83,16 +89,34 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
         return firstReviewTeamId || nextOwnedTeams[0]?.id || null;
       });
     } catch (err) {
-      setError(err.message || 'Could not load Team');
+      setStaleError(err.message || 'Could not refresh Team');
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
     }
-  }
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadReviewState();
-  }, [user?.email]);
+  }, [loadReviewState, user?.email]);
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadReviewState({ showLoading: false });
+      }
+    };
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [loadReviewState]);
 
   useEffect(() => {
     if (!isLoading && canManage && ownedTeams.length === 0) {
@@ -171,6 +195,23 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
       {error && (
         <div className="px-4 py-3 bg-red-50 border-b border-red-200">
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {(staleError || isRefreshing) && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
+          <p className="min-w-0 flex-1 text-xs text-amber-800">
+            {isRefreshing ? 'Refreshing Team...' : 'Team may be out of date.'}
+          </p>
+          {!isRefreshing && (
+            <button
+              type="button"
+              onClick={() => loadReviewState({ showLoading: false })}
+              className="shrink-0 text-xs font-medium text-amber-900 hover:text-amber-700"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 

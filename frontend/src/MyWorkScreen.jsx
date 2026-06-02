@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 function pointsText(item, pointsEnabled) {
@@ -121,11 +121,17 @@ export function MyWorkScreen({ onBack }) {
   const [approvedItems, setApprovedItems] = useState([]);
   const [busyItemId, setBusyItemId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [staleError, setStaleError] = useState(null);
 
-  async function loadWorkState() {
-    setIsLoading(true);
-    setError(null);
+  const loadWorkState = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) {
+      setIsLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
+    setStaleError(null);
     try {
       const state = await apiService.getMyWorkState();
       setTeam(state.team || null);
@@ -133,16 +139,34 @@ export function MyWorkScreen({ onBack }) {
       setOpenBacklogItems(state.openBacklogItems || []);
       setApprovedItems(state.approvedItems || []);
     } catch (err) {
-      setError(err.message || 'Could not load My Work');
+      setStaleError(err.message || 'Could not refresh My Work');
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
     }
-  }
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWorkState();
-  }, []);
+  }, [loadWorkState]);
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadWorkState({ showLoading: false });
+      }
+    };
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [loadWorkState]);
 
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
@@ -195,6 +219,23 @@ export function MyWorkScreen({ onBack }) {
       {error && (
         <div className="px-4 py-3 bg-red-50 border-b border-red-200">
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {(staleError || isRefreshing) && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
+          <p className="min-w-0 flex-1 text-xs text-amber-800">
+            {isRefreshing ? 'Refreshing My Work...' : 'My Work may be out of date.'}
+          </p>
+          {!isRefreshing && (
+            <button
+              type="button"
+              onClick={() => loadWorkState({ showLoading: false })}
+              className="shrink-0 text-xs font-medium text-amber-900 hover:text-amber-700"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
