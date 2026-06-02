@@ -11,7 +11,7 @@ async function buildApp(deps = {}) {
       openBacklogItems: [],
       submittedApprovalRequests: [],
     }),
-    getTeamWorkState: async () => ({
+    getMyWorkState: async () => ({
       team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false, approval_mode: 'auto' },
       inProgressItems: [],
       openBacklogItems: [],
@@ -89,7 +89,7 @@ describe('Team setup routes', () => {
 
   test('returns team worker queue sections', async () => {
     const app = await buildApp({
-      getTeamWorkState: async () => ({
+      getMyWorkState: async () => ({
         team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
         inProgressItems: [{ id: 'claimed-1', status: 'claimed', description: 'Clean bench' }],
         openBacklogItems: [{ id: 'open-1', status: 'open', description: 'Sweep floor' }],
@@ -97,13 +97,22 @@ describe('Team setup routes', () => {
       }),
     });
 
-    const res = await app.inject({ method: 'GET', url: '/api/teams/work' });
+    const res = await app.inject({ method: 'GET', url: '/api/my-work' });
 
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.inProgressItems[0].description, 'Clean bench');
     assert.equal(body.openBacklogItems[0].description, 'Sweep floor');
     assert.equal(body.approvedItems[0].status, 'approved');
+  });
+
+  test('keeps the old Team Work route as a compatibility alias', async () => {
+    const app = await buildApp();
+
+    const res = await app.inject({ method: 'GET', url: '/api/teams/work' });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).openBacklogItems, []);
   });
 
   test('creates an open Backlog Item with description and points', async () => {

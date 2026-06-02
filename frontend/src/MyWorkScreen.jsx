@@ -96,7 +96,7 @@ function FinishedItem({ item, pointsEnabled }) {
   );
 }
 
-export function TeamWorkScreen({ onBack }) {
+export function MyWorkScreen({ onBack }) {
   const [team, setTeam] = useState(null);
   const [inProgressItems, setInProgressItems] = useState([]);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
@@ -109,13 +109,13 @@ export function TeamWorkScreen({ onBack }) {
     setIsLoading(true);
     setError(null);
     try {
-      const state = await apiService.getTeamWorkState();
+      const state = await apiService.getMyWorkState();
       setTeam(state.team || null);
       setInProgressItems(state.inProgressItems || []);
       setOpenBacklogItems(state.openBacklogItems || []);
       setApprovedItems(state.approvedItems || []);
     } catch (err) {
-      setError(err.message || 'Could not load Team work');
+      setError(err.message || 'Could not load My Work');
     } finally {
       setIsLoading(false);
     }
@@ -169,7 +169,7 @@ export function TeamWorkScreen({ onBack }) {
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">Team Work</h1>
+          <h1 className="text-xl font-light text-gray-900 leading-5">My Work</h1>
           <p className="text-xs text-gray-500">{team?.name || 'JobDone Team'}</p>
         </div>
       </div>

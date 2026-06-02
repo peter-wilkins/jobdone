@@ -4,7 +4,7 @@ import {
   decideApprovalRequest,
   deleteOpenBacklogItem,
   getTeamSetupState,
-  getTeamWorkState,
+  getMyWorkState,
   submitClaimedBacklogItem,
   updateTeamSettings,
   updateOpenBacklogItem,
@@ -20,7 +20,7 @@ function errorReply(reply, error) {
 
 export async function registerTeamRoutes(fastify, deps = {}) {
   const getSetupState = deps.getTeamSetupState || getTeamSetupState;
-  const getWorkState = deps.getTeamWorkState || getTeamWorkState;
+  const getWorkState = deps.getMyWorkState || deps.getTeamWorkState || getMyWorkState;
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
   const updateItem = deps.updateOpenBacklogItem || updateOpenBacklogItem;
@@ -41,6 +41,14 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const team = await updateTeam(request.body || {});
       return { team };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.get('/api/my-work', async (_request, reply) => {
+    try {
+      return await getWorkState();
     } catch (error) {
       return errorReply(reply, error);
     }

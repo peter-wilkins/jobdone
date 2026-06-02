@@ -201,7 +201,7 @@ function withApprovalRequest(item, approvalByBacklogId) {
   });
 }
 
-export async function getTeamWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
   if (!db) return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
   const team = await ensureDogfoodTeam(db);
 

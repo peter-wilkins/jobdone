@@ -6,7 +6,7 @@ const MENU_ITEMS = [
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
   { screen: 'team-setup', label: 'Team Setup' },
-  { screen: 'team-work', label: 'Team Work' },
+  { screen: 'my-work', label: 'My Work' },
   { screen: 'feedback', label: 'Report issue' },
 ];
 

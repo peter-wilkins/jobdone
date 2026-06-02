@@ -385,13 +385,13 @@ export class APIService {
     return response.json();
   }
 
-  async getTeamWorkState() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/work`, {
+  async getMyWorkState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/my-work`, {
       headers: authHeader(),
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}: Failed to load Team work`);
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load My Work`);
     }
     return response.json();
   }
