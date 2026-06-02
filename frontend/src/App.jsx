@@ -7,6 +7,7 @@ import { LocationsScreen } from './LocationsScreen';
 import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { TeamSetupScreen } from './TeamSetupScreen';
+import { TeamWorkScreen } from './TeamWorkScreen';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
@@ -20,7 +21,7 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-setup'].includes(hash) ? hash : 'home';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-setup', 'team-work'].includes(hash) ? hash : 'home';
 }
 
 function isPlainHomeOpen() {
@@ -232,6 +233,10 @@ function App() {
 
   if (screen === 'team-setup') {
     return <>{crashStatusBar}<TeamSetupScreen onBack={() => navigateTo('home')} /></>;
+  }
+
+  if (screen === 'team-work') {
+    return <>{crashStatusBar}<TeamWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 
   return (

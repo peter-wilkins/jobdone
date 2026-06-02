@@ -385,6 +385,17 @@ export class APIService {
     return response.json();
   }
 
+  async getTeamWorkState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/work`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Team work`);
+    }
+    return response.json();
+  }
+
   async createTeamBacklogItem({ description, points }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items`, {
       method: 'POST',
@@ -419,6 +430,31 @@ export class APIService {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || `HTTP ${response.status}: Failed to delete Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async claimTeamBacklogItem(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}/claim`, {
+      method: 'POST',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to claim Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async submitTeamBacklogItem(id, { evidence_text }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ evidence_text }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to submit evidence`);
     }
     return response.json();
   }

@@ -64,6 +64,7 @@ export function presentBacklogItem(row = {}) {
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    approval_request: row.approval_request || null,
   };
 }
 
@@ -174,6 +175,57 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
   };
 }
 
+async function latestApprovalRequestsByBacklogId(db, teamId, backlogIds = []) {
+  if (!backlogIds.length) return new Map();
+  const { data, error } = await db
+    .from('approval_requests')
+    .select('*')
+    .eq('team_id', teamId)
+    .in('backlog_item_id', backlogIds)
+    .order('submitted_at', { ascending: false });
+  if (error) throw error;
+
+  const byBacklogId = new Map();
+  for (const row of data || []) {
+    if (!byBacklogId.has(row.backlog_item_id)) {
+      byBacklogId.set(row.backlog_item_id, presentApprovalRequest(row));
+    }
+  }
+  return byBacklogId;
+}
+
+function withApprovalRequest(item, approvalByBacklogId) {
+  return presentBacklogItem({
+    ...item,
+    approval_request: approvalByBacklogId.get(item.id) || null,
+  });
+}
+
+export async function getTeamWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+  if (!db) return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
+  const team = await ensureDogfoodTeam(db);
+
+  const { data: rows, error } = await db
+    .from('backlog_items')
+    .select('*')
+    .eq('team_id', teamId)
+    .in('status', ['open', 'claimed', 'submitted', 'needs_more_evidence', 'approved'])
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const inProgressRows = (rows || []).filter(row => ['claimed', 'submitted', 'needs_more_evidence'].includes(row.status));
+  const approvedRows = (rows || []).filter(row => row.status === 'approved');
+  const requestBacklogIds = [...inProgressRows, ...approvedRows].map(row => row.id);
+  const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, teamId, requestBacklogIds);
+
+  return {
+    team: presentTeam(team),
+    inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId)),
+    openBacklogItems: (rows || []).filter(row => row.status === 'open').map(presentBacklogItem),
+    approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId)),
+  };
+}
+
 export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
@@ -262,6 +314,92 @@ export async function deleteOpenBacklogItem(id, { db = jobdoneDb, teamId = DOGFO
     .eq('status', 'open');
   if (error) throw error;
   return { success: true };
+}
+
+export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  await ensureDogfoodTeam(db);
+  const { data, error } = await db
+    .from('backlog_items')
+    .update({ status: 'claimed', updated_at: nowIso() })
+    .eq('id', id)
+    .eq('team_id', teamId)
+    .eq('status', 'open')
+    .select('*')
+    .single();
+  if (error) throw error;
+  if (!data) {
+    const notFound = new Error('Open Backlog Item not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+  return presentBacklogItem(data);
+}
+
+function validateEvidenceText(value) {
+  const evidenceText = String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+  if (!evidenceText) {
+    const error = new Error('Evidence is required');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (evidenceText.length > 1000) {
+    const error = new Error('Evidence must be 1000 characters or fewer');
+    error.statusCode = 400;
+    throw error;
+  }
+  return evidenceText;
+}
+
+export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const team = await ensureDogfoodTeam(db);
+  const evidenceText = validateEvidenceText(input.evidence_text || input.evidenceText);
+  const nextStatus = team.approval_mode === 'auto' ? 'approved' : 'submitted';
+  const timestamp = nowIso();
+
+  const { data: backlogItem, error: backlogError } = await db
+    .from('backlog_items')
+    .update({ status: nextStatus, updated_at: timestamp })
+    .eq('id', id)
+    .eq('team_id', teamId)
+    .in('status', ['claimed', 'needs_more_evidence'])
+    .select('*')
+    .single();
+  if (backlogError) throw backlogError;
+  if (!backlogItem) {
+    const notFound = new Error('Claimed Backlog Item not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+
+  const { data: approvalRequest, error: requestError } = await db
+    .from('approval_requests')
+    .insert([{
+      team_id: teamId,
+      backlog_item_id: id,
+      status: nextStatus === 'approved' ? 'approved' : 'submitted',
+      evidence_text: evidenceText,
+      submitted_at: timestamp,
+      decided_at: nextStatus === 'approved' ? timestamp : null,
+      updated_at: timestamp,
+    }])
+    .select('*')
+    .single();
+  if (requestError) throw requestError;
+
+  return {
+    backlogItem: presentBacklogItem(backlogItem),
+    approvalRequest: presentApprovalRequest(approvalRequest, backlogItem),
+  };
 }
 
 export async function decideApprovalRequest(id, decision, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {

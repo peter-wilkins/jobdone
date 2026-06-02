@@ -1,8 +1,11 @@
 import {
+  claimBacklogItem,
   createBacklogItem,
   decideApprovalRequest,
   deleteOpenBacklogItem,
   getTeamSetupState,
+  getTeamWorkState,
+  submitClaimedBacklogItem,
   updateTeamSettings,
   updateOpenBacklogItem,
 } from '../services/teams.js';
@@ -17,10 +20,13 @@ function errorReply(reply, error) {
 
 export async function registerTeamRoutes(fastify, deps = {}) {
   const getSetupState = deps.getTeamSetupState || getTeamSetupState;
+  const getWorkState = deps.getTeamWorkState || getTeamWorkState;
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
   const updateItem = deps.updateOpenBacklogItem || updateOpenBacklogItem;
   const deleteItem = deps.deleteOpenBacklogItem || deleteOpenBacklogItem;
+  const claimItem = deps.claimBacklogItem || claimBacklogItem;
+  const submitItem = deps.submitClaimedBacklogItem || submitClaimedBacklogItem;
   const decideRequest = deps.decideApprovalRequest || decideApprovalRequest;
 
   fastify.get('/api/teams/setup', async (_request, reply) => {
@@ -35,6 +41,14 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const team = await updateTeam(request.body || {});
       return { team };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.get('/api/teams/work', async (_request, reply) => {
+    try {
+      return await getWorkState();
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -61,6 +75,23 @@ export async function registerTeamRoutes(fastify, deps = {}) {
   fastify.delete('/api/teams/backlog-items/:id', async (request, reply) => {
     try {
       return await deleteItem(request.params.id);
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/backlog-items/:id/claim', async (request, reply) => {
+    try {
+      const backlogItem = await claimItem(request.params.id);
+      return { backlogItem };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/backlog-items/:id/submit', async (request, reply) => {
+    try {
+      return await submitItem(request.params.id, request.body || {});
     } catch (error) {
       return errorReply(reply, error);
     }

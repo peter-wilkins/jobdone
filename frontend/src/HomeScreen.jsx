@@ -1939,6 +1939,12 @@ export function HomeScreen({
                 Team Setup
               </button>
               <button
+                onClick={() => { setMenuOpen(false); onNavigate('team-work'); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                Team Work
+              </button>
+              <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
