@@ -179,16 +179,16 @@ The Team Member who created or owns the Team and can change Team settings, invit
 _Avoid_: Admin Role, Parent, Manager-only
 
 **Team Worker**:
-An invited Team Member using the Team Work View. Team Workers can claim Backlog Items and submit work; whether they can create Backlog Items or bypass Approval depends on Team settings.
+An invited Team Member using My Work. Team Workers can claim Backlog Items and submit work across the Teams they belong to.
 _Avoid_: Child, Employee, Assignee-only
 
 **Team Setup View**:
 The Team creator/manager surface for naming the Team, inviting Team Members, managing the Backlog, approving submitted work, and choosing Team settings such as whether Points are enabled.
 _Avoid_: Parent View, Admin View
 
-**Team Work View**:
-The Team Member surface for doing work: claimed/in-progress items first, open Backlog Items next, and submitted/approved history after that.
-_Avoid_: Child View, Employee View
+**My Work View**:
+The Team Member-facing surface for doing work across all Teams they belong to: claimed/in-progress items first, open Backlog Items next, and submitted/done history after that. Items retain their Team context internally and may show a small Team label when useful.
+_Avoid_: Child View, Employee View, Single-Team Work Screen
 
 **Team Invite**:
 An email-based invitation to join a Team. A Team Invite exists before a Team Member is created; accepting the invite links a User/email/device into the Team and creates the Team Member. Invite links should support frictionless login where possible.
@@ -350,17 +350,17 @@ _Avoid_: Search bar, Input field, Record button
 - JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
 - JobDone V1 should build a generic Team layer rather than a separate family/kids product. A family Team, work Team, apprentice Team, and solo Team are all Teams with different settings.
 - Team language should be introduced now, but Team management UI should not exceed what the Backlog or Approval slice needs. Implement only the smallest Team-shaped schema/backend needed for the first collaboration workflow, then let Team capabilities grow from real use.
-- The first collaboration tracer bullet should be a dogfoodable Team workflow with the Team Setup View first: Team creation, Backlog Item creation, lightweight Approval Request review, followed by the Team Work View for claiming and evidence flow.
+- The first collaboration tracer bullet should be a dogfoodable Team workflow with the Team Setup View first: Team creation, Backlog Item creation, lightweight Approval Request review, followed by My Work for claiming and evidence flow.
 - The first Team implementation slice can use text-only Backlog Items and text-only submitted evidence. Photos, richer Share Pack editing, and complex instruction support can follow after the Backlog/Approval loop works.
 - The first Team UI can assume one invited Team Worker for dogfooding, while the underlying Team model should remain capable of multiple Team Members. Backlog Items are not assigned; Team Members claim work when they choose to do it.
 - The first Team Backlog should be an Open Backlog only. Dates, weekly scheduling, and Routine generation follow after the Backlog/Approval loop works.
 - Slice 1 Backlog Item creation needs only a description and Points. Description is the simple Backlog Item field for this slice; richer Instructions remain optional later. Titles, assignment, due dates, recurrence, reward choice, photos, and Share Pack-backed Instructions can follow when real use proves the need.
 - The first Team Setup View should keep navigation minimal with two sections: Open Backlog Items and Submitted For Approval.
 - Team Owners can edit a Backlog Item's description and Points, or delete it, only while it is open. Once a Backlog Item is claimed or submitted, V1 avoids edit/delete and uses the approval flow or a new Backlog Item instead.
-- The first Team Work View should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and approved/history items at the bottom.
+- My Work should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and done/history items at the bottom.
 - Submitted-but-not-yet-approved items stay in the claimed/in-progress section with a submitted status rather than moving to a separate pending section.
 - Items marked needs-more-evidence stay in the claimed/in-progress section with the same Claim. The Team Member adds more evidence and resubmits rather than starting over.
-- The approved/history section in the first Team Work View shows this week's approved items and total approved Points for the week. Full history and lazy loading can follow later if real use needs it.
+- The done/history section in My Work shows this week's finished items and total approved Points for the week when Points are enabled. Full history and lazy loading can follow later if real use needs it.
 - Search/filter across claimed items, open Backlog Items, and history is deferred until dogfooding shows the lists are noisy enough to need it.
 - A **Backlog Item** can include an **Instruction**. Instructions start as plain text, but can later reference a Share Pack when a reusable bundle of examples, previous Entries, photos, or context helps explain complex work.
 - Team evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Team-specific evidence object.
@@ -374,13 +374,23 @@ _Avoid_: Search bar, Input field, Record button
 - Team Owners set Points when creating or editing Backlog Items. For self-started work without a Backlog Item, the Team Member can suggest Points, but the Approver confirms or adjusts the Points when approving.
 - A **Backlog** belongs to a Team. Backlog Items are pull-based by default: Team Members choose what they feel ready to do rather than being assigned work by default. Future permission or eligibility rules may restrict who can do certain Backlog Items, but that is deferred.
 - A **Backlog Item** can be claimed by a Team Member before work starts. Claiming prevents accidental duplicate work and makes the member responsible for finishing or releasing it. In V1, a claim clears when the related Approval Request is approved; explicit release/reassign behaviour can follow.
-- A rejected Approval Request should mean "needs more evidence" rather than reopening the Backlog Item or releasing the Claim. The Claim stays with the Team Member, no Points are awarded yet, and the Team Member can add evidence and resubmit. The Team Work View therefore needs both available Backlog Items and claimed/in-progress Backlog Items.
+- A rejected Approval Request should mean "needs more evidence" rather than reopening the Backlog Item or releasing the Claim. The Claim stays with the Team Member, no Points are awarded yet, and the Team Member can add evidence and resubmit. My Work therefore needs both available Backlog Items and claimed/in-progress Backlog Items.
 - V1 Backlog Item states are `open`, `claimed`, `submitted`, `needs_more_evidence`, and `approved`. Release, reassignment, cancellation, and archival can come later if real use requires them.
 - A **Team Invite** is created before a **Team Member** exists. Mistyped, expired, or ignored invites should not create active members or assignable people. Accepting an invite can use a frictionless auth link that both signs in or links the email identity and creates the Team Member.
+- V1 Team Invite emails should behave like magic links: clicking once signs the invitee in as the invited email and returns them to JobDone to accept the invite. If the browser is already signed in as another email, the invite auth link wins and switches the session to the invited email. Do not build multi-email aliasing or composite Team identity in V1.
+- Team Invite copy should be generic, such as "Join [Team Name] on JobDone", regardless of whether the recipient already has a JobDone account. The backend may know or check account existence when generating auth links, but the product should not reveal that distinction to the Team Owner or invitee.
+- V1 can use whichever Supabase Auth link type is simplest for one-click invite acceptance. Try the invite link type first; fall back to magic link if that is simpler. Product behavior is the same either way.
+- After a Team Invite link signs the invitee in, acceptance should happen automatically and land the invitee in My Work. Do not add a separate "Join Team" confirmation screen in V1.
+- Pending Team Invites should not expire in V1. They remain live until accepted or explicitly revoked/deleted.
+- Revoked, already accepted, missing, or invalid Team Invite links should show the same neutral unavailable message, such as "This invite is no longer available", and should not reveal whether a specific Team or email exists.
+- Team Owners can remove pending Team Invites and resend invite emails. Resend exists for practical email loss/spam cases; it should not create a duplicate pending invite for the same Team and email.
+- Accepted Team Invites should land the invitee in **My Work View**, optionally filtered or highlighted to the invited Team. My Work aggregates actionable Backlog Items across all Teams the user belongs to.
+- First-time Team Workers should see lightweight in-place guidance explaining that they can claim Backlog Items and use JobDone's microphone/capture flow to record thoughts or evidence with minimal friction. This guidance should not block claiming or capture.
 - Every User keeps a personal Timeline and can create their own Teams. Team membership adds collaborative Backlogs and Approval flows; it does not replace personal capture.
-- V1 Teams use a simple capability split: the **Team Owner** manages settings, invites, and approval/backlog configuration; **Team Workers** claim work and submit evidence through the Team Work View.
-- Team Workers may be allowed to add Backlog Items when the Team Owner enables that setting. This supports self-starting teams without making worker-created work universal.
-- When worker-created Backlog Items are enabled, they appear in the Backlog immediately for high-trust Teams. If Points are enabled, worker-created Backlog Items should require Owner approval before Points-bearing work becomes available, so Team Workers cannot mint their own reward opportunities unchecked.
+- V1 Teams use a simple capability split: the **Team Owner** manages settings, invites, and approval/backlog configuration; **Team Workers** claim work and submit evidence through My Work.
+- V1 Backlog management is Team Owner-led. Team Workers do not directly create Backlog Items in the first Team Invite/Work slice; they can talk to the Team Owner outside the app or through a later request/conversation path. This keeps Backlog Items intentional: if work is too small to need thought, it may not belong in the Backlog.
+- My Work may offer a Team filter when the aggregate Backlog becomes noisy, but the default worker experience should show everything actionable across Teams without requiring a Team switch first.
+- Team Setup remains per-Team. Multi-Team owner switching and team-list UX are deferred until real use or issue #87 needs them.
 - Approval Requests are always created when claimed work is submitted. Team settings decide whether they require manual review or use **Auto-Approval**.
 - Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, voice, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
 - **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.
