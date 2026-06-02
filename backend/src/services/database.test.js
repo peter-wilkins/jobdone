@@ -2,6 +2,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   JOBDONE_DB_SCHEMA,
+  authSupabaseKey,
+  authSupabaseUrl,
   buildContactLocationCooccurrences,
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
@@ -23,6 +25,16 @@ describe('Database schema binding', () => {
 
     assert.equal(ssl.rejectUnauthorized, true);
     assert.match(ssl.ca, /BEGIN CERTIFICATE/);
+  });
+
+  test('falls back old JobDone Auth config to the shared lab Auth project', () => {
+    const env = {
+      SUPABASE_URL: 'https://yajbsbxjxevysnmiabui.supabase.co',
+      SUPABASE_KEY: 'old-project-key',
+    };
+
+    assert.equal(authSupabaseUrl(env), 'https://dtwuflwgcwxygjgkvzfl.supabase.co');
+    assert.equal(authSupabaseKey(env), 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q');
   });
 });
 

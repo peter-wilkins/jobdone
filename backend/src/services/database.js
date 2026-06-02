@@ -5,13 +5,17 @@ const LAB_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
 const LAB_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q';
 const OLD_JOBDONE_SUPABASE_URL = 'https://yajbsbxjxevysnmiabui.supabase.co';
 
-function authSupabaseUrl() {
-  const configured = process.env.SUPABASE_URL || '';
+export function authSupabaseUrl(env = process.env) {
+  const configured = env.SUPABASE_URL || '';
   return configured === OLD_JOBDONE_SUPABASE_URL ? LAB_SUPABASE_URL : (configured || LAB_SUPABASE_URL);
 }
 
-function authSupabaseKey() {
-  return process.env.SUPABASE_KEY || LAB_SUPABASE_PUBLISHABLE_KEY;
+export function authSupabaseKey(env = process.env) {
+  const configuredUrl = env.SUPABASE_URL || '';
+  if (!configuredUrl || configuredUrl === OLD_JOBDONE_SUPABASE_URL) {
+    return LAB_SUPABASE_PUBLISHABLE_KEY;
+  }
+  return env.SUPABASE_KEY || LAB_SUPABASE_PUBLISHABLE_KEY;
 }
 
 const supabaseUrl = authSupabaseUrl();
