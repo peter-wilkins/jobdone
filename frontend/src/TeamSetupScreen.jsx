@@ -2,18 +2,27 @@ import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 const EMPTY_FORM = { description: '', points: 3 };
+const DEFAULT_TEAM = { name: 'Dogfood Team', template: 'high_trust', points_enabled: false };
+
+const TEAM_TEMPLATES = [
+  { value: 'high_trust', label: 'High Trust', hint: 'Fast coordination, auto-approval, no points.' },
+  { value: 'low_trust', label: 'Low Trust', hint: 'Manual approval before work is accepted.' },
+  { value: 'family', label: 'Family', hint: 'Manual approval with points enabled.' },
+];
 
 function pointsOptions() {
   return Array.from({ length: 10 }, (_, index) => index + 1);
 }
 
-function BacklogItemRow({ item, onEdit, onDelete }) {
+function BacklogItemRow({ item, pointsEnabled, onEdit, onDelete }) {
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
-          <p className="mt-1 text-xs text-gray-500">{item.points} point{item.points === 1 ? '' : 's'}</p>
+          {pointsEnabled && (
+            <p className="mt-1 text-xs text-gray-500">{item.points || 0} point{item.points === 1 ? '' : 's'}</p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -42,7 +51,7 @@ function ApprovalRequestRow({ request, onDecision, busy }) {
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm font-medium text-gray-900 leading-5">{item.description || 'Submitted work'}</p>
       <p className="mt-1 text-xs text-gray-500">
-        {item.points || 0} point{item.points === 1 ? '' : 's'} · Submitted for approval
+        {item.points ? `${item.points} point${item.points === 1 ? '' : 's'} · ` : ''}Submitted for approval
       </p>
       {request.evidence_text && (
         <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
@@ -69,7 +78,8 @@ function ApprovalRequestRow({ request, onDecision, busy }) {
   );
 }
 
-export function ChoremoreParentScreen({ onBack }) {
+export function TeamSetupScreen({ onBack }) {
+  const [team, setTeam] = useState(DEFAULT_TEAM);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
@@ -79,29 +89,47 @@ export function ChoremoreParentScreen({ onBack }) {
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [error, setError] = useState(null);
 
-  async function loadParentState() {
+  async function loadTeamState() {
     setIsLoading(true);
     setError(null);
     try {
-      const state = await apiService.getChoremoreParentState();
+      const state = await apiService.getTeamSetupState();
+      setTeam(state.team || DEFAULT_TEAM);
       setOpenBacklogItems(state.openBacklogItems || []);
       setSubmittedApprovalRequests(state.submittedApprovalRequests || []);
     } catch (err) {
-      setError(err.message || 'Could not load Choremore');
+      setError(err.message || 'Could not load Team');
     } finally {
       setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    // Initial screen load is the synchronization point for parent backlog state.
+    // Initial screen load is the synchronization point for Team backlog state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadParentState();
+    loadTeamState();
   }, []);
+
+  const pointsEnabled = Boolean(team.points_enabled);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
+  };
+
+  const saveTeam = async (event) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      const result = await apiService.updateTeamSetup({ name: team.name, template: team.template });
+      setTeam(result.team || team);
+      await loadTeamState();
+    } catch (err) {
+      setError(err.message || 'Could not save Team');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const saveBacklogItem = async (event) => {
@@ -110,12 +138,18 @@ export function ChoremoreParentScreen({ onBack }) {
     setError(null);
     try {
       if (editingId) {
-        await apiService.updateChoremoreBacklogItem(editingId, form);
+        await apiService.updateTeamBacklogItem(editingId, {
+          description: form.description,
+          points: pointsEnabled ? form.points : null,
+        });
       } else {
-        await apiService.createChoremoreBacklogItem(form);
+        await apiService.createTeamBacklogItem({
+          description: form.description,
+          points: pointsEnabled ? form.points : null,
+        });
       }
       resetForm();
-      await loadParentState();
+      await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not save Backlog Item');
     } finally {
@@ -131,8 +165,8 @@ export function ChoremoreParentScreen({ onBack }) {
   const deleteItem = async (item) => {
     setError(null);
     try {
-      await apiService.deleteChoremoreBacklogItem(item.id);
-      await loadParentState();
+      await apiService.deleteTeamBacklogItem(item.id);
+      await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not delete Backlog Item');
     }
@@ -142,8 +176,8 @@ export function ChoremoreParentScreen({ onBack }) {
     setBusyApprovalId(request.id);
     setError(null);
     try {
-      await apiService.decideChoremoreApprovalRequest(request.id, decision);
-      await loadParentState();
+      await apiService.decideTeamApprovalRequest(request.id, decision);
+      await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not update Approval Request');
     } finally {
@@ -165,8 +199,8 @@ export function ChoremoreParentScreen({ onBack }) {
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">Choremore</h1>
-          <p className="text-xs text-gray-500">Parent backlog</p>
+          <h1 className="text-xl font-light text-gray-900 leading-5">Team Setup</h1>
+          <p className="text-xs text-gray-500">{team.name || 'JobDone Team'}</p>
         </div>
       </div>
 
@@ -177,6 +211,55 @@ export function ChoremoreParentScreen({ onBack }) {
       )}
 
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        <form onSubmit={saveTeam} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+              Team name
+            </label>
+            <input
+              value={team.name || ''}
+              onChange={(event) => setTeam(prev => ({ ...prev, name: event.target.value }))}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+              placeholder="Team name"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+              Starting point
+            </label>
+            <div className="grid gap-2">
+              {TEAM_TEMPLATES.map(template => (
+                <label
+                  key={template.value}
+                  className={`block rounded border px-3 py-2 ${team.template === template.value ? 'border-gray-900 bg-gray-50' : 'border-gray-200'}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="team-template"
+                      value={template.value}
+                      checked={team.template === template.value}
+                      onChange={() => setTeam(prev => ({ ...prev, template: template.value }))}
+                      className="mt-1"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{template.label}</p>
+                      <p className="text-xs text-gray-500">{template.hint}</p>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={isSaving || !String(team.name || '').trim()}
+            className="w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            Save Team
+          </button>
+        </form>
+
         <form onSubmit={saveBacklogItem} className="space-y-3">
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
@@ -191,20 +274,22 @@ export function ChoremoreParentScreen({ onBack }) {
             />
           </div>
           <div className="flex items-end gap-3">
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
-                Points
-              </label>
-              <select
-                value={form.points}
-                onChange={(event) => setForm(prev => ({ ...prev, points: Number(event.target.value) }))}
-                className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
-              >
-                {pointsOptions().map(value => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </div>
+            {pointsEnabled && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                  Points
+                </label>
+                <select
+                  value={form.points}
+                  onChange={(event) => setForm(prev => ({ ...prev, points: Number(event.target.value) }))}
+                  className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                >
+                  {pointsOptions().map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               type="submit"
               disabled={isSaving || !form.description.trim()}
@@ -241,6 +326,7 @@ export function ChoremoreParentScreen({ onBack }) {
                     <BacklogItemRow
                       key={item.id}
                       item={item}
+                      pointsEnabled={pointsEnabled}
                       onEdit={startEditing}
                       onDelete={deleteItem}
                     />

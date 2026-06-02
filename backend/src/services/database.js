@@ -5,7 +5,6 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const postgresUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 export const JOBDONE_DB_SCHEMA = process.env.SUPABASE_DB_SCHEMA || 'jobdone';
-export const CHOREMORE_DB_SCHEMA = process.env.CHOREMORE_DB_SCHEMA || 'choremore';
 
 if (!postgresUrl) {
   console.warn('[Database] Postgres not configured. Cloud sync disabled.');
@@ -22,11 +21,6 @@ const supabase = supabaseUrl && supabaseKey
 export const jobdoneDb = createJobDoneDb({
   connectionString: postgresUrl,
   schema: JOBDONE_DB_SCHEMA,
-});
-
-export const choremoreDb = createJobDoneDb({
-  connectionString: postgresUrl,
-  schema: CHOREMORE_DB_SCHEMA,
 });
 
 function toVectorLiteral(embedding) {

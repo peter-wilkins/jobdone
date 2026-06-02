@@ -361,19 +361,32 @@ export class APIService {
     }
   }
 
-  async getChoremoreParentState() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/parent`, {
+  async getTeamSetupState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
       headers: authHeader(),
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}: Failed to load Choremore`);
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Team`);
     }
     return response.json();
   }
 
-  async createChoremoreBacklogItem({ description, points }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items`, {
+  async updateTeamSetup({ name, template }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ name, template }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to update Team`);
+    }
+    return response.json();
+  }
+
+  async createTeamBacklogItem({ description, points }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ description, points }),
@@ -385,8 +398,8 @@ export class APIService {
     return response.json();
   }
 
-  async updateChoremoreBacklogItem(id, { description, points }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}`, {
+  async updateTeamBacklogItem(id, { description, points }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ description, points }),
@@ -398,8 +411,8 @@ export class APIService {
     return response.json();
   }
 
-  async deleteChoremoreBacklogItem(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}`, {
+  async deleteTeamBacklogItem(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -410,8 +423,8 @@ export class APIService {
     return response.json();
   }
 
-  async decideChoremoreApprovalRequest(id, decision) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/approval-requests/${id}/decision`, {
+  async decideTeamApprovalRequest(id, decision) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/approval-requests/${id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ decision }),

@@ -9,7 +9,7 @@ import { registerRecallRoutes } from './routes/recall.js';
 import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
-import { registerChoremoreRoutes } from './routes/choremore.js';
+import { registerTeamRoutes } from './routes/teams.js';
 import { registerRequestIdHooks } from './services/requestId.js';
 import { createCorsOriginValidator } from './services/cors.js';
 
@@ -38,7 +38,7 @@ export function createApp(options = {}) {
   fastify.register(registerQueryRoutes);
   fastify.register(registerStructureRoutes);
   fastify.register(registerLocationRoutes);
-  fastify.register(registerChoremoreRoutes);
+  fastify.register(registerTeamRoutes);
 
   fastify.get('/', async () => {
     return {

@@ -2,34 +2,45 @@ import {
   createBacklogItem,
   decideApprovalRequest,
   deleteOpenBacklogItem,
-  getParentChoremoreState,
+  getTeamSetupState,
+  updateTeamSettings,
   updateOpenBacklogItem,
-} from '../services/choremore.js';
+} from '../services/teams.js';
 
 function errorReply(reply, error) {
   const statusCode = error.statusCode || 500;
   return reply.status(statusCode).send({
-    error: statusCode >= 500 ? 'Choremore request failed' : error.message,
+    error: statusCode >= 500 ? 'Team request failed' : error.message,
     message: process.env.NODE_ENV === 'development' ? error.message : undefined,
   });
 }
 
-export async function registerChoremoreRoutes(fastify, deps = {}) {
-  const getParentState = deps.getParentChoremoreState || getParentChoremoreState;
+export async function registerTeamRoutes(fastify, deps = {}) {
+  const getSetupState = deps.getTeamSetupState || getTeamSetupState;
+  const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
   const updateItem = deps.updateOpenBacklogItem || updateOpenBacklogItem;
   const deleteItem = deps.deleteOpenBacklogItem || deleteOpenBacklogItem;
   const decideRequest = deps.decideApprovalRequest || decideApprovalRequest;
 
-  fastify.get('/api/choremore/parent', async (_request, reply) => {
+  fastify.get('/api/teams/setup', async (_request, reply) => {
     try {
-      return await getParentState();
+      return await getSetupState();
     } catch (error) {
       return errorReply(reply, error);
     }
   });
 
-  fastify.post('/api/choremore/backlog-items', async (request, reply) => {
+  fastify.patch('/api/teams/setup', async (request, reply) => {
+    try {
+      const team = await updateTeam(request.body || {});
+      return { team };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/backlog-items', async (request, reply) => {
     try {
       const backlogItem = await createItem(request.body || {});
       return reply.status(201).send({ backlogItem });
@@ -38,7 +49,7 @@ export async function registerChoremoreRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.patch('/api/choremore/backlog-items/:id', async (request, reply) => {
+  fastify.patch('/api/teams/backlog-items/:id', async (request, reply) => {
     try {
       const backlogItem = await updateItem(request.params.id, request.body || {});
       return { backlogItem };
@@ -47,7 +58,7 @@ export async function registerChoremoreRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.delete('/api/choremore/backlog-items/:id', async (request, reply) => {
+  fastify.delete('/api/teams/backlog-items/:id', async (request, reply) => {
     try {
       return await deleteItem(request.params.id);
     } catch (error) {
@@ -55,7 +66,7 @@ export async function registerChoremoreRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.post('/api/choremore/approval-requests/:id/decision', async (request, reply) => {
+  fastify.post('/api/teams/approval-requests/:id/decision', async (request, reply) => {
     try {
       const approvalRequest = await decideRequest(request.params.id, request.body?.decision);
       return { approvalRequest };
