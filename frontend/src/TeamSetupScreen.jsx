@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 const EMPTY_FORM = { description: '', points: 3 };
-const DEFAULT_TEAM = { name: 'My Team', template: 'high_trust', points_enabled: false };
+const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false };
 
 const TEAM_TEMPLATES = [
   { value: 'high_trust', label: 'High Trust', hint: 'Fast coordination, auto-approval, no points.' },
@@ -169,7 +169,16 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setIsSaving(true);
     setError(null);
     try {
-      const result = await apiService.updateTeamSetup({ name: team.name, template: team.template });
+      let result;
+      try {
+        result = await apiService.updateTeamSetup({ name: team.name, template: team.template });
+      } catch (err) {
+        if (!hasManagedTeam && err.status === 409 && window.confirm(err.message)) {
+          result = await apiService.updateTeamSetup({ name: team.name, template: team.template, allowSeparateTeam: true });
+        } else {
+          throw err;
+        }
+      }
       setTeam(result.team || team);
       await loadTeamState();
     } catch (err) {
@@ -305,7 +314,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         </button>
         <div>
           <h1 className="text-xl font-light text-gray-900 leading-5">Team Setup</h1>
-          <p className="text-xs text-gray-500">{team.name || 'JobDone Team'}</p>
+          <p className="text-xs text-gray-500">{isLoading ? 'Loading...' : (team.name || 'Create Team')}</p>
         </div>
       </div>
 
@@ -351,7 +360,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
               value={team.name || ''}
               onChange={(event) => setTeam(prev => ({ ...prev, name: event.target.value }))}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
-              placeholder="Team name"
+              placeholder="Team name, e.g. Chawmore"
             />
           </div>
           <div>

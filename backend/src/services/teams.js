@@ -207,6 +207,23 @@ export function validateTeamInput(input = {}) {
   return { name, ...settings, updated_at: nowIso() };
 }
 
+async function teamMembershipWithName(db, email, teamName) {
+  const normalizedName = normalizedEmail(teamName);
+  if (!email || !normalizedName) return null;
+  const { data, error } = await db.query(
+    `select t.id, t.name, tm.role
+       from ${db.schema}.team_members tm
+       join ${db.schema}.teams t on t.id = tm.team_id
+      where tm.normalized_email = $1
+        and lower(btrim(t.name)) = $2
+      order by tm.created_at asc
+      limit 1`,
+    [normalizedEmail(email), normalizedName]
+  );
+  if (error) throw error;
+  return (data || [])[0] || null;
+}
+
 async function ensureDogfoodTeam(db = jobdoneDb) {
   if (!db) return null;
   const { data: existing, error: existingError } = await db
@@ -426,6 +443,12 @@ export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFO
   const values = validateTeamInput(input);
   const ownedTeam = await ownedTeamForEmail(db, ownerEmail);
   if (!ownedTeam) {
+    const existingMembership = await teamMembershipWithName(db, ownerEmail, values.name);
+    if (existingMembership && !input.allow_separate_team) {
+      const error = new Error(`You are already in a Team called ${existingMembership.name}. Create a separate Team anyway?`);
+      error.statusCode = 409;
+      throw error;
+    }
     const id = crypto.randomUUID();
     const { data: team, error: teamError } = await db
       .from('teams')

@@ -372,15 +372,17 @@ export class APIService {
     return response.json();
   }
 
-  async updateTeamSetup({ name, template }) {
+  async updateTeamSetup({ name, template, allowSeparateTeam = false }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ name, template }),
+      body: JSON.stringify({ name, template, allow_separate_team: allowSeparateTeam }),
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}: Failed to update Team`);
+      const requestError = new Error(error.error || `HTTP ${response.status}: Failed to update Team`);
+      requestError.status = response.status;
+      throw requestError;
     }
     return response.json();
   }
