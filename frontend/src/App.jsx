@@ -7,6 +7,7 @@ import { LocationsScreen } from './LocationsScreen';
 import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { TeamSetupScreen } from './TeamSetupScreen';
+import { TeamReviewScreen } from './TeamReviewScreen';
 import { MyWorkScreen } from './MyWorkScreen';
 import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
@@ -24,7 +25,7 @@ function screenFromLocation() {
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-review', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
 }
 
 function isPlainHomeOpen() {
@@ -239,6 +240,10 @@ function App() {
 
   if (screen === 'team-setup') {
     return <>{crashStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+  }
+
+  if (screen === 'team-review') {
+    return <>{crashStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'my-work' || screen === 'team-work') {

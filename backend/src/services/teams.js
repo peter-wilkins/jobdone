@@ -11,18 +11,21 @@ const TEMPLATE_SETTINGS = {
     points_enabled: false,
     approval_mode: 'auto',
     workers_can_create_backlog_items: true,
+    require_owner_self_review: false,
   },
   low_trust: {
     template: 'low_trust',
     points_enabled: false,
     approval_mode: 'manual',
     workers_can_create_backlog_items: false,
+    require_owner_self_review: false,
   },
   family: {
     template: 'family',
     points_enabled: true,
     approval_mode: 'manual',
     workers_can_create_backlog_items: false,
+    require_owner_self_review: false,
   },
 };
 
@@ -101,6 +104,7 @@ export function presentBacklogItem(row = {}, team = null) {
     description: row.description,
     points: row.points,
     status: row.status,
+    claimed_by_email: row.claimed_by_email || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     approval_request: row.approval_request || null,
@@ -119,6 +123,7 @@ export function presentTeam(row = {}) {
     points_enabled: Boolean(row.points_enabled),
     approval_mode: row.approval_mode,
     workers_can_create_backlog_items: Boolean(row.workers_can_create_backlog_items),
+    require_owner_self_review: Boolean(row.require_owner_self_review),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -204,7 +209,12 @@ export function validateTeamInput(input = {}) {
     throw error;
   }
   const settings = teamSettingsFromTemplate(input.template);
-  return { name, ...settings, updated_at: nowIso() };
+  return {
+    name,
+    ...settings,
+    require_owner_self_review: Boolean(input.require_owner_self_review),
+    updated_at: nowIso(),
+  };
 }
 
 async function ensureDogfoodTeam(db = jobdoneDb) {
@@ -438,6 +448,52 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
   };
 }
 
+export async function getTeamReviewState({ db = jobdoneDb, ownerEmail = null } = {}) {
+  const empty = { ownedTeams: [], canManage: false, activeApprovalRequests: [], recentDecisions: [] };
+  if (!db || !ownerEmail) return empty;
+  const memberships = await teamMembershipsForEmail(db, ownerEmail);
+  const ownedTeams = memberships.ownedTeams || [];
+  if (!ownedTeams.length) {
+    return { ...empty, ownedTeams, canManage: true };
+  }
+
+  const teamIds = ownedTeams.map(team => team.id);
+  const teamById = new Map(ownedTeams.map(team => [team.id, team]));
+  const { data: requestRows, error: requestError } = await db
+    .from('approval_requests')
+    .select('*')
+    .in('team_id', teamIds)
+    .in('status', ['submitted', 'needs_more_evidence'])
+    .order('submitted_at', { ascending: true });
+  if (requestError) throw requestError;
+
+  const backlogIds = [...new Set((requestRows || []).map(row => row.backlog_item_id).filter(Boolean))];
+  const backlogById = new Map();
+  if (backlogIds.length) {
+    const { data: backlogRows, error: backlogError } = await db
+      .from('backlog_items')
+      .select('*')
+      .in('team_id', teamIds)
+      .in('id', backlogIds);
+    if (backlogError) throw backlogError;
+    for (const row of backlogRows || []) {
+      backlogById.set(row.id, row);
+    }
+  }
+
+  return {
+    ownedTeams,
+    canManage: true,
+    activeApprovalRequests: (requestRows || []).map(row => {
+      const backlogItem = backlogById.get(row.backlog_item_id);
+      const presented = presentApprovalRequest(row, backlogItem);
+      presented.team = presentTeam(teamById.get(row.team_id) || {});
+      return presented;
+    }),
+    recentDecisions: [],
+  };
+}
+
 async function latestApprovalRequestsByBacklogId(db, teamIds, backlogIds = []) {
   if (!backlogIds.length) return new Map();
   const query = db
@@ -467,6 +523,14 @@ function withApprovalRequest(item, approvalByBacklogId, team = null) {
     ...item,
     approval_request: approvalByBacklogId.get(item.id) || null,
   }, team);
+}
+
+export function shouldAutoApproveSubmission(team = {}, { submitterEmail = null, claimedByEmail = null, isSubmitterOwner = false } = {}) {
+  if (team.approval_mode === 'auto') return true;
+  if (!isSubmitterOwner || team.require_owner_self_review) return false;
+  const submitter = normalizedEmail(submitterEmail);
+  const claimant = normalizedEmail(claimedByEmail);
+  return Boolean(submitter && claimant && submitter === claimant);
 }
 
 export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
@@ -892,7 +956,7 @@ export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TE
   }
   const query = db
     .from('backlog_items')
-    .update({ status: 'claimed', updated_at: nowIso() })
+    .update({ status: 'claimed', claimed_by_email: normalizedEmail(userEmail) || null, updated_at: nowIso() })
     .eq('id', id)
     .eq('status', 'open')
     .select('*')
@@ -965,7 +1029,13 @@ export async function submitClaimedBacklogItem(id, input = {}, { db = jobdoneDb,
   }
 
   const team = visibleTeams.find(candidate => candidate.id === existingBacklogItem.team_id) || visibleTeams[0];
-  const nextStatus = team.approval_mode === 'auto' ? 'approved' : 'submitted';
+  const isSubmitterOwner = await isTeamOwner(db, existingBacklogItem.team_id, userEmail);
+  const autoApprove = shouldAutoApproveSubmission(team, {
+    submitterEmail: userEmail,
+    claimedByEmail: existingBacklogItem.claimed_by_email,
+    isSubmitterOwner,
+  });
+  const nextStatus = autoApprove ? 'approved' : 'submitted';
 
   const { data: backlogItem, error: backlogError } = await db
     .from('backlog_items')

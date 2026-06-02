@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
 const EMPTY_FORM = { description: '', points: 3 };
-const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false };
+const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false };
 
 const TEAM_TEMPLATES = [
   { value: 'high_trust', label: 'High Trust', hint: 'Fast coordination, auto-approval, no points.' },
@@ -40,39 +40,6 @@ function BacklogItemRow({ item, pointsEnabled, onEdit, onDelete }) {
             Delete
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ApprovalRequestRow({ request, onDecision, busy }) {
-  const item = request.backlog_item || {};
-  return (
-    <div className="py-3 border-b border-gray-100 last:border-b-0">
-      <p className="text-sm font-medium text-gray-900 leading-5">{item.description || 'Submitted work'}</p>
-      <p className="mt-1 text-xs text-gray-500">
-        {item.points ? `${item.points} point${item.points === 1 ? '' : 's'} · ` : ''}Submitted for approval
-      </p>
-      {request.evidence_text && (
-        <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
-      )}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onDecision(request, 'needs_more_evidence')}
-          className="px-3 py-2 text-sm font-medium text-amber-800 border border-amber-200 rounded hover:bg-amber-50 disabled:opacity-50"
-        >
-          Needs more evidence
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onDecision(request, 'approved')}
-          className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
-        >
-          Approve
-        </button>
       </div>
     </div>
   );
@@ -128,12 +95,10 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
-  const [submittedApprovalRequests, setSubmittedApprovalRequests] = useState([]);
   const [canManage, setCanManage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingTeam, setIsDeletingTeam] = useState(false);
-  const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [busyInviteId, setBusyInviteId] = useState(null);
   const [inviteCopyMessage, setInviteCopyMessage] = useState('');
   const [error, setError] = useState(null);
@@ -151,7 +116,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       setCanManage(Boolean(state.canManage));
       setPendingTeamInvites(state.pendingTeamInvites || []);
       setOpenBacklogItems(state.openBacklogItems || []);
-      setSubmittedApprovalRequests(state.submittedApprovalRequests || []);
     } catch (err) {
       setCanManage(false);
       setError(err.message || 'Could not load Team');
@@ -165,7 +129,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTeamState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.email]);
 
   const pointsEnabled = Boolean(team.points_enabled);
   const hasManagedTeam = Boolean(team.id);
@@ -185,7 +149,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setIsCreatingNewTeam(true);
     setPendingTeamInvites([]);
     setOpenBacklogItems([]);
-    setSubmittedApprovalRequests([]);
     resetForm();
     setError(null);
   };
@@ -204,6 +167,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         id: hasManagedTeam ? team.id : null,
         name: team.name,
         template: team.template,
+        requireOwnerSelfReview: Boolean(team.require_owner_self_review),
         createNewTeam: isCreatingNewTeam || !hasManagedTeam,
       });
       setTeam(result.team || team);
@@ -237,7 +201,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         setIsCreatingNewTeam(true);
         setPendingTeamInvites([]);
         setOpenBacklogItems([]);
-        setSubmittedApprovalRequests([]);
         resetForm();
       }
     } catch (err) {
@@ -288,19 +251,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       setOpenBacklogItems(items => items.filter(existing => existing.id !== item.id));
     } catch (err) {
       setError(err.message || 'Could not delete Backlog Item');
-    }
-  };
-
-  const decideApproval = async (request, decision) => {
-    setBusyApprovalId(request.id);
-    setError(null);
-    try {
-      await apiService.decideTeamApprovalRequest(request.id, decision, selectedOwnedTeamId);
-      await loadTeamState();
-    } catch (err) {
-      setError(err.message || 'Could not update Approval Request');
-    } finally {
-      setBusyApprovalId(null);
     }
   };
 
@@ -538,6 +488,18 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
               ))}
             </div>
           </div>
+          <label className="flex items-start gap-3 rounded border border-gray-200 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={Boolean(team.require_owner_self_review)}
+              onChange={(event) => setTeam(prev => ({ ...prev, require_owner_self_review: event.target.checked }))}
+              className="mt-1"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Owners review their own work</span>
+              <span className="block text-xs text-gray-500">Default is off, so owner-submitted work keeps an evidence trail and is approved automatically.</span>
+            </span>
+          </label>
           <button
             type="submit"
             disabled={isSaving || !String(team.name || '').trim()}
@@ -686,28 +648,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             </section>
             )}
 
-            {hasManagedTeam && (
-            <section>
-              <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
-                <h2 className="text-sm font-semibold text-gray-900">Submitted For Approval</h2>
-                <span className="text-xs text-gray-400">{submittedApprovalRequests.length}</span>
-              </div>
-              {submittedApprovalRequests.length === 0 ? (
-                <p className="py-5 text-sm text-gray-400">No work waiting for approval.</p>
-              ) : (
-                <div>
-                  {submittedApprovalRequests.map(request => (
-                    <ApprovalRequestRow
-                      key={request.id}
-                      request={request}
-                      busy={busyApprovalId === request.id}
-                      onDecision={decideApproval}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-            )}
           </>
         )}
       </main>

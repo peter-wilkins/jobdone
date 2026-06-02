@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { registerTeamRoutes } from './teams.js';
+import { shouldAutoApproveSubmission } from '../services/teams.js';
 
 async function buildApp(deps = {}) {
   const app = Fastify({ logger: false });
@@ -16,6 +17,12 @@ async function buildApp(deps = {}) {
       inProgressItems: [],
       openBacklogItems: [],
       approvedItems: [],
+    }),
+    getTeamReviewState: async () => ({
+      ownedTeams: [{ id: 'team-1', name: 'Dogfood Team' }],
+      canManage: true,
+      activeApprovalRequests: [],
+      recentDecisions: [],
     }),
     updateTeamSettings: async (input) => ({ id: 'team-1', name: input.name.trim(), template: input.template }),
     createBacklogItem: async (input) => ({
@@ -201,6 +208,49 @@ describe('Team setup routes', () => {
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body).openBacklogItems, []);
+  });
+
+  test('returns Team Review state for the authenticated owner', async () => {
+    let reviewContext;
+    const app = await buildApp({
+      optionalAuth: async () => ({ email: 'owner@example.com' }),
+      getTeamReviewState: async (context) => {
+        reviewContext = context;
+        return {
+          ownedTeams: [{ id: 'team-1', name: 'Dogfood Team' }],
+          canManage: true,
+          activeApprovalRequests: [{ id: 'approval-1', status: 'submitted', team_id: 'team-1' }],
+          recentDecisions: [],
+        };
+      },
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/teams/review' });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(reviewContext, { ownerEmail: 'owner@example.com' });
+    assert.equal(JSON.parse(res.body).activeApprovalRequests[0].status, 'submitted');
+  });
+
+  test('defaults Team Owner self-review to auto-approved unless required by setting', () => {
+    const manualTeam = { approval_mode: 'manual', require_owner_self_review: false };
+    const strictTeam = { approval_mode: 'manual', require_owner_self_review: true };
+
+    assert.equal(shouldAutoApproveSubmission(manualTeam, {
+      submitterEmail: 'owner@example.com',
+      claimedByEmail: 'OWNER@example.com',
+      isSubmitterOwner: true,
+    }), true);
+    assert.equal(shouldAutoApproveSubmission(strictTeam, {
+      submitterEmail: 'owner@example.com',
+      claimedByEmail: 'owner@example.com',
+      isSubmitterOwner: true,
+    }), false);
+    assert.equal(shouldAutoApproveSubmission(manualTeam, {
+      submitterEmail: 'worker@example.com',
+      claimedByEmail: 'worker@example.com',
+      isSubmitterOwner: false,
+    }), false);
   });
 
   test('creates an open Backlog Item with description and points', async () => {

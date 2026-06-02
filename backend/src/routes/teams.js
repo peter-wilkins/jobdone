@@ -6,6 +6,7 @@ import {
   decideApprovalRequest,
   deleteOwnedTeam,
   deleteOpenBacklogItem,
+  getTeamReviewState,
   getTeamSetupState,
   getMyWorkState,
   inspectTeamInvite,
@@ -35,6 +36,7 @@ function teamIdFromRequest(request) {
 
 export async function registerTeamRoutes(fastify, deps = {}) {
   const getSetupState = deps.getTeamSetupState || getTeamSetupState;
+  const getReviewState = deps.getTeamReviewState || getTeamReviewState;
   const getWorkState = deps.getMyWorkState || deps.getTeamWorkState || getMyWorkState;
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
@@ -68,6 +70,16 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       if (!user) return reply;
       const team = await updateTeam(request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
       return { team };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.get('/api/teams/review', async (request, reply) => {
+    try {
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      return await getReviewState({ ownerEmail: user?.email || null });
     } catch (error) {
       return errorReply(reply, error);
     }

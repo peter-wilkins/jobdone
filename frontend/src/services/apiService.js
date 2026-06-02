@@ -373,11 +373,22 @@ export class APIService {
     return response.json();
   }
 
-  async updateTeamSetup({ id = null, name, template, createNewTeam = false }) {
+  async getTeamReviewState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/review`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Team Review`);
+    }
+    return response.json();
+  }
+
+  async updateTeamSetup({ id = null, name, template, requireOwnerSelfReview = false, createNewTeam = false }) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ team_id: id, name, template, create_new_team: createNewTeam }),
+      body: JSON.stringify({ team_id: id, name, template, require_owner_self_review: requireOwnerSelfReview, create_new_team: createNewTeam }),
     });
     if (!response.ok) {
       const error = await response.json();

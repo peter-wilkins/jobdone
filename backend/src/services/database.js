@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import { createJobDoneDb } from './postgresDb.js';
 
 const LAB_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
@@ -37,6 +38,9 @@ const supabase = supabaseUrl && supabaseKey
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
+    },
+    realtime: {
+      transport: ws,
     },
   })
   : null;
