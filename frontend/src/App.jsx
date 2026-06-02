@@ -6,6 +6,7 @@ import { ContactsScreen } from './ContactsScreen';
 import { LocationsScreen } from './LocationsScreen';
 import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
+import { ChoremoreParentScreen } from './ChoremoreParentScreen';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
@@ -19,7 +20,7 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target'].includes(hash) ? hash : 'home';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'choremore-parent'].includes(hash) ? hash : 'home';
 }
 
 function isPlainHomeOpen() {
@@ -227,6 +228,10 @@ function App() {
 
   if (screen === 'login') {
     return <>{crashStatusBar}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+  }
+
+  if (screen === 'choremore-parent') {
+    return <>{crashStatusBar}<ChoremoreParentScreen onBack={() => navigateTo('home')} /></>;
   }
 
   return (

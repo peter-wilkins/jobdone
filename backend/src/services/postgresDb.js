@@ -329,6 +329,15 @@ class JobDoneDb {
     this.schema = schema;
   }
 
+  async query(sql, values = []) {
+    try {
+      const result = await this.pool.query(sql, values);
+      return { data: result.rows, error: null };
+    } catch (error) {
+      return { data: [], error: normalizePgError(error) };
+    }
+  }
+
   from(table) {
     return new QueryBuilder(this.pool, this.schema, table);
   }

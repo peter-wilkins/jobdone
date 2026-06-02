@@ -360,6 +360,68 @@ export class APIService {
       throw error;
     }
   }
+
+  async getChoremoreParentState() {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/parent`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Choremore`);
+    }
+    return response.json();
+  }
+
+  async createChoremoreBacklogItem({ description, points }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ description, points }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to create Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async updateChoremoreBacklogItem(id, { description, points }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ description, points }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to update Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async deleteChoremoreBacklogItem(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/backlog-items/${id}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to delete Backlog Item`);
+    }
+    return response.json();
+  }
+
+  async decideChoremoreApprovalRequest(id, decision) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/choremore/approval-requests/${id}/decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ decision }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to decide Approval Request`);
+    }
+    return response.json();
+  }
 }
 
 // Singleton instance
