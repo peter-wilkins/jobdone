@@ -2,7 +2,7 @@
 
 A mobile-first voice log for self-employed tradespeople that externalises operational memory — capturing what happened on a job and surfacing it at the moment it's needed.
 
-JobDone remains the business/trades product. Teams, Backlogs, Claims, Share Packs, and Approval Requests are shared primitives that can support JobDone collaboration and a separate kids/family product named **Choremore**. Choremore is a product label; shared domain language should remain neutral enough for trades, households, apprentices, and customer approvals.
+JobDone is the product surface. Teams, Backlogs, Claims, Share Packs, and Approval Requests are shared primitives inside JobDone that can support business crews, households, apprentices, customer approvals, and solo use.
 
 ## Language
 
@@ -127,11 +127,11 @@ The result unlocked or recorded when an Approval Request is approved, such as re
 _Avoid_: Payment-only, Prize-only
 
 **Reward**:
-A child/team-member-facing Approval Outcome such as points, money, or another benefit earned after approved work. Reward is one kind of Approval Outcome, not the approval decision itself.
+A Team Member-facing Approval Outcome such as points, money, or another benefit earned after approved work. Reward is one kind of Approval Outcome, not the approval decision itself.
 _Avoid_: Approval, Payment-only
 
 **Points**:
-The common Choremore progress unit earned through approved work and used for weekly Progress Goals, Bonuses, and Privilege Thresholds.
+An optional Approval Outcome unit enabled by a Team setting and earned through approved work. Points are useful for family/habit teams, progress goals, bonuses, and privilege thresholds, but should be absent from Teams that only need sign-off or ordinary work tracking.
 _Avoid_: Score, Coins, Credits
 
 **Reward Option**:
@@ -139,19 +139,19 @@ An allowed Reward a Team Member may choose before submitting work for approval. 
 _Avoid_: Prize Menu, Payment Request
 
 **Progress Goal**:
-A Choremore target based on earned Points in a week. Progress Goals help Team Members see weekly progress and can unlock Bonuses when met.
-_Avoid_: Streak-only, Chore Count
+A Team target based on earned Points in a week. Progress Goals help Team Members see weekly progress and can unlock Bonuses when met.
+_Avoid_: Streak-only, Task Count
 
 **Bonus**:
 An extra Reward granted when a Team Member reaches a Progress Goal, such as a point threshold. Bonuses are separate from the base Reward attached to an approved Backlog Item.
 _Avoid_: Base Reward, Approval
 
 **Privilege Threshold**:
-A Choremore point threshold used to communicate externally managed consequences, such as losing privileges when minimum points are not met. Choremore can track and display the threshold, but does not enforce the privilege itself in V1.
+A Team point threshold used to communicate externally managed consequences, such as losing privileges when minimum points are not met. JobDone can track and display the threshold, but does not enforce the privilege itself in V1.
 _Avoid_: Device Restriction, Automatic Lock
 
 **Routine**:
-A finite Choremore habit-building plan that suggests repeated Backlog Items for a period of time, such as brushing teeth daily for three weeks. A Routine exists to help instil behaviour, not to create permanent approval admin.
+A finite habit-building plan that suggests repeated Backlog Items for a period of time, such as brushing teeth daily for three weeks. A Routine exists to help instil behaviour, not to create permanent approval admin.
 _Avoid_: Forever Recurring Task, Streak Contract
 
 **Backlog**:
@@ -174,12 +174,40 @@ _Avoid_: Organisation, Account, Tenant, Household-only
 A person's membership in a Team. Team Member is separate from User identity and Device identity: the same person can use multiple devices, and a User can belong to multiple Teams with different capabilities.
 _Avoid_: User, Device, Person record, Role
 
+**Team Owner**:
+The Team Member who created or owns the Team and can change Team settings, invite people, and manage Team-level configuration. V1 keeps this as a single-owner model rather than a permission matrix.
+_Avoid_: Admin Role, Parent, Manager-only
+
+**Team Worker**:
+An invited Team Member using the Team Work View. Team Workers can claim Backlog Items and submit work; whether they can create Backlog Items or bypass Approval depends on Team settings.
+_Avoid_: Child, Employee, Assignee-only
+
+**Team Setup View**:
+The Team creator/manager surface for naming the Team, inviting Team Members, managing the Backlog, approving submitted work, and choosing Team settings such as whether Points are enabled.
+_Avoid_: Parent View, Admin View
+
+**Team Work View**:
+The Team Member surface for doing work: claimed/in-progress items first, open Backlog Items next, and submitted/approved history after that.
+_Avoid_: Child View, Employee View
+
+**Team Invite**:
+An email-based invitation to join a Team. A Team Invite exists before a Team Member is created; accepting the invite links a User/email/device into the Team and creates the Team Member. Invite links should support frictionless login where possible.
+_Avoid_: Product Invite, Manual Account Setup
+
+**Auto-Approval**:
+A Team setting where submitted work is approved immediately by policy instead of waiting for a manual Approver decision. Auto-Approval still creates an Approval Request and still requires evidence; it records that the Team chose trust/coordination over manual review.
+_Avoid_: No Approval, Skipping Evidence, Silent Completion
+
+**Team Template**:
+A suggested starting configuration for a new Team, such as High Trust Team, Low Trust Team, or Family Team. Templates set initial Team settings without creating separate product modes.
+_Avoid_: Product Type, Mode, Segment Lock-in
+
 **Product Module**:
-A product capability enabled for a Team, such as JobDone or Choremore. Product Modules determine which product entry points and workflows are available in that Team; they are not feature flags inside a single mixed UI.
+Deferred concept for a future multi-product shell. JobDone V1 should not need Product Modules; Teams configure capabilities such as Points instead of switching between products.
 _Avoid_: Mode, Feature Flag, App Toggle
 
 **Product Invite**:
-An invite into a Team through a specific Product Module entry point. Product Invites link a person/device into the Team context without requiring the installed shell to show every product first.
+Deferred concept for a future multi-product shell. JobDone V1 invites are Team Invites.
 _Avoid_: Generic Invite, Login Link
 
 **Rejection**:
@@ -266,10 +294,10 @@ _Avoid_: Search bar, Input field, Record button
 - The next **Recall Property Testing** slice uses local Supabase, generated cases, and shrinking against the production SQL-first Recall path
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - An **Approval Request** uses a Share Pack as its evidence portfolio. The Share Pack carries the selected Entry snapshot; the Approval Request adds reviewer intent, state, decision, and outcome.
-- When a claimed Backlog Item is submitted, Choremore auto-creates the Approval Request's Share Pack from Entries linked to that Claim, then shows a quick edit/confirmation step before submission.
-- Choremore V1 uses one Approval Request per Backlog Item. Bundled approvals are deferred because they complicate partial approval, Points, and "needs more evidence" state.
+- When a claimed Backlog Item is submitted, JobDone auto-creates the Approval Request's Share Pack from Entries linked to that Claim, then shows a quick edit/confirmation step before submission.
+- V1 uses one Approval Request per Backlog Item. Bundled approvals are deferred because they complicate partial approval, Points, and "needs more evidence" state.
 - An **Approval Request** may reference a Backlog Item, but does not always have to. Self-started work is allowed by default so Team Members can show initiative, while a Team setting can require Approval Requests to be backed by a Backlog Item when the Team wants consensus on acceptable use of time.
-- Approval is a shared core workflow. Product-specific outcomes sit on top: Choremore can add Reward Options and reward balances; a trades product can add customer sign-off or payment/admin notes.
+- Approval is a shared core workflow. Team settings decide whether Approval Requests require manual review or are auto-approved when submitted. Team-specific outcomes sit on top: a family Team can use Points and reward balances; a work Team can use customer sign-off or payment/admin notes.
 - A **Share Pack** includes Entry summaries and dates by default; materials, labour time, follow-ups, and possible future work are optional shared fields
 - Transcripts are excluded from MVP Share Packs because they may contain incidental personal data
 - A **Share Pack** never grants access to the Timeline, Contacts, Queries, audio blobs, or future Entries
@@ -320,36 +348,46 @@ _Avoid_: Search bar, Input field, Record button
 - The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
 - JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
-- Choremore should live in the same repository as JobDone initially, with separate product entry points and a separate PostgreSQL schema. JobDone remains the business/trades product while Choremore is the kids/family product. Avoid mode flags that make one UI/backend path mean two products. Reuse shared logic through clearly named functions and services, and duplicate product logic when behaviour needs to diverge rather than forcing premature abstraction.
-- The installed app shell can support multiple products, but the user's entry channel should determine the default product screen. Someone arriving through Choremore should feel like they are using Choremore, not a generic switchboard; someone arriving through JobDone should land in JobDone. Other products can be added later as optional modules, with lazy JavaScript loading so the initial download stays focused.
-- Product Modules are enabled per Team. Product Invites are product-aware, so a Choremore invite opens Choremore and a JobDone invite opens JobDone. User preferences such as preferred product/team should follow the User across devices; Device state should be limited to local install/session/capability details.
-- Team language should be introduced now, but Team management UI should not be built before a Backlog or Approval slice needs it. Implement only the smallest Team-shaped schema/backend needed for the first collaboration workflow, then let Team capabilities grow from real use.
-- The first collaboration tracer bullet should be a dogfoodable Choremore mini app with the Approver/parent view first: Backlog Item creation and lightweight Approval Request review, followed by the Team Member/child claiming and evidence flow. This is more immediately useful than a JobDone customer-signoff slice and will force shared primitive boundaries early.
-- The first Choremore implementation slice can use text-only Backlog Items and text-only submitted evidence. Photos, richer Share Pack editing, and complex instruction support can follow after the parent Backlog/Approval loop works.
-- The first Choremore UI can assume one child/Team Member for dogfooding, while the underlying Team model should remain capable of multiple Team Members. Backlog Items are not assigned; Team Members claim work when they choose to do it.
-- The first Choremore Backlog should be an Open Backlog only. Dates, weekly scheduling, and Routine generation follow after the parent Backlog/Approval loop works.
+- JobDone V1 should build a generic Team layer rather than a separate family/kids product. A family Team, work Team, apprentice Team, and solo Team are all Teams with different settings.
+- Team language should be introduced now, but Team management UI should not exceed what the Backlog or Approval slice needs. Implement only the smallest Team-shaped schema/backend needed for the first collaboration workflow, then let Team capabilities grow from real use.
+- The first collaboration tracer bullet should be a dogfoodable Team workflow with the Team Setup View first: Team creation, Backlog Item creation, lightweight Approval Request review, followed by the Team Work View for claiming and evidence flow.
+- The first Team implementation slice can use text-only Backlog Items and text-only submitted evidence. Photos, richer Share Pack editing, and complex instruction support can follow after the Backlog/Approval loop works.
+- The first Team UI can assume one invited Team Worker for dogfooding, while the underlying Team model should remain capable of multiple Team Members. Backlog Items are not assigned; Team Members claim work when they choose to do it.
+- The first Team Backlog should be an Open Backlog only. Dates, weekly scheduling, and Routine generation follow after the Backlog/Approval loop works.
 - Slice 1 Backlog Item creation needs only a description and Points. Description is the simple Backlog Item field for this slice; richer Instructions remain optional later. Titles, assignment, due dates, recurrence, reward choice, photos, and Share Pack-backed Instructions can follow when real use proves the need.
-- The first parent/Approver Choremore page should keep navigation minimal with two sections: Open Backlog Items and Submitted For Approval.
-- Parents can edit a Backlog Item's description and Points, or delete it, only while it is open. Once a Backlog Item is claimed or submitted, V1 avoids edit/delete and uses the approval flow or a new Backlog Item instead.
-- The first child/Team Member Choremore page should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and approved/history items at the bottom.
+- The first Team Setup View should keep navigation minimal with two sections: Open Backlog Items and Submitted For Approval.
+- Team Owners can edit a Backlog Item's description and Points, or delete it, only while it is open. Once a Backlog Item is claimed or submitted, V1 avoids edit/delete and uses the approval flow or a new Backlog Item instead.
+- The first Team Work View should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and approved/history items at the bottom.
 - Submitted-but-not-yet-approved items stay in the claimed/in-progress section with a submitted status rather than moving to a separate pending section.
 - Items marked needs-more-evidence stay in the claimed/in-progress section with the same Claim. The Team Member adds more evidence and resubmits rather than starting over.
-- The approved/history section in the first child/Team Member page shows this week's approved items and total approved Points for the week. Full history and lazy loading can follow later if real use needs it.
+- The approved/history section in the first Team Work View shows this week's approved items and total approved Points for the week. Full history and lazy loading can follow later if real use needs it.
 - Search/filter across claimed items, open Backlog Items, and history is deferred until dogfooding shows the lists are noisy enough to need it.
 - A **Backlog Item** can include an **Instruction**. Instructions start as plain text, but can later reference a Share Pack when a reusable bundle of examples, previous Entries, photos, or context helps explain complex work.
-- Choremore V1 evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Choremore-specific evidence object.
-- Choremore does not require objective proof before approval. Trust is between the Team Member and Approver; the app records the submitted Entry evidence and approval decision, while "needs more evidence" gives the Approver a lightweight way to ask for more.
-- Choremore V1 should include visible Progress Goals: Team Members can track earned points against targets, earn Bonuses for reaching targets, and see minimum Privilege Thresholds. Privilege consequences are managed outside the app in V1; Choremore tracks and communicates them but does not enforce them.
-- Choremore can support habit-building through finite Routines that suggest repeated Backlog Items for a limited period, then stop when the behaviour is likely established or the approval burden outweighs value.
-- Choremore should help Approvers create useful Routines by suggesting sensible habit-building patterns, rather than forcing them to invent every repeated Backlog Item from scratch.
+- Team evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Team-specific evidence object.
+- Teams do not require objective proof before approval. Trust is between the Team Member and Approver; the app records the submitted Entry evidence and approval decision, while "needs more evidence" gives the Approver a lightweight way to ask for more.
+- Teams with Points enabled should include visible Progress Goals: Team Members can track earned points against targets, earn Bonuses for reaching targets, and see minimum Privilege Thresholds. Privilege consequences are managed outside the app in V1; JobDone tracks and communicates them but does not enforce them.
+- Teams can support habit-building through finite Routines that suggest repeated Backlog Items for a limited period, then stop when the behaviour is likely established or the approval burden outweighs value.
+- JobDone should help Team Owners create useful Routines by suggesting sensible habit-building patterns, rather than forcing them to invent every repeated Backlog Item from scratch.
 - Routine-generated Backlog Items still use the normal approval flow every time in V1. Approval should remain lightweight so repeated habit work does not become admin-heavy.
-- Choremore should discourage Approvers from creating too many new Backlog Items or Routines at once. Habit-building works better when the Team Member can focus on one new routine for a period, such as adding a recurring Backlog Item every few weeks rather than flooding the Backlog.
-- Choremore Backlog Items have base Points on a simple 1-10 scale so different work can be worth different amounts before it is claimed. Approval grants the Backlog Item's Points.
-- Approvers set Points when creating or editing Backlog Items. For self-started work without a Backlog Item, the Team Member can suggest Points, but the Approver confirms or adjusts the Points when approving.
+- JobDone should discourage Team Owners from creating too many new Backlog Items or Routines at once. Habit-building works better when the Team Member can focus on one new routine for a period, such as adding a recurring Backlog Item every few weeks rather than flooding the Backlog.
+- Teams with Points enabled have base Points on Backlog Items using a simple 1-10 scale so different work can be worth different amounts before it is claimed. Approval grants the Backlog Item's Points.
+- Team Owners set Points when creating or editing Backlog Items. For self-started work without a Backlog Item, the Team Member can suggest Points, but the Approver confirms or adjusts the Points when approving.
 - A **Backlog** belongs to a Team. Backlog Items are pull-based by default: Team Members choose what they feel ready to do rather than being assigned work by default. Future permission or eligibility rules may restrict who can do certain Backlog Items, but that is deferred.
 - A **Backlog Item** can be claimed by a Team Member before work starts. Claiming prevents accidental duplicate work and makes the member responsible for finishing or releasing it. In V1, a claim clears when the related Approval Request is approved; explicit release/reassign behaviour can follow.
-- A rejected Choremore Approval Request should mean "needs more evidence" rather than reopening the Backlog Item or releasing the Claim. The Claim stays with the Team Member, no Points are awarded yet, and the Team Member can add evidence and resubmit. The Team Member view therefore needs both available Backlog Items and claimed/in-progress Backlog Items.
-- Choremore V1 Backlog Item states are `open`, `claimed`, `submitted`, `needs_more_evidence`, and `approved`. Release, reassignment, cancellation, and archival can come later if real use requires them.
+- A rejected Approval Request should mean "needs more evidence" rather than reopening the Backlog Item or releasing the Claim. The Claim stays with the Team Member, no Points are awarded yet, and the Team Member can add evidence and resubmit. The Team Work View therefore needs both available Backlog Items and claimed/in-progress Backlog Items.
+- V1 Backlog Item states are `open`, `claimed`, `submitted`, `needs_more_evidence`, and `approved`. Release, reassignment, cancellation, and archival can come later if real use requires them.
+- A **Team Invite** is created before a **Team Member** exists. Mistyped, expired, or ignored invites should not create active members or assignable people. Accepting an invite can use a frictionless auth link that both signs in or links the email identity and creates the Team Member.
+- Every User keeps a personal Timeline and can create their own Teams. Team membership adds collaborative Backlogs and Approval flows; it does not replace personal capture.
+- V1 Teams use a simple capability split: the **Team Owner** manages settings, invites, and approval/backlog configuration; **Team Workers** claim work and submit evidence through the Team Work View.
+- Team Workers may be allowed to add Backlog Items when the Team Owner enables that setting. This supports self-starting teams without making worker-created work universal.
+- When worker-created Backlog Items are enabled, they appear in the Backlog immediately for high-trust Teams. If Points are enabled, worker-created Backlog Items should require Owner approval before Points-bearing work becomes available, so Team Workers cannot mint their own reward opportunities unchecked.
+- Approval Requests are always created when claimed work is submitted. Team settings decide whether they require manual review or use **Auto-Approval**.
+- Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, voice, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
+- **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.
+- Team creation should offer simple **Team Templates**. The default should be **High Trust Team** so friction does not accidentally creep into ordinary collaboration.
+- Example Team Templates: High Trust Team can use Auto-Approval and no Points; Low Trust Team can use manual Approval; Family Team can use manual Approval and Points.
+- Team Templates are setup shortcuts, not durable Team types. After creation, Teams morph by changing real settings; for example a Family Team can become a High Trust Team over time by turning off manual review or Points.
+- Evidence helper copy should explain value rather than compliance, such as "Capture what happened now so your future self can find it later."
 
 ## Example dialogue
 

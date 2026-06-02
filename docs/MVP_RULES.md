@@ -54,3 +54,19 @@ and backwards compatibility become mandatory.
 - Keep MVP/process rules here, not in `CONTEXT.md`.
 - Keep product language and domain model in `CONTEXT.md`.
 - Capture side quests as issues unless the user explicitly reprioritises.
+
+## Change Workflow Modes
+
+Use the lightest workflow that fits the risk:
+
+- **Commit Directly**: work on `main`, make small bisectable commits, push, and
+  deploy when needed. This is the default while JobDone is in MVP mode and has no
+  users.
+- **Feature PR**: use one ready-for-review PR for a coherent risky change, with
+  small commits inside it. Do not make it draft once checks pass and it is ready
+  for Peter to review.
+- **Spike Draft PR**: use a draft PR for experiments, investigations, and
+  branches that should not be reviewed or merged yet.
+
+Branch protection and stricter review return when real users or durable data
+make safety more important than speed.
