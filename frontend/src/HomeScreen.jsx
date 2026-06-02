@@ -20,6 +20,7 @@ import {
   requestInstall,
 } from './services/installPromptService';
 import { predictionSourcePresentation } from './services/predictionSourceService';
+import { ProductSwitcher } from './ProductSwitcher';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -1857,6 +1858,7 @@ export function HomeScreen({
         <div className="min-w-0">
           <h1 className="text-xl font-light text-gray-900 leading-5">JobDone</h1>
           <p className="text-[10px] leading-4 text-gray-400 font-mono">build {BUILD_ID}</p>
+          <ProductSwitcher currentProduct="jobdone" onSwitch={onNavigate} />
         </div>
         
         {/* Recording timer in header */}
@@ -1931,12 +1933,6 @@ export function HomeScreen({
                 className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
               >
                 Locations
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('choremore-parent'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Choremore parent
               </button>
               <button
                 onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}

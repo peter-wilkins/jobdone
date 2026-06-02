@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
+import { ProductSwitcher } from './ProductSwitcher';
 
 const EMPTY_FORM = { description: '', points: 3 };
 
@@ -69,7 +70,7 @@ function ApprovalRequestRow({ request, onDecision, busy }) {
   );
 }
 
-export function ChoremoreParentScreen({ onBack }) {
+export function ChoremoreParentScreen({ onBack, onNavigate }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
@@ -167,6 +168,7 @@ export function ChoremoreParentScreen({ onBack }) {
         <div>
           <h1 className="text-xl font-light text-gray-900 leading-5">Choremore</h1>
           <p className="text-xs text-gray-500">Parent backlog</p>
+          <ProductSwitcher currentProduct="choremore" onSwitch={onNavigate} />
         </div>
       </div>
 
