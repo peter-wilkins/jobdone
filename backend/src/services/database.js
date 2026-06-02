@@ -31,8 +31,14 @@ if (!supabaseUrl || !supabaseKey) {
   console.warn('[Database] Supabase Auth not configured. Login disabled.');
 }
 
-const supabase = supabaseUrl && supabaseKey 
-  ? createClient(supabaseUrl, supabaseKey)
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  })
   : null;
 
 export const jobdoneDb = createJobDoneDb({

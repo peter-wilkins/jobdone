@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
 
 function inviteTokenFromLocation() {
@@ -6,12 +6,13 @@ function inviteTokenFromLocation() {
   return params.get('token') || '';
 }
 
-export function InviteScreen({ onBack, onNavigate }) {
+export function InviteScreen({ onBack, onNavigate, user }) {
   const [token] = useState(inviteTokenFromLocation);
   const [inviteState, setInviteState] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAccepting, setIsAccepting] = useState(false);
   const [error, setError] = useState(null);
+  const acceptedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,17 +35,26 @@ export function InviteScreen({ onBack, onNavigate }) {
   }, [token]);
 
   const acceptInvite = async () => {
+    if (acceptedRef.current) return;
+    acceptedRef.current = true;
     setIsAccepting(true);
     setError(null);
     try {
       const result = await apiService.acceptTeamInvite(token);
       onNavigate?.(result.destination || 'my-work');
     } catch (err) {
+      acceptedRef.current = false;
       setError(err.message || 'Could not accept invite');
     } finally {
       setIsAccepting(false);
     }
   };
+
+  useEffect(() => {
+    if (!token || !user || !inviteState?.available || acceptedRef.current) return;
+    acceptInvite();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, user, inviteState?.available]);
 
   const unavailable = !isLoading && (!inviteState?.available || !token);
 
@@ -93,14 +103,20 @@ export function InviteScreen({ onBack, onNavigate }) {
               <p className="text-sm text-gray-500">You have been invited to join</p>
               <p className="mt-1 text-lg font-medium text-gray-900">{inviteState.team?.name || 'a JobDone Team'}</p>
             </div>
-            <button
-              type="button"
-              disabled={isAccepting}
-              onClick={acceptInvite}
-              className="w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
-            >
-              {isAccepting ? 'Joining...' : 'Accept invite'}
-            </button>
+            {user ? (
+              <button
+                type="button"
+                disabled={isAccepting}
+                onClick={acceptInvite}
+                className="w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
+              >
+                {isAccepting ? 'Joining...' : 'Accept invite'}
+              </button>
+            ) : (
+              <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Use the invite email link to sign in as the invited address.
+              </p>
+            )}
           </div>
         )}
       </main>

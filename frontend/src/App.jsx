@@ -23,6 +23,7 @@ function screenFromLocation() {
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
+  if (pathname === '/invite') return 'invite';
   return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
 }
 
@@ -245,7 +246,7 @@ function App() {
   }
 
   if (screen === 'invite') {
-    return <>{crashStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} /></>;
+    return <>{crashStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   return (

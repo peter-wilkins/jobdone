@@ -509,6 +509,7 @@ export class APIService {
   async acceptTeamInvite(token) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}/accept`, {
       method: 'POST',
+      headers: authHeader(),
     });
     if (!response.ok) {
       const error = await response.json();

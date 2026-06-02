@@ -166,7 +166,9 @@ export async function registerTeamRoutes(fastify, deps = {}) {
 
   fastify.post('/api/teams/invites/:token/accept', async (request, reply) => {
     try {
-      return await acceptInvite(request.params.token);
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      return await acceptInvite(request.params.token, { userEmail: user.email });
     } catch (error) {
       return errorReply(reply, error);
     }

@@ -3,6 +3,10 @@
     {
       "source": "/share-target",
       "destination": "/"
+    },
+    {
+      "source": "/invite",
+      "destination": "/"
     }
   ]
 }

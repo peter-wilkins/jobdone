@@ -48,7 +48,7 @@ async function buildApp(deps = {}) {
       email: input.email.trim().toLowerCase(),
       status: 'pending',
       invited_by_email: context.ownerEmail,
-      invite_url: `${context.appBaseUrl}/#invite?token=token-1`,
+      invite_url: `${context.appBaseUrl}/invite?token=token-1`,
     }),
     revokeTeamInvite: async (id, context) => ({
       id,
@@ -317,7 +317,7 @@ describe('Team setup routes', () => {
           email: input.email.trim().toLowerCase(),
           status: 'pending',
           invited_by_email: context.ownerEmail,
-          invite_url: `${context.appBaseUrl}/#invite?token=token-1`,
+          invite_url: `${context.appBaseUrl}/invite?token=token-1`,
         };
       },
     });
@@ -333,7 +333,7 @@ describe('Team setup routes', () => {
     const body = JSON.parse(res.body);
     assert.equal(inviteArgs.context.ownerEmail, 'owner@example.com');
     assert.equal(body.invite.email, 'worker@example.com');
-    assert.equal(body.invite.invite_url, 'https://frontend.example/#invite?token=token-1');
+    assert.equal(body.invite.invite_url, 'https://frontend.example/invite?token=token-1');
   });
 
   test('requires login to create a Team Invite', async () => {
@@ -371,8 +371,15 @@ describe('Team setup routes', () => {
     assert.equal(JSON.parse(res.body).invite.status, 'revoked');
   });
 
-  test('inspects and accepts Team Invite tokens', async () => {
-    const app = await buildApp();
+  test('inspects and accepts Team Invite tokens for the signed-in invited email', async () => {
+    let acceptArgs;
+    const app = await buildApp({
+      requireAuth: async () => ({ email: 'worker@example.com' }),
+      acceptTeamInvite: async (token, context) => {
+        acceptArgs = { token, context };
+        return { destination: 'my-work', alreadyAccepted: token === 'accepted-token' };
+      },
+    });
 
     const inspectRes = await app.inject({ method: 'GET', url: '/api/teams/invites/token-1' });
     assert.equal(inspectRes.statusCode, 200);
@@ -380,7 +387,22 @@ describe('Team setup routes', () => {
 
     const acceptRes = await app.inject({ method: 'POST', url: '/api/teams/invites/accepted-token/accept' });
     assert.equal(acceptRes.statusCode, 200);
+    assert.deepEqual(acceptArgs, { token: 'accepted-token', context: { userEmail: 'worker@example.com' } });
     assert.equal(JSON.parse(acceptRes.body).destination, 'my-work');
     assert.equal(JSON.parse(acceptRes.body).alreadyAccepted, true);
+  });
+
+  test('requires login before accepting a Team Invite token', async () => {
+    const app = await buildApp({
+      requireAuth: async (_request, reply) => {
+        reply.status(401).send({ error: 'Authorization required' });
+        return null;
+      },
+    });
+
+    const res = await app.inject({ method: 'POST', url: '/api/teams/invites/token-1/accept' });
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(JSON.parse(res.body).error, 'Authorization required');
   });
 });

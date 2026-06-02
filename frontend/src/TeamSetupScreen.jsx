@@ -227,11 +227,10 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setInviteCopyMessage('');
     try {
       const result = await apiService.createTeamInvite({ email: inviteEmail });
+      const invitedEmail = result.invite?.email || inviteEmail;
       setInviteEmail('');
       await loadTeamState();
-      if (result.invite?.invite_url) {
-        await copyInviteUrl(result.invite);
-      }
+      setInviteCopyMessage(`Invite email sent to ${invitedEmail}`);
     } catch (err) {
       setError(err.message || 'Could not create invite');
     } finally {
@@ -376,7 +375,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                     Create invite
                   </button>
                 </div>
-                <p className="text-xs text-gray-400">Email is not sent yet. Copy the link and send it yourself.</p>
+                <p className="text-xs text-gray-400">JobDone emails a sign-in link to the invited address. Copy link remains as a fallback.</p>
               </form>
               {inviteCopyMessage && (
                 <p className="pb-2 text-xs text-gray-500 break-all">{inviteCopyMessage}</p>

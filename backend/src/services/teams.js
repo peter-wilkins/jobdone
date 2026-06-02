@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { jobdoneDb } from './database.js';
+import { jobdoneDb, supabase } from './database.js';
 
 export const DOGFOOD_TEAM_ID = '00000000-0000-4000-8000-000000000001';
 const MAX_PENDING_INVITES_PER_TEAM = 20;
@@ -120,7 +120,7 @@ export function presentTeam(row = {}) {
 
 function inviteUrlFor(row = {}, appBaseUrl = '') {
   const baseUrl = String(appBaseUrl || process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://frontend-jobdone1.vercel.app').replace(/\/+$/, '');
-  return `${baseUrl}/#invite?token=${encodeURIComponent(tokenForInviteId(row.id))}`;
+  return `${baseUrl}/invite?token=${encodeURIComponent(tokenForInviteId(row.id))}`;
 }
 
 export function presentTeamInvite(row = {}, appBaseUrl = '') {
@@ -136,6 +136,25 @@ export function presentTeamInvite(row = {}, appBaseUrl = '') {
     updated_at: row.updated_at,
     invite_url: row.status === 'pending' ? inviteUrlFor(row, appBaseUrl) : null,
   };
+}
+
+async function sendInviteMagicLink(email, inviteUrl) {
+  if (!supabase) {
+    const error = new Error('Auth service not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: inviteUrl,
+    },
+  });
+  if (error) {
+    const sendError = new Error(error.message || 'Could not send invite email');
+    sendError.statusCode = error.status || 502;
+    throw sendError;
+  }
 }
 
 export function presentTeamMember(row = {}) {
@@ -399,7 +418,18 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
     }
     throw error;
   }
-  return presentTeamInvite(data, appBaseUrl);
+  const invite = presentTeamInvite(data, appBaseUrl);
+  try {
+    await sendInviteMagicLink(email, invite.invite_url);
+  } catch (sendError) {
+    await db
+      .from('team_invites')
+      .update({ status: 'revoked', revoked_at: nowIso(), updated_at: nowIso() })
+      .eq('id', data.id)
+      .eq('status', 'pending');
+    throw sendError;
+  }
+  return invite;
 }
 
 export async function revokeTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail } = {}) {
@@ -471,14 +501,15 @@ export async function inspectTeamInvite(token, { db = jobdoneDb } = {}) {
   return { available: true, invite: presentTeamInvite(invite), team: presentTeam(team) };
 }
 
-export async function acceptTeamInvite(token, { db = jobdoneDb } = {}) {
+export async function acceptTeamInvite(token, { db = jobdoneDb, userEmail } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
   const invite = await inviteByToken(db, token);
-  if (!invite || invite.status === 'revoked') {
+  const signedInEmail = normalizedEmail(userEmail);
+  if (!invite || invite.status === 'revoked' || signedInEmail !== normalizedEmail(invite.email)) {
     const error = new Error('This invite is no longer available');
     error.statusCode = 404;
     throw error;
