@@ -1,8 +1,8 @@
 export const FEEDBACK_KINDS = [
-  { value: 'bug', label: 'Bug' },
+  { value: 'improvement', label: 'Idea' },
+  { value: 'bug', label: 'Problem' },
   { value: 'data_loss', label: 'Lost data' },
   { value: 'confusing', label: 'Confusing' },
-  { value: 'improvement', label: 'Improvement' },
   { value: 'sync_login', label: 'Sync/login' },
   { value: 'share_install', label: 'Share/install' },
   { value: 'performance', label: 'Slow' },
@@ -27,7 +27,7 @@ const IMPACT_VALUES = new Set(FEEDBACK_IMPACTS.map(item => item.value));
 const DATA_LOSS_VALUES = new Set(FEEDBACK_DATA_LOSS.map(item => item.value));
 
 export const DEFAULT_FEEDBACK_TRIAGE = {
-  kind: 'bug',
+  kind: 'improvement',
   impact: 'unsure',
   data_loss: 'no',
   surface: null,

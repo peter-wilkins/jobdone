@@ -149,7 +149,20 @@ export function presentTeamInvite(row = {}, appBaseUrl = '') {
   };
 }
 
-async function sendInviteMagicLink(email, inviteUrl) {
+export function teamInviteEmailData({ inviteUrl, teamName, inviterEmail } = {}) {
+  return {
+    email_kind: 'team_invite',
+    app_name: 'JobDone',
+    team_name: String(teamName || 'a JobDone Team').slice(0, 120),
+    inviter_email: String(inviterEmail || '').slice(0, 254),
+    invite_url: inviteUrl,
+    action_text: 'Join Team',
+    headline: `Join ${String(teamName || 'a JobDone Team').slice(0, 120)} on JobDone`,
+    message: 'You have been invited to a Team on JobDone. Tap the link to sign in and see your Backlog.',
+  };
+}
+
+async function sendInviteMagicLink(email, inviteUrl, inviteContext = {}) {
   if (!supabase) {
     const error = new Error('Auth service not configured');
     error.statusCode = 503;
@@ -159,6 +172,7 @@ async function sendInviteMagicLink(email, inviteUrl) {
     email,
     options: {
       emailRedirectTo: inviteUrl,
+      data: teamInviteEmailData({ inviteUrl, ...inviteContext }),
     },
   });
   if (error) {
@@ -713,7 +727,10 @@ export async function createTeamInvite(input, { db = jobdoneDb, ownerEmail, team
   }
   const invite = presentTeamInvite(data, appBaseUrl);
   try {
-    await sendInviteMagicLink(email, invite.invite_url);
+    await sendInviteMagicLink(email, invite.invite_url, {
+      teamName: ownedTeam.name,
+      inviterEmail: invitedByEmail,
+    });
   } catch (sendError) {
     await db
       .from('team_invites')
@@ -751,7 +768,10 @@ export async function resendTeamInvite(id, { db = jobdoneDb, ownerEmail, teamId:
   }
 
   const invite = presentTeamInvite(data, appBaseUrl);
-  await sendInviteMagicLink(invite.email, invite.invite_url);
+  await sendInviteMagicLink(invite.email, invite.invite_url, {
+    teamName: ownedTeam.name,
+    inviterEmail: invitedByEmail,
+  });
   return invite;
 }
 

@@ -12,10 +12,10 @@ import {
 
 test('defines the feedback taxonomy values', () => {
   assert.deepEqual(FEEDBACK_KINDS.map(item => item.value), [
+    'improvement',
     'bug',
     'data_loss',
     'confusing',
-    'improvement',
     'sync_login',
     'share_install',
     'performance',
@@ -32,7 +32,7 @@ test('normalizes invalid triage values', () => {
     data_loss: 'maybe',
     surface: 'login',
   }), {
-    kind: 'bug',
+    kind: 'improvement',
     impact: 'unsure',
     data_loss: 'no',
     surface: 'login',

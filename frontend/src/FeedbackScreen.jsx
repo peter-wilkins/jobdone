@@ -388,7 +388,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
           ←
         </button>
         <div>
-          <h1 className="text-2xl font-light text-gray-900">Report issue</h1>
+          <h1 className="text-2xl font-light text-gray-900">Share idea</h1>
           <p className="text-[10px] leading-4 text-gray-400 font-mono">build {BUILD_ID}</p>
         </div>
       </div>
@@ -428,7 +428,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
                   data_loss,
                   kind: data_loss === 'yes'
                     ? 'data_loss'
-                    : triage.kind === 'data_loss' ? 'bug' : triage.kind,
+                    : triage.kind === 'data_loss' ? 'improvement' : triage.kind,
                 })}
                 tone={triage.data_loss === 'yes' ? 'red' : 'gray'}
               />
@@ -440,7 +440,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
             onChange={(event) => setTypedReport(event.target.value)}
             rows={4}
             className="w-full resize-none rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
-            placeholder={triage.data_loss === 'yes' ? 'What is missing? (optional)' : 'What went wrong?'}
+            placeholder={triage.data_loss === 'yes' ? 'What is missing? (optional)' : 'What would make JobDone better?'}
           />
           <button
             onClick={handleTypedSubmit}
@@ -449,7 +449,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
             }`}
             disabled={!canCreateTextFeedback({ text: typedReport, triage })}
           >
-            {triage.data_loss === 'yes' ? 'Send data-loss report' : 'Send report'}
+            {triage.data_loss === 'yes' ? 'Send data-loss report' : 'Send idea'}
           </button>
           {sendStatus && (
             <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
@@ -478,7 +478,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
               )}
             </button>
             <p className="text-xs text-gray-400 text-center max-w-xs">
-              Voice or text reports attach build, device, status, and recent app events. Private Entry content and Contact details are excluded by default.
+              Voice or text feedback attaches build, device, status, and recent app events. Private Entry content and Contact details are excluded by default.
             </p>
             {backendAvailable === false && (
               <p className="text-xs text-amber-700 text-center">

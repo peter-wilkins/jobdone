@@ -7,7 +7,7 @@ const MENU_ITEMS = [
   { screen: 'locations', label: 'Locations' },
   { screen: 'team-review', label: 'Team' },
   { screen: 'my-work', label: 'My Work' },
-  { screen: 'feedback', label: 'Report issue' },
+  { screen: 'feedback', label: 'Share idea' },
 ];
 
 export function GlobalMenu({
