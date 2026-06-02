@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
+import { dbService } from './services/dbService';
+import { evidenceTextForEntry, suggestEvidenceEntries } from './services/evidenceSuggestionService';
 
 function pointsText(item, pointsEnabled) {
   if (!pointsEnabled || !item.points) return '';
@@ -27,11 +29,22 @@ function statusText(status, usesManualApproval = true) {
   return 'Open';
 }
 
-function WorkItem({ item, pointsEnabled, usesManualApproval, onSubmit, busy }) {
+function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntries, onSubmit, busy }) {
   const [evidenceText, setEvidenceText] = useState('');
   const request = item.approval_request || {};
   const rowPointsEnabled = itemPointsEnabled(item, pointsEnabled);
   const rowUsesManualApproval = itemUsesManualApproval(item, usesManualApproval);
+  const suggestions = suggestEvidenceEntries(item, recentEntries, 3);
+  const includeSuggestion = (entry) => {
+    const suggestedText = evidenceTextForEntry(entry);
+    setEvidenceText(current => {
+      const trimmed = current.trim();
+      if (!trimmed) return suggestedText;
+      if (trimmed.includes(suggestedText)) return current;
+      return `${trimmed}\n\n${suggestedText}`;
+    });
+  };
+
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
@@ -61,6 +74,21 @@ function WorkItem({ item, pointsEnabled, usesManualApproval, onSubmit, busy }) {
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
             placeholder="Capture what happened now so your future self can find it later."
           />
+          {suggestions.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-500">Possible evidence</p>
+              {suggestions.map(entry => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => includeSuggestion(entry)}
+                  className="block w-full rounded border border-gray-200 px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <span className="block max-h-10 overflow-hidden leading-5">{evidenceTextForEntry(entry)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="submit"
             disabled={busy || !evidenceText.trim()}
@@ -119,6 +147,7 @@ export function MyWorkScreen({ onBack }) {
   const [inProgressItems, setInProgressItems] = useState([]);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
   const [approvedItems, setApprovedItems] = useState([]);
+  const [recentEntries, setRecentEntries] = useState([]);
   const [busyItemId, setBusyItemId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -149,15 +178,26 @@ export function MyWorkScreen({ onBack }) {
     }
   }, []);
 
+  const loadRecentEntries = useCallback(async () => {
+    try {
+      const entries = await dbService.getEntries('confirmed');
+      setRecentEntries(entries.slice(0, 20));
+    } catch {
+      setRecentEntries([]);
+    }
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWorkState();
-  }, [loadWorkState]);
+    loadRecentEntries();
+  }, [loadRecentEntries, loadWorkState]);
 
   useEffect(() => {
     const refreshIfVisible = () => {
       if (document.visibilityState === 'visible') {
         loadWorkState({ showLoading: false });
+        loadRecentEntries();
       }
     };
     window.addEventListener('focus', refreshIfVisible);
@@ -166,7 +206,7 @@ export function MyWorkScreen({ onBack }) {
       window.removeEventListener('focus', refreshIfVisible);
       document.removeEventListener('visibilitychange', refreshIfVisible);
     };
-  }, [loadWorkState]);
+  }, [loadRecentEntries, loadWorkState]);
 
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
@@ -258,6 +298,7 @@ export function MyWorkScreen({ onBack }) {
                     item={item}
                     pointsEnabled={pointsEnabled}
                     usesManualApproval={usesManualApproval}
+                    recentEntries={recentEntries}
                     busy={busyItemId === item.id}
                     onSubmit={submitItem}
                   />
