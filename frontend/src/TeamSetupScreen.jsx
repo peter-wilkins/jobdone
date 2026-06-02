@@ -221,20 +221,22 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       if (editingId) {
-        await apiService.updateTeamBacklogItem(editingId, {
+        const result = await apiService.updateTeamBacklogItem(editingId, {
           teamId: selectedOwnedTeamId,
           description: form.description,
           points: pointsEnabled ? form.points : null,
         });
+        const savedItem = result.backlogItem;
+        setOpenBacklogItems(items => items.map(item => item.id === editingId ? savedItem : item));
       } else {
-        await apiService.createTeamBacklogItem({
+        const result = await apiService.createTeamBacklogItem({
           teamId: selectedOwnedTeamId,
           description: form.description,
           points: pointsEnabled ? form.points : null,
         });
+        setOpenBacklogItems(items => [result.backlogItem, ...items]);
       }
       resetForm();
-      await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not save Backlog Item');
     } finally {
@@ -251,7 +253,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       await apiService.deleteTeamBacklogItem(item.id, selectedOwnedTeamId);
-      await loadTeamState();
+      setOpenBacklogItems(items => items.filter(existing => existing.id !== item.id));
     } catch (err) {
       setError(err.message || 'Could not delete Backlog Item');
     }
