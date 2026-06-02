@@ -20,6 +20,7 @@ import {
   requestInstall,
 } from './services/installPromptService';
 import { predictionSourcePresentation } from './services/predictionSourceService';
+import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
 
 // Dev toggle for query-active state testing
@@ -111,19 +112,8 @@ export function HomeScreen({
   recordRequestId = 0,
   onRecordRequestHandled,
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
   const processingIdsRef = useRef(new Set());
   const handledRecordRequestRef = useRef(0);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
@@ -486,8 +476,6 @@ export function HomeScreen({
       setInstallMessage('In Chrome, open the menu and choose Install app. You can keep using JobDone here too.');
     } else if (result.outcome === 'dismissed') {
       setInstallMessage('No problem. You can install from this menu later.');
-    } else {
-      setMenuOpen(false);
     }
     setInstallState(getInstallState());
   };
@@ -797,7 +785,6 @@ export function HomeScreen({
   };
 
   const handleClearLocalDatabase = async () => {
-    setMenuOpen(false);
     const confirmed = window.confirm('Clear all local JobDone data on this device? This removes local entries, captures, contacts, tags, feedback, and query history.');
     if (!confirmed) return;
 
@@ -1873,118 +1860,20 @@ export function HomeScreen({
           </div>
         )}
         
-        <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setMenuOpen(o => !o)}
-            className="w-8 h-8 flex flex-col items-center justify-center gap-1.5 text-gray-400 hover:text-gray-600 transition"
-            title="Menu"
-          >
-            <span className="w-5 h-px bg-current" />
-            <span className="w-5 h-px bg-current" />
-            <span className="w-5 h-px bg-current" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-20">
-              {user ? (
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <p className="text-xs text-gray-400">Signed in as</p>
-                  <p className="text-xs text-gray-700 truncate">{user.email}</p>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setMenuOpen(false); onNavigate('login'); }}
-                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Log in
-                </button>
-              )}
-              {installState.canShowAction && (
-                <div className="border-t border-gray-100">
-                  <button
-                    onClick={handleInstall}
-                    className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-                  >
-                    Install JobDone
-                  </button>
-                  {installMessage && (
-                    <p className="px-4 pb-3 text-xs leading-5 text-gray-500">{installMessage}</p>
-                  )}
-                </div>
-              )}
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('inbox'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition flex items-center justify-between"
-              >
-                <span>Inbox</span>
-                {captureCount > 0 && (
-                  <span className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5">{captureCount}</span>
-                )}
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('contacts'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Contacts
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('locations'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Locations
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('team-setup'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Team Setup
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('my-work'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                My Work
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); onNavigate('feedback'); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Report issue
-              </button>
-              <label className="flex items-start gap-3 px-4 py-3 border-t border-gray-100 text-sm text-gray-700 hover:bg-gray-50 transition cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={fastCaptureEnabled}
-                  onChange={(event) => handleFastCaptureChange(event.target.checked)}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <span>
-                  <span className="block font-medium">Fast Capture on this device</span>
-                  <span className="block text-xs text-gray-400 mt-0.5">Start recording when this device opens JobDone or returns to it</span>
-                </span>
-              </label>
-              <button
-                onClick={() => { setMenuOpen(false); handleCheckForUpdate(); }}
-                className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-              >
-                Check for update
-              </button>
-              <button
-                onClick={handleClearLocalDatabase}
-                className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50 transition border-t border-gray-100"
-              >
-                Clear local database
-              </button>
-              {user && (
-                <button
-                  onClick={() => { setMenuOpen(false); onNavigate('login'); }}
-                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Account
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <GlobalMenu
+          currentScreen="home"
+          onNavigate={onNavigate}
+          user={user}
+          position="inline"
+          captureCount={captureCount}
+          installState={installState}
+          installMessage={installMessage}
+          onInstall={handleInstall}
+          fastCaptureEnabled={fastCaptureEnabled}
+          onFastCaptureChange={handleFastCaptureChange}
+          onCheckForUpdate={handleCheckForUpdate}
+          onClearLocalDatabase={handleClearLocalDatabase}
+        />
       </div>
 
       {/* Login nudge */}
