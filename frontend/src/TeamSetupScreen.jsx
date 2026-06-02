@@ -78,15 +78,49 @@ function ApprovalRequestRow({ request, onDecision, busy }) {
   );
 }
 
-export function TeamSetupScreen({ onBack }) {
+function InviteRow({ invite, onCopy, onRemove, busy }) {
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 leading-5">{invite.email}</p>
+          <p className="mt-1 text-xs text-gray-500">Pending invite</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onCopy(invite)}
+            className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Copy link
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onRemove(invite)}
+            className="px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [team, setTeam] = useState(DEFAULT_TEAM);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
   const [submittedApprovalRequests, setSubmittedApprovalRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
+  const [busyInviteId, setBusyInviteId] = useState(null);
+  const [inviteCopyMessage, setInviteCopyMessage] = useState('');
   const [error, setError] = useState(null);
 
   async function loadTeamState() {
@@ -95,6 +129,7 @@ export function TeamSetupScreen({ onBack }) {
     try {
       const state = await apiService.getTeamSetupState();
       setTeam(state.team || DEFAULT_TEAM);
+      setPendingTeamInvites(state.pendingTeamInvites || []);
       setOpenBacklogItems(state.openBacklogItems || []);
       setSubmittedApprovalRequests(state.submittedApprovalRequests || []);
     } catch (err) {
@@ -185,6 +220,49 @@ export function TeamSetupScreen({ onBack }) {
     }
   };
 
+  const createInvite = async (event) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    setInviteCopyMessage('');
+    try {
+      const result = await apiService.createTeamInvite({ email: inviteEmail });
+      setInviteEmail('');
+      await loadTeamState();
+      if (result.invite?.invite_url) {
+        await copyInviteUrl(result.invite);
+      }
+    } catch (err) {
+      setError(err.message || 'Could not create invite');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const copyInviteUrl = async (invite) => {
+    setInviteCopyMessage('');
+    try {
+      await navigator.clipboard.writeText(invite.invite_url);
+      setInviteCopyMessage(`Copied invite link for ${invite.email}`);
+    } catch {
+      setInviteCopyMessage(invite.invite_url);
+    }
+  };
+
+  const removeInvite = async (invite) => {
+    setBusyInviteId(invite.id);
+    setError(null);
+    setInviteCopyMessage('');
+    try {
+      await apiService.revokeTeamInvite(invite.id);
+      await loadTeamState();
+    } catch (err) {
+      setError(err.message || 'Could not remove invite');
+    } finally {
+      setBusyInviteId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-3">
@@ -259,6 +337,66 @@ export function TeamSetupScreen({ onBack }) {
             Save Team
           </button>
         </form>
+
+        <section>
+          <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
+            <h2 className="text-sm font-semibold text-gray-900">Team Invites</h2>
+            <span className="text-xs text-gray-400">{pendingTeamInvites.length}</span>
+          </div>
+          {!user ? (
+            <div className="py-4">
+              <p className="text-sm text-gray-500">Log in to invite Team Members.</p>
+              <button
+                type="button"
+                onClick={() => onNavigate?.('login')}
+                className="mt-3 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800"
+              >
+                Log in
+              </button>
+            </div>
+          ) : (
+            <>
+              <form onSubmit={createInvite} className="py-3 space-y-2">
+                <label className="block text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Email
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                    placeholder="team.member@example.com"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSaving || !inviteEmail.trim()}
+                    className="shrink-0 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    Create invite
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">Email is not sent yet. Copy the link and send it yourself.</p>
+              </form>
+              {inviteCopyMessage && (
+                <p className="pb-2 text-xs text-gray-500 break-all">{inviteCopyMessage}</p>
+              )}
+              {pendingTeamInvites.length > 0 && (
+                <div>
+                  {pendingTeamInvites.map(invite => (
+                    <InviteRow
+                      key={invite.id}
+                      invite={invite}
+                      busy={busyInviteId === invite.id}
+                      onCopy={copyInviteUrl}
+                      onRemove={removeInvite}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
 
         <form onSubmit={saveBacklogItem} className="space-y-3">
           <div>

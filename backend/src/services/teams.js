@@ -1,6 +1,9 @@
+import crypto from 'node:crypto';
 import { jobdoneDb } from './database.js';
 
 export const DOGFOOD_TEAM_ID = '00000000-0000-4000-8000-000000000001';
+const MAX_PENDING_INVITES_PER_TEAM = 20;
+const MAX_INVITES_PER_OWNER_PER_HOUR = 10;
 
 const TEMPLATE_SETTINGS = {
   high_trust: {
@@ -25,6 +28,36 @@ const TEMPLATE_SETTINGS = {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function tokenSecret() {
+  return process.env.INVITE_TOKEN_SECRET || process.env.SUPABASE_KEY || process.env.SUPABASE_DB_URL || 'jobdone-mvp-invite-token-secret';
+}
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function tokenForInviteId(inviteId) {
+  const signature = crypto
+    .createHmac('sha256', tokenSecret())
+    .update(String(inviteId))
+    .digest('base64url');
+  return `v1.${inviteId}.${signature}`;
+}
+
+function normalizedEmail(value) {
+  return String(value || '').normalize('NFKC').trim().toLowerCase();
+}
+
+function validateEmail(value) {
+  const email = normalizedEmail(value);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    const error = new Error('Valid email is required');
+    error.statusCode = 400;
+    throw error;
+  }
+  return email;
 }
 
 function normalizeDescription(value) {
@@ -85,6 +118,37 @@ export function presentTeam(row = {}) {
   };
 }
 
+function inviteUrlFor(row = {}, appBaseUrl = '') {
+  const baseUrl = String(appBaseUrl || process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://frontend-jobdone1.vercel.app').replace(/\/+$/, '');
+  return `${baseUrl}/#invite?token=${encodeURIComponent(tokenForInviteId(row.id))}`;
+}
+
+export function presentTeamInvite(row = {}, appBaseUrl = '') {
+  return {
+    id: row.id,
+    team_id: row.team_id,
+    email: row.email,
+    status: row.status,
+    invited_by_email: row.invited_by_email,
+    accepted_at: row.accepted_at,
+    revoked_at: row.revoked_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    invite_url: row.status === 'pending' ? inviteUrlFor(row, appBaseUrl) : null,
+  };
+}
+
+export function presentTeamMember(row = {}) {
+  return {
+    id: row.id,
+    team_id: row.team_id,
+    email: row.email,
+    role: row.role,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 export function presentApprovalRequest(row = {}, backlogItem = null) {
   return {
     id: row.id,
@@ -138,9 +202,33 @@ async function ensureDogfoodTeam(db = jobdoneDb) {
   return data;
 }
 
-export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {
+async function ensureTeamOwner(db, teamId, ownerEmail) {
+  const email = validateEmail(ownerEmail);
+  const timestamp = nowIso();
+  const { data, error } = await db
+    .from('team_members')
+    .upsert([{ team_id: teamId, email, role: 'owner', updated_at: timestamp }], { onConflict: 'team_id,normalized_email' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
+  const { data, error } = await db
+    .from('team_invites')
+    .select('*')
+    .eq('team_id', teamId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(row => presentTeamInvite(row, appBaseUrl));
+}
+
+export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail = null, appBaseUrl = '' } = {}) {
   if (!db) return { team: null, openBacklogItems: [], submittedApprovalRequests: [] };
   const team = await ensureDogfoodTeam(db);
+  if (ownerEmail) await ensureTeamOwner(db, teamId, ownerEmail);
 
   const { data: openRows, error: openError } = await db
     .from('backlog_items')
@@ -174,6 +262,8 @@ export async function getTeamSetupState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_
 
   return {
     team: presentTeam(team),
+    pendingTeamInvites: ownerEmail ? await pendingInvitesForTeam(db, teamId, appBaseUrl) : [],
+    inviteAccess: { canCreate: Boolean(ownerEmail) },
     openBacklogItems: (openRows || []).map(presentBacklogItem),
     submittedApprovalRequests: (requestRows || []).map(row => presentApprovalRequest(row, backlogById.get(row.backlog_item_id))),
   };
@@ -246,6 +336,178 @@ export async function updateTeamSettings(input, { db = jobdoneDb, teamId = DOGFO
     .single();
   if (error) throw error;
   return presentTeam(data);
+}
+
+export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail, appBaseUrl = '' } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const email = validateEmail(input.email);
+  const invitedByEmail = validateEmail(ownerEmail);
+  await ensureDogfoodTeam(db);
+  await ensureTeamOwner(db, teamId, invitedByEmail);
+
+  const { data: pendingRows, error: pendingError } = await db
+    .from('team_invites')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('status', 'pending');
+  if (pendingError) throw pendingError;
+  if ((pendingRows || []).length >= MAX_PENDING_INVITES_PER_TEAM) {
+    const error = new Error('Team has too many pending invites');
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const { data: recentRows, error: recentError } = await db.query(
+    `select id from ${db.schema}.team_invites
+     where invited_by_email = $1
+       and created_at > now() - interval '1 hour'
+     limit ${MAX_INVITES_PER_OWNER_PER_HOUR + 1}`,
+    [invitedByEmail]
+  );
+  if (recentError) throw recentError;
+  if ((recentRows || []).length >= MAX_INVITES_PER_OWNER_PER_HOUR) {
+    const error = new Error('Too many invites created recently');
+    error.statusCode = 429;
+    throw error;
+  }
+
+  const id = crypto.randomUUID();
+  const token = tokenForInviteId(id);
+  const timestamp = nowIso();
+  const { data, error } = await db
+    .from('team_invites')
+    .insert([{
+      id,
+      team_id: teamId,
+      email,
+      token_hash: hashToken(token),
+      status: 'pending',
+      invited_by_email: invitedByEmail,
+      updated_at: timestamp,
+    }])
+    .select('*')
+    .single();
+  if (error) {
+    if (error.code === '23505') {
+      const duplicate = new Error('A pending invite already exists for that email');
+      duplicate.statusCode = 409;
+      throw duplicate;
+    }
+    throw error;
+  }
+  return presentTeamInvite(data, appBaseUrl);
+}
+
+export async function revokeTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const invitedByEmail = validateEmail(ownerEmail);
+  await ensureDogfoodTeam(db);
+  await ensureTeamOwner(db, teamId, invitedByEmail);
+  const { data, error } = await db
+    .from('team_invites')
+    .update({ status: 'revoked', revoked_at: nowIso(), updated_at: nowIso() })
+    .eq('id', id)
+    .eq('team_id', teamId)
+    .eq('status', 'pending')
+    .select('*')
+    .single();
+  if (error) throw error;
+  if (!data) {
+    const notFound = new Error('Pending invite not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+  return presentTeamInvite(data);
+}
+
+function parseInviteToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3 || parts[0] !== 'v1') return null;
+  const [, inviteId] = parts;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inviteId)) return null;
+  return { inviteId, tokenHash: hashToken(token) };
+}
+
+async function inviteByToken(db, token) {
+  const parsed = parseInviteToken(token);
+  if (!parsed) return null;
+  const { data, error } = await db
+    .from('team_invites')
+    .select('*')
+    .eq('id', parsed.inviteId)
+    .eq('token_hash', parsed.tokenHash)
+    .limit(1)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function inspectTeamInvite(token, { db = jobdoneDb } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const invite = await inviteByToken(db, token);
+  if (!invite || invite.status === 'revoked') {
+    return { available: false, message: 'This invite is no longer available' };
+  }
+  const { data: team, error } = await db
+    .from('teams')
+    .select('*')
+    .eq('id', invite.team_id)
+    .limit(1)
+    .single();
+  if (error) throw error;
+  if (!team) return { available: false, message: 'This invite is no longer available' };
+  return { available: true, invite: presentTeamInvite(invite), team: presentTeam(team) };
+}
+
+export async function acceptTeamInvite(token, { db = jobdoneDb } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const invite = await inviteByToken(db, token);
+  if (!invite || invite.status === 'revoked') {
+    const error = new Error('This invite is no longer available');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (invite.status === 'accepted' && invite.accepted_member_id) {
+    return { destination: 'my-work', alreadyAccepted: true };
+  }
+
+  const timestamp = nowIso();
+  const { data: member, error: memberError } = await db
+    .from('team_members')
+    .upsert([{ team_id: invite.team_id, email: invite.email, role: 'worker', updated_at: timestamp }], { onConflict: 'team_id,normalized_email' })
+    .select('*')
+    .single();
+  if (memberError) throw memberError;
+
+  const { data: acceptedInvite, error: inviteError } = await db
+    .from('team_invites')
+    .update({ status: 'accepted', accepted_member_id: member.id, accepted_at: timestamp, updated_at: timestamp })
+    .eq('id', invite.id)
+    .select('*')
+    .single();
+  if (inviteError) throw inviteError;
+  return {
+    destination: 'my-work',
+    alreadyAccepted: invite.status === 'accepted',
+    invite: presentTeamInvite(acceptedInvite),
+    teamMember: presentTeamMember(member),
+  };
 }
 
 export async function createBacklogItem(input, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID } = {}) {

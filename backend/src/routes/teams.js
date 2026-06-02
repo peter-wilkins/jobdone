@@ -1,14 +1,19 @@
 import {
   claimBacklogItem,
+  acceptTeamInvite,
+  createTeamInvite,
   createBacklogItem,
   decideApprovalRequest,
   deleteOpenBacklogItem,
   getTeamSetupState,
   getMyWorkState,
+  inspectTeamInvite,
+  revokeTeamInvite,
   submitClaimedBacklogItem,
   updateTeamSettings,
   updateOpenBacklogItem,
 } from '../services/teams.js';
+import { optionalAuth, requireAuth } from '../services/auth.js';
 
 function errorReply(reply, error) {
   const statusCode = error.statusCode || 500;
@@ -16,6 +21,10 @@ function errorReply(reply, error) {
     error: statusCode >= 500 ? 'Team request failed' : error.message,
     message: process.env.NODE_ENV === 'development' ? error.message : undefined,
   });
+}
+
+function appBaseUrlFromRequest(request) {
+  return request.headers.origin || process.env.FRONTEND_URL || process.env.VITE_APP_URL || '';
 }
 
 export async function registerTeamRoutes(fastify, deps = {}) {
@@ -28,10 +37,18 @@ export async function registerTeamRoutes(fastify, deps = {}) {
   const claimItem = deps.claimBacklogItem || claimBacklogItem;
   const submitItem = deps.submitClaimedBacklogItem || submitClaimedBacklogItem;
   const decideRequest = deps.decideApprovalRequest || decideApprovalRequest;
+  const createInvite = deps.createTeamInvite || createTeamInvite;
+  const revokeInvite = deps.revokeTeamInvite || revokeTeamInvite;
+  const inspectInvite = deps.inspectTeamInvite || inspectTeamInvite;
+  const acceptInvite = deps.acceptTeamInvite || acceptTeamInvite;
+  const maybeAuth = deps.optionalAuth || optionalAuth;
+  const mustAuth = deps.requireAuth || requireAuth;
 
-  fastify.get('/api/teams/setup', async (_request, reply) => {
+  fastify.get('/api/teams/setup', async (request, reply) => {
     try {
-      return await getSetupState();
+      const user = await maybeAuth(request, reply);
+      if (reply.sent) return reply;
+      return await getSetupState({ ownerEmail: user?.email || null, appBaseUrl: appBaseUrlFromRequest(request) });
     } catch (error) {
       return errorReply(reply, error);
     }
@@ -109,6 +126,47 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const approvalRequest = await decideRequest(request.params.id, request.body?.decision);
       return { approvalRequest };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/invites', async (request, reply) => {
+    try {
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const invite = await createInvite(request.body || {}, {
+        ownerEmail: user.email,
+        appBaseUrl: appBaseUrlFromRequest(request),
+      });
+      return reply.status(201).send({ invite });
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.delete('/api/teams/invites/:id', async (request, reply) => {
+    try {
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const invite = await revokeInvite(request.params.id, { ownerEmail: user.email });
+      return { invite };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.get('/api/teams/invites/:token', async (request, reply) => {
+    try {
+      return await inspectInvite(request.params.token);
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/invites/:token/accept', async (request, reply) => {
+    try {
+      return await acceptInvite(request.params.token);
     } catch (error) {
       return errorReply(reply, error);
     }

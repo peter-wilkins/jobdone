@@ -471,6 +471,51 @@ export class APIService {
     }
     return response.json();
   }
+
+  async createTeamInvite({ email }) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to create invite`);
+    }
+    return response.json();
+  }
+
+  async revokeTeamInvite(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to remove invite`);
+    }
+    return response.json();
+  }
+
+  async inspectTeamInvite(token) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load invite`);
+    }
+    return response.json();
+  }
+
+  async acceptTeamInvite(token) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}/accept`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to accept invite`);
+    }
+    return response.json();
+  }
 }
 
 // Singleton instance

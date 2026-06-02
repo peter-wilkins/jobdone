@@ -41,6 +41,29 @@ async function buildApp(deps = {}) {
       status: decision,
       backlog_item: { id: 'item-1', status: decision },
     }),
+    optionalAuth: async () => null,
+    requireAuth: async () => ({ email: 'owner@example.com' }),
+    createTeamInvite: async (input, context) => ({
+      id: 'invite-1',
+      email: input.email.trim().toLowerCase(),
+      status: 'pending',
+      invited_by_email: context.ownerEmail,
+      invite_url: `${context.appBaseUrl}/#invite?token=token-1`,
+    }),
+    revokeTeamInvite: async (id, context) => ({
+      id,
+      status: 'revoked',
+      invited_by_email: context.ownerEmail,
+    }),
+    inspectTeamInvite: async (token) => ({
+      available: token === 'token-1',
+      team: token === 'token-1' ? { name: 'Dogfood Team' } : undefined,
+      message: token === 'token-1' ? undefined : 'This invite is no longer available',
+    }),
+    acceptTeamInvite: async (token) => ({
+      destination: 'my-work',
+      alreadyAccepted: token === 'accepted-token',
+    }),
     ...deps,
   });
   await app.ready();
@@ -50,18 +73,22 @@ async function buildApp(deps = {}) {
 describe('Team setup routes', () => {
   test('returns team setup backlog and submitted approval sections', async () => {
     const app = await buildApp({
-      getTeamSetupState: async () => ({
+      getTeamSetupState: async (context) => ({
         team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false, approval_mode: 'auto' },
+        inviteAccess: { canCreate: Boolean(context.ownerEmail) },
+        pendingTeamInvites: [],
         openBacklogItems: [{ id: 'item-1', description: 'Empty dishwasher', points: 2, status: 'open' }],
         submittedApprovalRequests: [{ id: 'approval-1', backlog_item_id: 'item-2', status: 'submitted' }],
       }),
+      optionalAuth: async () => ({ email: 'owner@example.com' }),
     });
 
-    const res = await app.inject({ method: 'GET', url: '/api/teams/setup' });
+    const res = await app.inject({ method: 'GET', url: '/api/teams/setup', headers: { origin: 'https://frontend.example' } });
 
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.team.name, 'Dogfood Team');
+    assert.equal(body.inviteAccess.canCreate, true);
     assert.equal(body.openBacklogItems[0].description, 'Empty dishwasher');
     assert.equal(body.submittedApprovalRequests[0].status, 'submitted');
   });
@@ -278,5 +305,82 @@ describe('Team setup routes', () => {
 
     assert.equal(res.statusCode, 400);
     assert.equal(JSON.parse(res.body).error, 'Points must be an integer from 1 to 10');
+  });
+
+  test('creates a pending Team Invite for the authenticated owner', async () => {
+    let inviteArgs;
+    const app = await buildApp({
+      createTeamInvite: async (input, context) => {
+        inviteArgs = { input, context };
+        return {
+          id: 'invite-1',
+          email: input.email.trim().toLowerCase(),
+          status: 'pending',
+          invited_by_email: context.ownerEmail,
+          invite_url: `${context.appBaseUrl}/#invite?token=token-1`,
+        };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/invites',
+      headers: { 'content-type': 'application/json', origin: 'https://frontend.example' },
+      body: JSON.stringify({ email: ' Worker@Example.com ' }),
+    });
+
+    assert.equal(res.statusCode, 201);
+    const body = JSON.parse(res.body);
+    assert.equal(inviteArgs.context.ownerEmail, 'owner@example.com');
+    assert.equal(body.invite.email, 'worker@example.com');
+    assert.equal(body.invite.invite_url, 'https://frontend.example/#invite?token=token-1');
+  });
+
+  test('requires login to create a Team Invite', async () => {
+    const app = await buildApp({
+      requireAuth: async (_request, reply) => {
+        reply.status(401).send({ error: 'Authorization required' });
+        return null;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/invites',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'worker@example.com' }),
+    });
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(JSON.parse(res.body).error, 'Authorization required');
+  });
+
+  test('revokes a pending Team Invite for the authenticated owner', async () => {
+    let revokeArgs;
+    const app = await buildApp({
+      revokeTeamInvite: async (id, context) => {
+        revokeArgs = { id, context };
+        return { id, status: 'revoked' };
+      },
+    });
+
+    const res = await app.inject({ method: 'DELETE', url: '/api/teams/invites/invite-1' });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(revokeArgs, { id: 'invite-1', context: { ownerEmail: 'owner@example.com' } });
+    assert.equal(JSON.parse(res.body).invite.status, 'revoked');
+  });
+
+  test('inspects and accepts Team Invite tokens', async () => {
+    const app = await buildApp();
+
+    const inspectRes = await app.inject({ method: 'GET', url: '/api/teams/invites/token-1' });
+    assert.equal(inspectRes.statusCode, 200);
+    assert.equal(JSON.parse(inspectRes.body).available, true);
+
+    const acceptRes = await app.inject({ method: 'POST', url: '/api/teams/invites/accepted-token/accept' });
+    assert.equal(acceptRes.statusCode, 200);
+    assert.equal(JSON.parse(acceptRes.body).destination, 'my-work');
+    assert.equal(JSON.parse(acceptRes.body).alreadyAccepted, true);
   });
 });
