@@ -50,6 +50,13 @@ async function buildApp(deps = {}) {
       invited_by_email: context.ownerEmail,
       invite_url: `${context.appBaseUrl}/invite?token=token-1`,
     }),
+    resendTeamInvite: async (id, context) => ({
+      id,
+      email: 'worker@example.com',
+      status: 'pending',
+      invited_by_email: context.ownerEmail,
+      invite_url: `${context.appBaseUrl}/invite?token=token-1`,
+    }),
     revokeTeamInvite: async (id, context) => ({
       id,
       status: 'revoked',
@@ -355,6 +362,26 @@ describe('Team setup routes', () => {
     assert.equal(JSON.parse(res.body).error, 'Authorization required');
   });
 
+  test('returns friendly duplicate Team Invite message', async () => {
+    const app = await buildApp({
+      createTeamInvite: async () => {
+        const error = new Error('You have already done this one. Did you mean to resend it?');
+        error.statusCode = 409;
+        throw error;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/invites',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'worker@example.com' }),
+    });
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(JSON.parse(res.body).error, 'You have already done this one. Did you mean to resend it?');
+  });
+
   test('revokes a pending Team Invite for the authenticated owner', async () => {
     let revokeArgs;
     const app = await buildApp({
@@ -369,6 +396,35 @@ describe('Team setup routes', () => {
     assert.equal(res.statusCode, 200);
     assert.deepEqual(revokeArgs, { id: 'invite-1', context: { ownerEmail: 'owner@example.com' } });
     assert.equal(JSON.parse(res.body).invite.status, 'revoked');
+  });
+
+  test('resends a pending Team Invite for the authenticated owner', async () => {
+    let resendArgs;
+    const app = await buildApp({
+      resendTeamInvite: async (id, context) => {
+        resendArgs = { id, context };
+        return {
+          id,
+          email: 'worker@example.com',
+          status: 'pending',
+          invited_by_email: context.ownerEmail,
+          invite_url: `${context.appBaseUrl}/invite?token=token-1`,
+        };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/invites/invite-1/resend',
+      headers: { origin: 'https://frontend.example' },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(resendArgs, {
+      id: 'invite-1',
+      context: { ownerEmail: 'owner@example.com', appBaseUrl: 'https://frontend.example' },
+    });
+    assert.equal(JSON.parse(res.body).invite.email, 'worker@example.com');
   });
 
   test('inspects and accepts Team Invite tokens for the signed-in invited email', async () => {

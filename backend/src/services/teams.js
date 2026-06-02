@@ -60,6 +60,12 @@ function validateEmail(value) {
   return email;
 }
 
+function alreadyDoneError(message = 'You have already done this one. Did you mean to resend it?') {
+  const error = new Error(message);
+  error.statusCode = 409;
+  return error;
+}
+
 function normalizeDescription(value) {
   return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
@@ -368,6 +374,29 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
   await ensureDogfoodTeam(db);
   await ensureTeamOwner(db, teamId, invitedByEmail);
 
+  const { data: existingMemberRows, error: existingMemberError } = await db
+    .from('team_members')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('normalized_email', email)
+    .limit(1);
+  if (existingMemberError) throw existingMemberError;
+  if ((existingMemberRows || []).length) {
+    throw alreadyDoneError('This person is already in the Team.');
+  }
+
+  const { data: existingInviteRows, error: existingInviteError } = await db
+    .from('team_invites')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('normalized_email', email)
+    .eq('status', 'pending')
+    .limit(1);
+  if (existingInviteError) throw existingInviteError;
+  if ((existingInviteRows || []).length) {
+    throw alreadyDoneError();
+  }
+
   const { data: pendingRows, error: pendingError } = await db
     .from('team_invites')
     .select('id')
@@ -412,9 +441,7 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
     .single();
   if (error) {
     if (error.code === '23505') {
-      const duplicate = new Error('A pending invite already exists for that email');
-      duplicate.statusCode = 409;
-      throw duplicate;
+      throw alreadyDoneError();
     }
     throw error;
   }
@@ -429,6 +456,36 @@ export async function createTeamInvite(input, { db = jobdoneDb, teamId = DOGFOOD
       .eq('status', 'pending');
     throw sendError;
   }
+  return invite;
+}
+
+export async function resendTeamInvite(id, { db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, ownerEmail, appBaseUrl = '' } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const invitedByEmail = validateEmail(ownerEmail);
+  await ensureDogfoodTeam(db);
+  await ensureTeamOwner(db, teamId, invitedByEmail);
+
+  const { data, error } = await db
+    .from('team_invites')
+    .select('*')
+    .eq('id', id)
+    .eq('team_id', teamId)
+    .eq('status', 'pending')
+    .limit(1)
+    .single();
+  if (error) throw error;
+  if (!data) {
+    const notFound = new Error('Pending invite not found');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+
+  const invite = presentTeamInvite(data, appBaseUrl);
+  await sendInviteMagicLink(invite.email, invite.invite_url);
   return invite;
 }
 

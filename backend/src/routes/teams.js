@@ -8,6 +8,7 @@ import {
   getTeamSetupState,
   getMyWorkState,
   inspectTeamInvite,
+  resendTeamInvite,
   revokeTeamInvite,
   submitClaimedBacklogItem,
   updateTeamSettings,
@@ -38,6 +39,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
   const submitItem = deps.submitClaimedBacklogItem || submitClaimedBacklogItem;
   const decideRequest = deps.decideApprovalRequest || decideApprovalRequest;
   const createInvite = deps.createTeamInvite || createTeamInvite;
+  const resendInvite = deps.resendTeamInvite || resendTeamInvite;
   const revokeInvite = deps.revokeTeamInvite || revokeTeamInvite;
   const inspectInvite = deps.inspectTeamInvite || inspectTeamInvite;
   const acceptInvite = deps.acceptTeamInvite || acceptTeamInvite;
@@ -150,6 +152,20 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
       const invite = await revokeInvite(request.params.id, { ownerEmail: user.email });
+      return { invite };
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/invites/:id/resend', async (request, reply) => {
+    try {
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const invite = await resendInvite(request.params.id, {
+        ownerEmail: user.email,
+        appBaseUrl: appBaseUrlFromRequest(request),
+      });
       return { invite };
     } catch (error) {
       return errorReply(reply, error);

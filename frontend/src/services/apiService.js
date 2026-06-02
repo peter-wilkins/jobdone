@@ -497,6 +497,18 @@ export class APIService {
     return response.json();
   }
 
+  async resendTeamInvite(id) {
+    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}/resend`, {
+      method: 'POST',
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to resend invite`);
+    }
+    return response.json();
+  }
+
   async inspectTeamInvite(token) {
     const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}`);
     if (!response.ok) {

@@ -78,21 +78,29 @@ function ApprovalRequestRow({ request, onDecision, busy }) {
   );
 }
 
-function InviteRow({ invite, onCopy, onRemove, busy }) {
+function InviteRow({ invite, onCopy, onResend, onRemove, busy }) {
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
-      <div className="flex items-start gap-3">
+      <div className="space-y-2 sm:flex sm:items-start sm:gap-3 sm:space-y-0">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-900 leading-5">{invite.email}</p>
-          <p className="mt-1 text-xs text-gray-500">Pending invite</p>
+          <p className="break-all text-sm font-medium leading-5 text-gray-900">{invite.email}</p>
+          <p className="mt-1 text-xs text-gray-500">Pending invite email</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onResend(invite)}
+            className="px-3 py-1.5 text-xs font-medium text-gray-900 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 disabled:opacity-50"
+          >
+            Resend
+          </button>
           <button
             type="button"
             onClick={() => onCopy(invite)}
-            className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+            className="px-3 py-1.5 text-xs font-medium text-gray-500 border border-gray-200 rounded hover:bg-gray-50"
           >
-            Copy link
+            Copy fallback
           </button>
           <button
             type="button"
@@ -248,6 +256,22 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     }
   };
 
+  const resendInvite = async (invite) => {
+    setBusyInviteId(invite.id);
+    setError(null);
+    setInviteCopyMessage('');
+    try {
+      const result = await apiService.resendTeamInvite(invite.id);
+      const invitedEmail = result.invite?.email || invite.email;
+      setInviteCopyMessage(`Invite email resent to ${invitedEmail}`);
+      await loadTeamState();
+    } catch (err) {
+      setError(err.message || 'Could not resend invite');
+    } finally {
+      setBusyInviteId(null);
+    }
+  };
+
   const removeInvite = async (invite) => {
     setBusyInviteId(invite.id);
     setError(null);
@@ -375,7 +399,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                     Create invite
                   </button>
                 </div>
-                <p className="text-xs text-gray-400">JobDone emails a sign-in link to the invited address. Copy link remains as a fallback.</p>
+                <p className="text-xs text-gray-400">JobDone emails a sign-in link to the invited address.</p>
               </form>
               {inviteCopyMessage && (
                 <p className="pb-2 text-xs text-gray-500 break-all">{inviteCopyMessage}</p>
@@ -388,6 +412,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                       invite={invite}
                       busy={busyInviteId === invite.id}
                       onCopy={copyInviteUrl}
+                      onResend={resendInvite}
                       onRemove={removeInvite}
                     />
                   ))}
