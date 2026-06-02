@@ -3,6 +3,7 @@ import { apiService } from './services/apiService';
 
 const EMPTY_FORM = { description: '', points: 3 };
 const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false };
+const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
 
 const TEAM_TEMPLATES = [
   { value: 'high_trust', label: 'High Trust', hint: 'Fast coordination, auto-approval, no points.' },
@@ -12,6 +13,16 @@ const TEAM_TEMPLATES = [
 
 function pointsOptions() {
   return Array.from({ length: 10 }, (_, index) => index + 1);
+}
+
+function consumeRequestedTeamId() {
+  try {
+    const teamId = sessionStorage.getItem(TEAM_EDIT_SELECTED_TEAM_KEY);
+    sessionStorage.removeItem(TEAM_EDIT_SELECTED_TEAM_KEY);
+    return teamId || null;
+  } catch {
+    return null;
+  }
 }
 
 function BacklogItemRow({ item, pointsEnabled, onEdit, onDelete }) {
@@ -127,7 +138,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   useEffect(() => {
     // Initial screen load is the synchronization point for Team backlog state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadTeamState();
+    loadTeamState(consumeRequestedTeamId());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email]);
 

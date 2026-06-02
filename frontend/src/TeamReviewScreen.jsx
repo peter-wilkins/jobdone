@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
 
+const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
+const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
+
 function approvalStatusText(status) {
   if (status === 'needs_more_evidence') return 'Waiting for more evidence';
   if (status === 'submitted') return 'Submitted';
   return status || 'Submitted';
+}
+
+function pointsOptions() {
+  return Array.from({ length: 10 }, (_, index) => index + 1);
 }
 
 function ReviewRequestRow({ request, busy, onDecision }) {
@@ -49,6 +56,11 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
   const [ownedTeams, setOwnedTeams] = useState([]);
   const [activeApprovalRequests, setActiveApprovalRequests] = useState([]);
   const [canManage, setCanManage] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [isAddingBacklog, setIsAddingBacklog] = useState(false);
+  const [backlogForm, setBacklogForm] = useState(EMPTY_BACKLOG_FORM);
+  const [isSavingBacklog, setIsSavingBacklog] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,11 +70,20 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       const state = await apiService.getTeamReviewState();
-      setOwnedTeams(state.ownedTeams || []);
-      setActiveApprovalRequests(state.activeApprovalRequests || []);
+      const nextOwnedTeams = state.ownedTeams || [];
+      const nextRequests = state.activeApprovalRequests || [];
+      setOwnedTeams(nextOwnedTeams);
+      setActiveApprovalRequests(nextRequests);
       setCanManage(Boolean(state.canManage));
+      setSelectedTeamId(currentTeamId => {
+        if (nextOwnedTeams.some(team => team.id === currentTeamId)) return currentTeamId;
+        const firstReviewTeamId = nextRequests.find(request =>
+          nextOwnedTeams.some(team => team.id === request.team_id)
+        )?.team_id;
+        return firstReviewTeamId || nextOwnedTeams[0]?.id || null;
+      });
     } catch (err) {
-      setError(err.message || 'Could not load Team Review');
+      setError(err.message || 'Could not load Team');
     } finally {
       setIsLoading(false);
     }
@@ -78,6 +99,42 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
       onNavigate?.('team-setup');
     }
   }, [canManage, isLoading, onNavigate, ownedTeams.length]);
+
+  const selectedTeam = ownedTeams.find(team => team.id === selectedTeamId) || ownedTeams[0] || null;
+  const selectedTeamPointsEnabled = Boolean(selectedTeam?.points_enabled);
+
+  const editTeams = () => {
+    if (selectedTeam?.id) {
+      try {
+        sessionStorage.setItem(TEAM_EDIT_SELECTED_TEAM_KEY, selectedTeam.id);
+      } catch {
+        // Team Edit will fall back to its default Team when session storage is unavailable.
+      }
+    }
+    onNavigate?.('team-setup');
+  };
+
+  const saveBacklogItem = async (event) => {
+    event.preventDefault();
+    if (!selectedTeam?.id) return;
+    setIsSavingBacklog(true);
+    setError(null);
+    setSaveMessage('');
+    try {
+      await apiService.createTeamBacklogItem({
+        teamId: selectedTeam.id,
+        description: backlogForm.description,
+        points: selectedTeamPointsEnabled ? backlogForm.points : null,
+      });
+      setBacklogForm(EMPTY_BACKLOG_FORM);
+      setIsAddingBacklog(false);
+      setSaveMessage(`Added Backlog Item to ${selectedTeam.name}`);
+    } catch (err) {
+      setError(err.message || 'Could not add Backlog Item');
+    } finally {
+      setIsSavingBacklog(false);
+    }
+  };
 
   const decideApproval = async (request, decision) => {
     setBusyApprovalId(request.id);
@@ -106,18 +163,9 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
           </svg>
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-light text-gray-900 leading-5">Needs Review</h1>
-          <p className="text-xs text-gray-500">Submitted work across your Teams</p>
+          <h1 className="text-xl font-light text-gray-900 leading-5">Team</h1>
+          <p className="text-xs text-gray-500">Review work and keep the Backlog moving</p>
         </div>
-        {canManage && ownedTeams.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onNavigate?.('team-setup')}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Edit Teams
-          </button>
-        )}
       </div>
 
       {error && (
@@ -141,19 +189,123 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
               Log in
             </button>
           </section>
-        ) : activeApprovalRequests.length === 0 ? (
-          <p className="py-8 text-sm text-gray-400">No work needs review.</p>
         ) : (
-          <section>
-            {activeApprovalRequests.map(request => (
-              <ReviewRequestRow
-                key={request.id}
-                request={request}
-                busy={busyApprovalId === request.id}
-                onDecision={decideApproval}
-              />
-            ))}
-          </section>
+          <div className="space-y-6">
+            {ownedTeams.length > 0 && (
+              <section className="space-y-3">
+                {ownedTeams.length > 1 ? (
+                  <label className="block">
+                    <span className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Selected Team</span>
+                    <select
+                      value={selectedTeam?.id || ''}
+                      onChange={(event) => {
+                        setSelectedTeamId(event.target.value);
+                        setSaveMessage('');
+                      }}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                    >
+                      {ownedTeams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <p className="text-xs text-gray-500">Team: <span className="font-medium text-gray-700">{selectedTeam?.name}</span></p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingBacklog(open => !open);
+                      setSaveMessage('');
+                    }}
+                    className="px-3 py-2 text-sm font-medium text-gray-900 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Add Backlog Item
+                  </button>
+                  <button
+                    type="button"
+                    onClick={editTeams}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Edit Teams
+                  </button>
+                </div>
+
+                {saveMessage && <p className="text-xs text-green-700">{saveMessage}</p>}
+
+                {isAddingBacklog && (
+                  <form onSubmit={saveBacklogItem} className="rounded border border-gray-200 px-3 py-3 space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                        Backlog Item
+                      </label>
+                      <textarea
+                        value={backlogForm.description}
+                        onChange={(event) => setBacklogForm(prev => ({ ...prev, description: event.target.value }))}
+                        rows={3}
+                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                        placeholder={`What should ${selectedTeam?.name || 'this Team'} do?`}
+                      />
+                    </div>
+                    {selectedTeamPointsEnabled && (
+                      <label className="block">
+                        <span className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Points</span>
+                        <select
+                          value={backlogForm.points}
+                          onChange={(event) => setBacklogForm(prev => ({ ...prev, points: Number(event.target.value) }))}
+                          className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                        >
+                          {pointsOptions().map(points => (
+                            <option key={points} value={points}>{points}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBacklogForm(EMPTY_BACKLOG_FORM);
+                          setIsAddingBacklog(false);
+                        }}
+                        className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingBacklog || !backlogForm.description.trim() || !selectedTeam}
+                        className="px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+            )}
+
+            <section>
+              <div className="border-b border-gray-200 pb-2">
+                <h2 className="text-sm font-semibold text-gray-900">Needs Review</h2>
+                <p className="mt-1 text-xs text-gray-500">Submitted and needs-more-evidence work across Teams you own.</p>
+              </div>
+              {activeApprovalRequests.length === 0 ? (
+                <p className="py-8 text-sm text-gray-400">No work needs review.</p>
+              ) : (
+                activeApprovalRequests.map(request => (
+                  <ReviewRequestRow
+                    key={request.id}
+                    request={request}
+                    busy={busyApprovalId === request.id}
+                    onDecision={decideApproval}
+                  />
+                ))
+              )}
+            </section>
+          </div>
         )}
       </main>
     </div>

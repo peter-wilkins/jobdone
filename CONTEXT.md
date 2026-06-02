@@ -190,6 +190,10 @@ _Avoid_: Parent View, Admin View, Approval Queue
 The Team Owner operational review surface for submitted Approval Requests that need a decision. Team Review is time-sensitive work and should float submitted work above slower Team configuration.
 _Avoid_: Team Setup, Team Edit, Admin Settings
 
+**Team Home View**:
+The Team Owner hub for day-to-day Team work. Team Home puts Needs Review first, with lightweight access to creating Backlog Items and editing Teams without hiding those actions in the burger menu.
+_Avoid_: Team Setup, Admin Dashboard, Settings-only View
+
 **My Work View**:
 The Team Member-facing surface for doing work across all Teams they belong to: claimed/in-progress items first, open Backlog Items next, and submitted/done history after that. Items retain their Team context internally and may show a small Team label when useful.
 _Avoid_: Child View, Employee View, Single-Team Work Screen
@@ -362,9 +366,12 @@ _Avoid_: Search bar, Input field, Record button
 - The first Team Backlog should be an Open Backlog only. Dates, weekly scheduling, and Routine generation follow after the Backlog/Approval loop works.
 - Slice 1 Backlog Item creation needs only a description and Points. Description is the simple Backlog Item field for this slice; richer Instructions remain optional later. Titles, assignment, due dates, recurrence, reward choice, photos, and Share Pack-backed Instructions can follow when real use proves the need.
 - Team Review and Team Edit should be separate surfaces: Team Review handles submitted Approval Requests that need a decision, while Team Edit handles Team configuration, invites, settings, and open Backlog management.
-- The Teams area should default to Team Edit only when the user owns no Teams yet. Once a user owns at least one Team, the Teams area should default to Team Review because approving submitted work is more time-sensitive than editing Team configuration. Team Edit should remain available as a secondary button/link that uses little screen space.
+- The Teams area should default to Team Edit only when the user owns no Teams yet. Once a user owns at least one Team, the Teams area should default to Team Home because day-to-day owner work includes review, quick Backlog creation, and occasional Team editing.
 - Team Review's active queue shows submitted Approval Requests and needs-more-evidence items oldest first. Closed decisions can appear below as lazy-loaded recent history, but they should not compete with active review work.
-- The burger/menu label for the owner-facing Teams area should be **Team Review**. Inside that surface, the main heading can be **Needs Review** with a small **Edit Teams** action.
+- The burger/menu label for the owner-facing Teams area should be **Team**. Inside Team Home, the main section is **Needs Review**, with obvious secondary actions for **Add Backlog Item** and **Edit Teams**. These owner actions should not rely only on the burger menu or awkward floating controls.
+- Team Home should support quick inline Backlog creation. **Add Backlog Item** expands a compact form in place, saves the new item, then collapses while keeping the owner on Team Home. Team Edit remains the slower configuration surface, not the normal path for day-to-day Backlog capture.
+- Team Home should keep Team context visible. If the owner has multiple Teams, a compact Team selector appears near the top. Inline Backlog creation uses the selected Team; Edit Teams opens configuration for the selected Team. The selector should default to the Team related to the current review item when there is one, otherwise the most recently used or first owned Team.
+- Team Home's Needs Review list should aggregate submitted work across all owned Teams by default, oldest first. Each review item carries a small Team label, matching My Work's team labels, so urgent work is not hidden behind a filter. Filtering by Team can follow later if the list gets noisy.
 - Team Owners can edit a Backlog Item's description and Points, or delete it, only while it is open. Once a Backlog Item is claimed or submitted, V1 avoids edit/delete and uses the approval flow or a new Backlog Item instead.
 - My Work should be ordered as a simple work queue: claimed/in-progress items at the top, open Backlog Items in the middle, and done/history items at the bottom.
 - Submitted-but-not-yet-approved items stay in the claimed/in-progress section with a submitted status rather than moving to a separate pending section.

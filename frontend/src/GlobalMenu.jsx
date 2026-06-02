@@ -5,7 +5,7 @@ const MENU_ITEMS = [
   { screen: 'inbox', label: 'Inbox' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
-  { screen: 'team-review', label: 'Team Review' },
+  { screen: 'team-review', label: 'Team' },
   { screen: 'my-work', label: 'My Work' },
   { screen: 'feedback', label: 'Report issue' },
 ];
