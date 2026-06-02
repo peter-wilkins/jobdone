@@ -6,15 +6,15 @@ function pointsText(item, pointsEnabled) {
   return `${item.points} point${item.points === 1 ? '' : 's'}`;
 }
 
-function statusText(status) {
+function statusText(status, usesManualApproval = true) {
   if (status === 'needs_more_evidence') return 'Needs more evidence';
   if (status === 'submitted') return 'Submitted';
-  if (status === 'approved') return 'Approved';
+  if (status === 'approved') return usesManualApproval ? 'Approved' : 'Done';
   if (status === 'claimed') return 'Claimed';
   return 'Open';
 }
 
-function WorkItem({ item, pointsEnabled, onSubmit, busy }) {
+function WorkItem({ item, pointsEnabled, usesManualApproval, onSubmit, busy }) {
   const [evidenceText, setEvidenceText] = useState('');
   const request = item.approval_request || {};
   return (
@@ -23,7 +23,7 @@ function WorkItem({ item, pointsEnabled, onSubmit, busy }) {
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {[statusText(item.status), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
+            {[statusText(item.status, usesManualApproval), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
           </p>
         </div>
       </div>
@@ -82,13 +82,13 @@ function OpenItem({ item, pointsEnabled, onClaim, busy }) {
   );
 }
 
-function ApprovedItem({ item, pointsEnabled }) {
+function FinishedItem({ item, pointsEnabled, usesManualApproval }) {
   const request = item.approval_request || {};
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm font-medium text-gray-900 leading-5">{item.description}</p>
       <p className="mt-1 text-xs text-gray-500">
-        {[statusText(item.status), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
+        {[statusText(item.status, usesManualApproval), pointsText(item, pointsEnabled)].filter(Boolean).join(' · ')}
       </p>
       {request.evidence_text && (
         <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
@@ -128,6 +128,7 @@ export function TeamWorkScreen({ onBack }) {
   }, []);
 
   const pointsEnabled = Boolean(team?.points_enabled);
+  const usesManualApproval = team?.approval_mode === 'manual';
 
   const claimItem = async (item) => {
     setBusyItemId(item.id);
@@ -198,6 +199,7 @@ export function TeamWorkScreen({ onBack }) {
                     key={item.id}
                     item={item}
                     pointsEnabled={pointsEnabled}
+                    usesManualApproval={usesManualApproval}
                     busy={busyItemId === item.id}
                     onSubmit={submitItem}
                   />
@@ -227,14 +229,23 @@ export function TeamWorkScreen({ onBack }) {
 
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
-                <h2 className="text-sm font-semibold text-gray-900">Approved / History</h2>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {usesManualApproval ? 'Approved / History' : 'Done / History'}
+                </h2>
                 <span className="text-xs text-gray-400">{approvedItems.length}</span>
               </div>
               {approvedItems.length === 0 ? (
-                <p className="py-5 text-sm text-gray-400">No approved work yet.</p>
+                <p className="py-5 text-sm text-gray-400">
+                  {usesManualApproval ? 'No approved work yet.' : 'No finished work yet.'}
+                </p>
               ) : (
                 approvedItems.map(item => (
-                  <ApprovedItem key={item.id} item={item} pointsEnabled={pointsEnabled} />
+                  <FinishedItem
+                    key={item.id}
+                    item={item}
+                    pointsEnabled={pointsEnabled}
+                    usesManualApproval={usesManualApproval}
+                  />
                 ))
               )}
             </section>
