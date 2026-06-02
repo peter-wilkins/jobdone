@@ -292,28 +292,23 @@ export function FeedbackScreen({ onBack, onRecord }) {
             ...feedbackTriageSummary(currentTriage),
           });
           setSendStatus('Transcribing voice detail...');
-          const diagnosticBundle = await buildDiagnosticBundle(currentTriage);
           let transcript = 'Voice feedback report';
           try {
             const result = await apiService.transcribeAudio(audioData.blob);
             transcript = result.transcript || transcript;
             diagnosticService.record('issue_report_transcribed', {
               duration: audioData.duration,
-              status: 'sending',
+              status: 'ready_for_review',
             });
           } catch (transcriptionErr) {
             const kind = friendlyError(transcriptionErr);
             diagnosticService.record('issue_report_processing_failed', { kind });
+            setError('Could not transcribe the voice report. Type the issue instead.');
+            setSendStatus(null);
+            return;
           }
-          setSendStatus('Sending report...');
-          const id = await dbService.createFeedbackTextReport({
-            transcript,
-            diagnosticBundle,
-            triage: currentTriage,
-          });
-          const newItem = await dbService.getFeedbackItem(id);
-          const synced = await sendFeedbackItem(newItem);
-          setSendStatus(synced ? 'Report sent.' : 'Saved. Will retry when Sync is available.');
+          setTypedReport(transcript);
+          setSendStatus('Review the text, then send report.');
         }
       }
     } catch (err) {
