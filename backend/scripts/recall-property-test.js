@@ -2,6 +2,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import pg from 'pg';
+import {
+  renderGitHubErrorAnnotation,
+  renderLocalFailureText,
+  renderMarkdownSummary,
+} from './recall-property-diagnostics.js';
 
 const { Pool } = pg;
 
@@ -478,24 +483,18 @@ async function shrinkFailure(pool, world, queryCase) {
 async function writeFailure(failure) {
   await mkdir(dirname(FAILURE_PATH), { recursive: true });
   await writeFile(FAILURE_PATH, `${JSON.stringify(failure, null, 2)}\n`);
+  if (process.env.GITHUB_ACTIONS) {
+    console.error(renderGitHubErrorAnnotation(failure));
+    console.error('Recall property failed. See the GitHub job summary for the shrunk repro.');
+  } else {
+    console.error(renderLocalFailureText(failure, FAILURE_PATH));
+  }
   if (process.env.GITHUB_STEP_SUMMARY) {
-    await writeFile(process.env.GITHUB_STEP_SUMMARY, [
-      '## Recall property failure',
-      '',
-      `- Seed: ${failure.seed}`,
-      `- Query: ${failure.query.text}`,
-      `- Failures: ${failure.failures.join('; ')}`,
-      `- Repro JSON: ${FAILURE_PATH}`,
-      '',
-      '```json',
-      JSON.stringify({
-        seed: failure.seed,
-        query: failure.query,
-        actual: failure.actual,
-      }, null, 2),
-      '```',
-      '',
-    ].join('\n'), { flag: 'a' });
+    await writeFile(
+      process.env.GITHUB_STEP_SUMMARY,
+      renderMarkdownSummary(failure, FAILURE_PATH),
+      { flag: 'a' },
+    );
   }
 }
 
@@ -523,9 +522,6 @@ async function main() {
             shrunkWorld,
           };
           await writeFailure(failure);
-          console.error(`Recall property failed: ${queryCase.id} seed ${world.seed}`);
-          console.error(shrunkResult.failures.join('\n'));
-          console.error(`Shrunk repro: ${FAILURE_PATH}`);
           process.exitCode = 1;
           return;
         }
