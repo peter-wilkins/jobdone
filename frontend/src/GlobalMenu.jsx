@@ -47,8 +47,8 @@ export function GlobalMenu({
     fn?.();
   };
   const containerClass = position === 'inline'
-    ? 'relative'
-    : 'fixed top-3 right-3 z-40';
+    ? 'relative z-50'
+    : 'fixed top-3 right-3 z-50';
 
   return (
     <div className={containerClass} ref={menuRef}>
@@ -63,7 +63,7 @@ export function GlobalMenu({
         <span className="w-5 h-px bg-current" />
       </button>
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+        <div className="absolute right-0 z-50 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
           {user && (
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-xs text-gray-400">Signed in as</p>

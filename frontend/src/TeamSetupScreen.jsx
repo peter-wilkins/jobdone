@@ -122,6 +122,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [memberTeams, setMemberTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [isCreatingNewTeam, setIsCreatingNewTeam] = useState(false);
+  const [memberTeamsOpen, setMemberTeamsOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
@@ -168,6 +169,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const pointsEnabled = Boolean(team.points_enabled);
   const hasManagedTeam = Boolean(team.id);
   const selectedOwnedTeamId = hasManagedTeam ? team.id : selectedTeamId;
+  const editorTitle = isCreatingNewTeam || !hasManagedTeam ? 'Create Team' : `Edit ${team.name}`;
 
   const selectOwnedTeam = async (ownedTeam) => {
     setSelectedTeamId(ownedTeam.id);
@@ -393,26 +395,60 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             <p className="py-3 text-sm text-gray-400">No Teams yet.</p>
           ) : (
             <div className="py-2 space-y-2">
-              {ownedTeams.map(ownedTeam => (
-                <button
-                  key={ownedTeam.id}
-                  type="button"
-                  onClick={() => selectOwnedTeam(ownedTeam)}
-                  className={`w-full rounded border px-3 py-2 text-left ${ownedTeam.id === selectedOwnedTeamId && !isCreatingNewTeam ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                >
-                  <span className="block text-sm font-medium text-gray-900">{ownedTeam.name}</span>
-                  <span className="block text-xs text-gray-500">Owner</span>
-                </button>
-              ))}
-              {memberTeams.map(({ team: memberTeam, role }) => (
-                <div key={memberTeam.id} className="rounded border border-gray-100 px-3 py-2">
-                  <span className="block text-sm font-medium text-gray-500">{memberTeam.name}</span>
-                  <span className="block text-xs text-gray-400">{role || 'Member'}</span>
+              {ownedTeams.length > 0 && (
+                <label className="block">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Owned Teams</span>
+                  <select
+                    value={isCreatingNewTeam ? '__new__' : (selectedOwnedTeamId || '')}
+                    onChange={(event) => {
+                      if (event.target.value === '__new__') {
+                        startCreateTeam();
+                        return;
+                      }
+                      const ownedTeam = ownedTeams.find(candidate => candidate.id === event.target.value);
+                      if (ownedTeam) selectOwnedTeam(ownedTeam);
+                    }}
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                  >
+                    <option value="__new__">Create new Team</option>
+                    {ownedTeams.map(ownedTeam => (
+                      <option key={ownedTeam.id} value={ownedTeam.id}>{ownedTeam.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {memberTeams.length > 0 && (
+                <div className="rounded border border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setMemberTeamsOpen(open => !open)}
+                    className="w-full px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
+                  >
+                    Member Teams ({memberTeams.length}) {memberTeamsOpen ? 'hide' : 'show'}
+                  </button>
+                  {memberTeamsOpen && (
+                    <div className="border-t border-gray-100">
+                      {memberTeams.map(({ team: memberTeam, role }) => (
+                        <div key={memberTeam.id} className="px-3 py-2 border-b border-gray-50 last:border-b-0">
+                          <span className="block text-sm font-medium text-gray-500">{memberTeam.name}</span>
+                          <span className="block text-xs text-gray-400">{role || 'Member'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </section>
+
+        <section className="rounded border border-gray-200 px-3 py-3">
+        <div className="mb-3 border-b border-gray-100 pb-2">
+          <h2 className="text-sm font-semibold text-gray-900">{editorTitle}</h2>
+          <p className="text-xs text-gray-500">
+            {hasManagedTeam && !isCreatingNewTeam ? 'Changes apply only to this owned Team.' : 'This creates a separate Team.'}
+          </p>
+        </div>
 
         <form onSubmit={saveTeam} className="space-y-3">
           <div>
@@ -462,6 +498,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
             {hasManagedTeam ? 'Save Team' : 'Create Team'}
           </button>
         </form>
+        </section>
 
         {hasManagedTeam && (
         <section>
