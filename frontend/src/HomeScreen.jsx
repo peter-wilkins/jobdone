@@ -36,6 +36,7 @@ const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
 const MIN_STOP_AFTER_MS = 1000;
 const MIN_RECORDING_SECONDS = 1;
+const BACKEND_FIRST_LOCAL_DELAY_MS = 750;
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
 let fastCaptureAttemptedThisRun = false;
 
@@ -744,13 +745,18 @@ export function HomeScreen({
       };
 
       const raceBackend = shouldRaceBackendTranscription();
-      const localPromise = timedLocal();
+      const localPromise = raceBackend
+        ? new Promise(resolve => window.setTimeout(resolve, BACKEND_FIRST_LOCAL_DELAY_MS)).then(timedLocal)
+        : timedLocal();
       const backendPromise = raceBackend ? timedBackend() : null;
       const firstResult = backendPromise ? await Promise.race([localPromise, backendPromise]) : await localPromise;
       let localOutcome = firstResult.source === 'local' ? firstResult : null;
       let backendOutcome = firstResult.source === 'backend' ? firstResult : null;
 
       if (!firstResult.value.ok) {
+        if (firstResult.source === 'backend' && firstResult.value.error?.code === 'empty_transcription') {
+          throw firstResult.value.error;
+        }
         const fallback = firstResult.source === 'local'
           ? (backendPromise ? await backendPromise : await timedBackend())
           : await localPromise;
@@ -954,6 +960,7 @@ export function HomeScreen({
       const jobId = await dbService.createEntry(
         {
           duration: audioData.duration,
+          audioDiagnostics: audioData.diagnostics,
         },
         audioData.blob
       );
@@ -969,7 +976,12 @@ export function HomeScreen({
 
       // Add to entries list (at the top, as in-progress)
       const newEntry = await dbService.getEntry(jobId);
-      setEntries(prev => [newEntry, ...prev]);
+      setEntries(prev => [{
+        ...newEntry,
+        status: 'ready_for_review',
+        intent: 'NOTE',
+        transcriptionPending: true,
+      }, ...prev]);
 
       // Auto-trigger transcription if backend is available
       if (backendAvailable) {
@@ -1770,7 +1782,7 @@ export function HomeScreen({
       ? entry.workContextSnapshots
       : [];
 
-    if (entry.status === 'recording' || isProcessing) {
+    if (entry.status === 'recording') {
       const isQueued = entry.errorMessage === 'offline';
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -1808,6 +1820,18 @@ export function HomeScreen({
                 ? 'No speech detected. Try recording again.'
               : 'Something went wrong while processing this recording.'}
           </p>
+          {entry.audioDiagnostics && (
+            <div className="mb-3 rounded border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-900">
+              <p>
+                Audio debug: {entry.audioSize || 0} bytes, {entry.audioDiagnostics.chunkCount ?? '?'} chunks
+                {entry.audioDiagnostics.track?.muted ? ', mic muted' : ''}
+                {entry.audioDiagnostics.track?.readyState ? `, track ${entry.audioDiagnostics.track.readyState}` : ''}
+              </p>
+              {entry.audioDiagnostics.track?.lastEvent && (
+                <p className="mt-1">Last mic event: {entry.audioDiagnostics.track.lastEvent}</p>
+              )}
+            </div>
+          )}
           <div className="flex gap-3">
             {!isEmptyTranscription && (
               <button
@@ -1866,6 +1890,7 @@ export function HomeScreen({
       const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
       const workContextPanelError = reviewWorkContextErrors[entry.id];
       const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
+      const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
       const reviewEntryText = entry.summary || entry.transcript || '';
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
@@ -1880,6 +1905,11 @@ export function HomeScreen({
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
               {isQuery ? 'Search' : 'Note'}
             </span>
+            {transcriptionPending && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
+                Transcribing...
+              </span>
+            )}
           </div>
           
           {isQuery ? (
@@ -1937,7 +1967,11 @@ export function HomeScreen({
                   })}
                 </div>
               )}
-              <p className="text-gray-900 mb-2">{reviewEntryText}</p>
+              {reviewEntryText ? (
+                <p className="text-gray-900 mb-2">{reviewEntryText}</p>
+              ) : (
+                <p className="mb-2 text-sm text-gray-500">Audio is transcribing. You can add context while it runs.</p>
+              )}
               {showSeparateTranscript && (
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               )}

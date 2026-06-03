@@ -10,6 +10,7 @@ export class AudioService {
     this.isRecording = false;
     this.startTime = null;
     this.stream = null;
+    this.trackDiagnostics = null;
   }
 
   /**
@@ -100,12 +101,30 @@ export class AudioService {
         );
       }
 
-      this.stream = await navigator.mediaDevices.getUserMedia({ 
+      this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         }
+      });
+      const audioTrack = this.stream.getAudioTracks()[0] || null;
+      this.trackDiagnostics = audioTrack ? {
+        label: audioTrack.label || null,
+        enabled: audioTrack.enabled,
+        muted: audioTrack.muted,
+        readyState: audioTrack.readyState,
+        settings: audioTrack.getSettings?.() || null,
+        constraints: audioTrack.getConstraints?.() || null,
+      } : null;
+      audioTrack?.addEventListener?.('mute', () => {
+        this.trackDiagnostics = { ...this.trackDiagnostics, muted: true, lastEvent: 'mute', lastEventAt: new Date().toISOString() };
+      });
+      audioTrack?.addEventListener?.('unmute', () => {
+        this.trackDiagnostics = { ...this.trackDiagnostics, muted: false, lastEvent: 'unmute', lastEventAt: new Date().toISOString() };
+      });
+      audioTrack?.addEventListener?.('ended', () => {
+        this.trackDiagnostics = { ...this.trackDiagnostics, readyState: 'ended', lastEvent: 'ended', lastEventAt: new Date().toISOString() };
       });
 
       this.audioChunks = [];
@@ -141,6 +160,19 @@ export class AudioService {
       this.mediaRecorder.onstop = () => {
         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm;codecs=opus' });
         const duration = Math.floor((Date.now() - this.startTime) / 1000);
+        const audioTrack = this.stream.getAudioTracks()[0] || null;
+        const diagnostics = {
+          chunkCount: this.audioChunks.length,
+          recorderMimeType: this.mediaRecorder.mimeType || null,
+          recorderState: this.mediaRecorder.state,
+          track: audioTrack ? {
+            ...this.trackDiagnostics,
+            enabled: audioTrack.enabled,
+            muted: audioTrack.muted,
+            readyState: audioTrack.readyState,
+            settings: audioTrack.getSettings?.() || this.trackDiagnostics?.settings || null,
+          } : this.trackDiagnostics,
+        };
 
         // Stop all tracks to release microphone
         this.stream.getTracks().forEach(track => track.stop());
@@ -154,6 +186,7 @@ export class AudioService {
           duration,
           mimeType: 'audio/webm;codecs=opus',
           size: audioBlob.size,
+          diagnostics,
         });
       };
 
