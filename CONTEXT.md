@@ -107,11 +107,11 @@ The chronological stream of all confirmed Entries — the user's full operationa
 _Avoid_: Feed, History, Log
 
 **Recall**:
-A natural-language question submitted through the same voice input as capture. Intent is classified by heuristics (question words and sentence structure) with a confirmation screen as the safety net for misclassifications. The system detects QUERY intent and filters the Timeline to relevant Entries — deterministically and cacheably. No AI synthesis at query time.
+A natural-language question submitted through the same Capture input as Entry creation. Intent is classified by heuristics (question words and sentence structure) with a confirmation screen as the safety net for misclassifications. The system detects QUERY intent and filters the Timeline to relevant Entries — deterministically and cacheably. No AI synthesis at query time. A future dedicated `?` affordance may be added after user testing if the shared input is confusing.
 _Avoid_: Search, Lookup, Query
 
 **Query**:
-The saved text of a Recall question, transcribed from voice via the same input as capture. Queries are persisted and shown in a recent-queries dropdown so the user can re-run them with one tap, producing the same filtered Timeline.
+The saved text of a Recall question entered via the same input as Capture. Queries are persisted and shown in a recent-queries dropdown so the user can re-run them with one tap, producing the same filtered Timeline.
 _Avoid_: Search term, Filter
 
 **Share Pack**:
@@ -423,7 +423,7 @@ _Avoid_: Search bar, Input field, Record button
 - Shared Captures open through a dedicated `/share-target` review route
 - The service worker stores raw shared payloads and creates the Capture shell; app code parses and enriches payloads during review
 - A default text-first **Capture** starts at `ready_for_review`; optional/beta audio Capture may still pass through `recording`. A Capture is committed through Confirmation or permanently deleted through Rejection
-- A **Query** moves through: `transcribing → ready_for_review` (user sees intent label + transcription, confirms or corrects) → filters Timeline and is saved to recent Queries
+- A **Query** moves through: `ready_for_review` (user sees intent label and can confirm or correct) → filters Timeline and is saved to recent Queries
 - The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
 - JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
