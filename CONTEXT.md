@@ -1,6 +1,6 @@
 # JobDone
 
-A mobile-first voice log for self-employed tradespeople that externalises operational memory — capturing what happened on a job and surfacing it at the moment it's needed.
+A mobile-first capture log for self-employed tradespeople that externalises operational memory — capturing what happened on a job and surfacing it at the moment it's needed.
 
 JobDone is the product surface. Teams, Backlogs, Claims, Share Packs, and Approval Requests are shared primitives inside JobDone that can support business crews, households, apprentices, customer approvals, and solo use.
 
@@ -259,7 +259,7 @@ Permanent deletion of an Entry before it reaches the Timeline. No recovery.
 _Avoid_: Discard, Cancel
 
 **Capture Bar**:
-A browser-bar-style fixed input at the top of the screen — the single entry point for both capture and recall. Contains a mic icon to start recording, shows active Query text with a back button when a Query is active, and reveals a recent-Queries dropdown (chips, most-recent-first) when tapped.
+A browser-bar-style fixed input at the top of the screen — the single entry point for both capture and recall. In the MVP input-mode pivot it opens a ready-for-review text Capture immediately, focuses the text box, and lets the user's keyboard, OS dictation, or future voice path provide the text. It shows active Query text with a back button when a Query is active and reveals a recent-Queries dropdown (chips, most-recent-first) when tapped.
 _Avoid_: Search bar, Input field, Record button
 
 ## Relationships
@@ -268,12 +268,12 @@ _Avoid_: Search bar, Input field, Record button
 - When a **Query** is active, the Timeline shows the top 10 matching Entries (by semantic similarity, above a loose relevance floor) under a "Showing results for: [query]" header — full Timeline restored on dismiss
 - Offline **Recall** can replay cached results for previously run Queries; new Recall requires the backend
 - If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
-- A voice recording creates a **Capture**; transcription produces reviewable text before the user chooses Context Clues, Work Context, or Team-linked Backlog Items
+- The MVP default Capture path is text-first: pressing the Capture Bar plus action creates a **Capture** in review immediately, focuses an editable text box, and lets the user type or use OS-level dictation. JobDone-owned microphone/transcription paths are beta/spike behaviour until proven.
 - A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
 - Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every transcription.
-- Deterministic Pre-Extraction should be phone-capable/client-side where possible. This keeps review snappy, supports offline/local mode, and pairs well with future on-device transcription such as whisper.cpp. Online Clean Up Text can happen later when connectivity returns.
-- Local Transcription is a local-mode product capability, not a specific runtime choice. It owns lazy loading, cache status, backend fallback, dogfood UX, and weak-connectivity behaviour. Transcription Runtime work owns whether JobDone can legally and practically self-host the underlying WASM transcription engine.
+- Deterministic Pre-Extraction should be phone-capable/client-side where possible and may run against the editable Capture text as the user types. This keeps review snappy, supports offline/local mode, and avoids making transcription a dependency for beta-user Capture. Online Clean Up Text can happen later when connectivity returns.
+- Local Transcription is a parked beta/spike capability, not the default MVP Capture path. If revisited, it owns lazy loading, cache status, backend fallback, dogfood UX, and weak-connectivity behaviour. Transcription Runtime work owns whether JobDone can legally and practically self-host the underlying WASM transcription engine.
 - Transcription Source should be visible during dogfooding, especially in Entry review. Users and agents should be able to tell whether text came from Local Transcription, backend transcription, fallback-to-backend, or an evaluation race.
 - JobDone may occasionally race Local Transcription and backend transcription to compare latency and quality, but racing is an evaluation mode, not the default user path. The long-term preference is high-quality Local Transcription with backend fallback for unexpected failures.
 - Transcription Evaluation should be provider-agnostic. Evaluation records should include source/provider, latency, success/failure, and enough user-visible quality signal for dogfooding, but JobDone should not permanently race every Capture by default.
@@ -286,7 +286,7 @@ _Avoid_: Search bar, Input field, Record button
 - On-device transcription is not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as Local Transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
 - Local Transcription should optimise for dogfoodable weak-connectivity Capture quality first, not smallest possible model. A larger Runtime/model is acceptable if it fits realistic target devices, loads lazily/backgrounds cleanly, and produces noticeably better short-note transcripts.
 - The first hard Local Transcription target is Android Chrome/PWA on Peter's real dogfooding phone. Desktop can help debug runtime integration, but acceptance should be based on acceptable short-note transcription, fallback, and status visibility on that phone.
-- Runtime/model loading may start whenever the app can do it opportunistically, but it must never block voice Capture. While setup is incomplete, Capture should continue through backend transcription; once Local Transcription is ready, JobDone should prefer it and keep backend transcription as fallback.
+- Runtime/model loading must never block Capture and should stay behind a Beta Tester/debug flag while beta-user onboarding focuses on text-first Capture. While setup is incomplete or disabled, Capture should continue through editable text and OS dictation rather than JobDone-owned transcription.
 - JobDone should avoid automatic Runtime/model downloads on mobile data or when the browser reports data-saving mode. Because browser connection signals are imperfect, this should be conservative: skip auto-download when the device appears to be on cellular or save-data, show status, and allow an explicit user-triggered download later.
 - Browser Cache Storage is the preferred place for Runtime/model assets, with a small local readiness record for version, size, status, and last failure. Large model bytes should not go into IndexedDB unless Cache Storage proves unsuitable.
 - Local Transcription runtime work should run in a Web Worker. The main thread must stay responsive during model setup and transcription, and the Service Worker should not own heavy runtime state.
@@ -299,7 +299,7 @@ _Avoid_: Search bar, Input field, Record button
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
 - Clean Up Text is optional. Users who are happy with the text can confirm without waiting for more AI. Clean Up Text may make the message more readable, add Markdown structure such as bullet points, and reduce repeated details already captured by user-set context, but user-set context remains authoritative.
-- The preferred Capture flow is: transcription -> Pre-Extraction guesses -> Context Clue and Work Context twiddling -> optional Clean Up Text using the selected Capture Context -> Confirmation.
+- The preferred MVP Capture flow is: immediate editable text Capture -> deterministic Pre-Extraction guesses while the user types -> Context Clue and Work Context twiddling -> optional Clean Up Text using the selected Capture Context -> Confirmation.
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
 - Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
 - Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry
