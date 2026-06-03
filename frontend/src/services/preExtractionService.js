@@ -134,6 +134,7 @@ function tokensFuzzilyMatch(captureToken, labelToken) {
   const captureStem = stemToken(captureToken);
   const labelStem = stemToken(labelToken);
   if (captureStem === labelStem) return true;
+  if (captureStem.length >= 3 && labelStem.length >= 3 && editDistance(captureStem, labelStem) <= 1) return true;
   if (captureStem.length >= 5 && labelStem.length >= 5) {
     const [shorter, longer] = captureStem.length <= labelStem.length
       ? [captureStem, labelStem]

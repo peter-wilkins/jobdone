@@ -157,13 +157,13 @@ function mergeCandidatesById(primary = [], secondary = []) {
   });
 }
 
-function suggestionIdsToPreselect(suggestions = [], { allowStrongKeywords = false } = {}) {
+function suggestionIdsToPreselect(suggestions = [], { keywordThreshold = null } = {}) {
   return suggestions
     .filter(candidate =>
       !candidate.ambiguous &&
       (
         candidate.reason === 'exact_name_match' ||
-        (allowStrongKeywords && candidate.reason === 'keyword_match' && candidate.score >= 90)
+        (keywordThreshold != null && candidate.reason === 'keyword_match' && candidate.score >= keywordThreshold)
       )
     )
     .map(candidate => candidate.id)
@@ -681,13 +681,13 @@ export function HomeScreen({
           const prediction = {
             ...(result.prediction || {}),
             locationIds: mergeIds(
-              suggestionIdsToPreselect(preSuggestions.locations || []),
+              suggestionIdsToPreselect(preSuggestions.locations || [], { keywordThreshold: 90 }),
               result.prediction?.locationIds || []
             ),
             contactIds: mergeIds(
               localMatchedContact
-                ? [localMatchedContact.id, ...suggestionIdsToPreselect(preSuggestions.contacts || [])]
-                : suggestionIdsToPreselect(preSuggestions.contacts || []),
+                ? [localMatchedContact.id, ...suggestionIdsToPreselect(preSuggestions.contacts || [], { keywordThreshold: 80 })]
+                : suggestionIdsToPreselect(preSuggestions.contacts || [], { keywordThreshold: 80 }),
               result.prediction?.contactIds || []
             ),
             tagIds: mergeIds(
@@ -695,7 +695,7 @@ export function HomeScreen({
               result.prediction?.tagIds || []
             ),
           };
-          const preselectedWorkContextIds = suggestionIdsToPreselect(preSuggestions.backlogItems || [], { allowStrongKeywords: true });
+          const preselectedWorkContextIds = suggestionIdsToPreselect(preSuggestions.backlogItems || [], { keywordThreshold: 90 });
           const predictedLocation = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
           const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
 

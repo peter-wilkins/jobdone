@@ -304,6 +304,34 @@ test('pre-extraction matches common address abbreviations', () => {
   assert.equal(result.suggestions.locations[0]?.id, 'right');
 });
 
+test('pre-extraction fuzzily matches dictated contact names', () => {
+  const result = runPreExtraction({
+    captureText: 'Spoke to Alan about the visit.',
+    candidates: {
+      contacts: [
+        { id: 'target', displayName: 'Alain' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.contacts[0]?.id, 'target');
+  assert.ok(result.suggestions.contacts[0]?.score >= 80);
+});
+
+test('pre-extraction fuzzily matches multi-word locations', () => {
+  const result = runPreExtraction({
+    captureText: 'Finished at Bell Rod.',
+    candidates: {
+      locations: [
+        { id: 'target', displayName: 'Bell Road' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.locations[0]?.id, 'target');
+  assert.ok(result.suggestions.locations[0]?.score >= 90);
+});
+
 test('pre-extraction prefers greedy multi-token overlap over short accidental candidates', () => {
   const result = runPreExtraction({
     captureText: 'Replace the kitchen sink tap washer today.',
