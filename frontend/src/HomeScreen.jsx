@@ -240,6 +240,7 @@ export function HomeScreen({
   const [reviewWorkContextErrors, setReviewWorkContextErrors] = useState({});
   const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
   const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
+  const [reviewTextDrafts, setReviewTextDrafts] = useState({});
   const [busyWorkContextIds, setBusyWorkContextIds] = useState(new Set());
   const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
@@ -834,6 +835,18 @@ export function HomeScreen({
           ));
           return;
         }
+        if (kind === 'empty_transcription') {
+          const updated = await dbService.updateEntry(jobId, {
+            status: 'ready_for_review',
+            intent: 'NOTE',
+            errorMessage: kind,
+            transcriptionPending: false,
+          });
+          setEntries(prev => prev.map(e =>
+            e.id === jobId ? { ...e, ...updated } : e
+          ));
+          return;
+        }
         await dbService.markEntryFailed(jobId, kind);
         setEntries(prev => prev.map(e =>
           e.id === jobId ? { ...e, status: 'failed', errorMessage: kind } : e
@@ -854,17 +867,22 @@ export function HomeScreen({
 
   const selectTranscriptionCandidate = async (entry, candidate) => {
     if (!candidate?.selectable || !candidate.transcript) return;
+    const existingDraft = reviewTextDrafts[entry.id];
+    const nextText = existingDraft?.trim()
+      ? `${existingDraft.trim()}\n\n${candidate.transcript}`
+      : candidate.transcript;
     const candidates = (entry.transcriptionCandidates || []).map(item => ({
       ...item,
       selected: item.source === candidate.source,
     }));
     const updates = {
       transcript: candidate.transcript,
-      summary: candidate.transcript,
+      summary: nextText,
       transcriptionSource: candidate.source,
       transcriptionCandidates: candidates,
     };
     const updated = await dbService.updateEntry(entry.id, updates);
+    setReviewTextDrafts(prev => ({ ...prev, [entry.id]: nextText }));
     setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...updated } : item));
   };
 
@@ -1037,7 +1055,16 @@ export function HomeScreen({
 
     try {
       setError(null);
-      const entry = entries.find(e => e.id === id);
+      let entry = entries.find(e => e.id === id);
+      const draftText = (reviewTextDrafts[id] ?? '').trim();
+      if (draftText && draftText !== (entry.summary || entry.transcript || '').trim()) {
+        entry = await dbService.updateEntry(id, {
+          transcript: entry.transcript || draftText,
+          summary: draftText,
+          intent: entry.intent || 'NOTE',
+        });
+        setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
+      }
 
       // Handle QUERY intent
       if (entry.intent === 'QUERY') {
@@ -1236,6 +1263,11 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      setReviewTextDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (err) {
       console.error('Failed to confirm entry:', err);
       setError('Failed to confirm entry');
@@ -1268,6 +1300,11 @@ export function HomeScreen({
       setError(null);
       await dbService.rejectEntry(id);
       setEntries(prev => prev.filter(e => e.id !== id));
+      setReviewTextDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (err) {
       console.error('Failed to reject entry:', err);
       setError('Failed to reject entry');
@@ -1891,7 +1928,11 @@ export function HomeScreen({
       const workContextPanelError = reviewWorkContextErrors[entry.id];
       const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
       const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
+      const transcriptionFailed = entry.errorMessage === 'empty_transcription';
       const reviewEntryText = entry.summary || entry.transcript || '';
+      const editableReviewText = Object.prototype.hasOwnProperty.call(reviewTextDrafts, entry.id)
+        ? reviewTextDrafts[entry.id]
+        : reviewEntryText;
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
       const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
@@ -1908,6 +1949,11 @@ export function HomeScreen({
             {transcriptionPending && (
               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
                 Transcribing...
+              </span>
+            )}
+            {transcriptionFailed && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                No speech detected
               </span>
             )}
           </div>
@@ -1967,10 +2013,25 @@ export function HomeScreen({
                   })}
                 </div>
               )}
-              {reviewEntryText ? (
-                <p className="text-gray-900 mb-2">{reviewEntryText}</p>
-              ) : (
-                <p className="mb-2 text-sm text-gray-500">Audio is transcribing. You can add context while it runs.</p>
+              <textarea
+                value={editableReviewText}
+                onChange={(event) => setReviewTextDrafts(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
+                placeholder="Type here, use phone dictation, or wait for transcription."
+                className="mb-2 w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+              {!reviewEntryText && transcriptionPending && (
+                <p className="mb-2 text-xs text-gray-500">Audio is transcribing. You can add context or type while it runs.</p>
+              )}
+              {transcriptionFailed && (
+                <p className="mb-2 text-xs text-red-700">Transcription did not hear speech. Type here or use keyboard dictation.</p>
+              )}
+              {transcriptionFailed && entry.audioDiagnostics && (
+                <p className="mb-3 rounded border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-900">
+                  Audio debug: {entry.audioSize || 0} bytes, {entry.audioDiagnostics.chunkCount ?? '?'} chunks
+                  {entry.audioDiagnostics.track?.muted ? ', mic muted' : ''}
+                  {entry.audioDiagnostics.track?.readyState ? `, track ${entry.audioDiagnostics.track.readyState}` : ''}
+                </p>
               )}
               {showSeparateTranscript && (
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
