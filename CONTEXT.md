@@ -79,8 +79,8 @@ A dogfooding and testing path that compares two or more Transcription Sources, R
 _Avoid_: Permanent Race Mode, Provider Lock-In
 
 **Beta Tester**:
-A User who has explicitly opted in to preview or diagnostic product behaviour before it is ready for normal users. Beta Tester status can enable extra feedback surfaces such as Transcription Evaluation after JobDone has real users.
-_Avoid_: Hidden Debug Victim, Internal User Only
+A User who has explicitly opted in to preview or diagnostic product behaviour before it is ready for normal users. Beta Tester status is global to the User, not Team-specific, and can enable extra feedback surfaces such as Transcription Evaluation after JobDone has real users.
+_Avoid_: Hidden Debug Victim, Internal User Only, Team Beta Setting
 
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
