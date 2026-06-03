@@ -2,13 +2,14 @@ const CAPTURE_COUNT_KEY = 'jobdone.localTranscription.successfulCaptures.v1';
 const METRICS_KEY = 'jobdone.localTranscription.metrics.v1';
 const MODEL_CACHE = 'jobdone-whisper-models-v1';
 
-export const WHISPER_TINY_EN_Q5_1 = {
-  id: 'tiny.en-q5_1',
-  bytes: 32166155,
-  url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin',
+export const WHISPER_BASE_EN_Q5_1 = {
+  id: 'base.en-q5_1',
+  bytes: 59721011,
+  url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin',
 };
 
 let preloadPromise = null;
+let workerInstance = null;
 
 function safeStorage() {
   try {
@@ -63,17 +64,22 @@ export function canUseWhisperWasm(global = globalThis) {
   };
 }
 
+export function isConnectionLikelyMetered(connection = safeNavigator()?.connection || null) {
+  if (!connection) return false;
+  if (connection.saveData) return true;
+  if (connection.type === 'cellular') return true;
+  if (['slow-2g', '2g'].includes(connection.effectiveType)) return true;
+  return false;
+}
+
 export function shouldPreloadWhisperModel({
-  successfulCaptures = getSuccessfulCaptureCount(),
   online = safeNavigator()?.onLine !== false,
   connection = safeNavigator()?.connection || null,
   metrics = getLocalTranscriptionMetrics(),
 } = {}) {
-  if (successfulCaptures < 2) return false;
   if (!online) return false;
   if (metrics?.modelCached) return false;
-  if (connection?.saveData) return false;
-  if (['slow-2g', '2g'].includes(connection?.effectiveType)) return false;
+  if (isConnectionLikelyMetered(connection)) return false;
   return true;
 }
 
@@ -81,7 +87,7 @@ export async function preloadWhisperModel({
   cacheStorage = globalThis.caches,
   fetchImpl = globalThis.fetch,
   storage = safeStorage(),
-  model = WHISPER_TINY_EN_Q5_1,
+  model = WHISPER_BASE_EN_Q5_1,
   now = nowMs,
 } = {}) {
   if (!cacheStorage || !fetchImpl) {
@@ -150,8 +156,49 @@ export function maybePreloadWhisperModel(options = {}) {
   return preloadPromise;
 }
 
-export async function tryLocalTranscribeAudio() {
+function getWorker() {
+  if (workerInstance) return workerInstance;
+  if (typeof Worker !== 'function') return null;
+  workerInstance = new Worker(new URL('../workers/localTranscription.worker.js', import.meta.url), { type: 'module' });
+  return workerInstance;
+}
+
+function askWorker(message, { timeoutMs = 1500 } = {}) {
+  const worker = getWorker();
+  if (!worker) return null;
+
+  return new Promise((resolve) => {
+    const id = `lt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timer = setTimeout(() => {
+      worker.removeEventListener('message', onMessage);
+      resolve({ ok: false, reason: 'runtime_timeout' });
+    }, timeoutMs);
+    function onMessage(event) {
+      if (event.data?.id !== id) return;
+      clearTimeout(timer);
+      worker.removeEventListener('message', onMessage);
+      resolve(event.data.result);
+    }
+    worker.addEventListener('message', onMessage);
+    worker.postMessage({ ...message, id });
+  });
+}
+
+export async function tryLocalTranscribeAudio(audioBlob, { captureContext = null } = {}) {
   const capabilities = canUseWhisperWasm();
+  const workerResult = await askWorker({
+    type: 'transcribe',
+    audioBlob,
+    captureContext,
+    model: WHISPER_BASE_EN_Q5_1,
+  });
+  if (workerResult) {
+    return {
+      ...workerResult,
+      capabilities,
+      provider: workerResult.provider || 'whisper.cpp',
+    };
+  }
   return {
     ok: false,
     reason: 'runtime_not_integrated',
@@ -161,4 +208,6 @@ export async function tryLocalTranscribeAudio() {
 
 export function resetLocalTranscriptionServiceForTests() {
   preloadPromise = null;
+  workerInstance?.terminate?.();
+  workerInstance = null;
 }

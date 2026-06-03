@@ -20,11 +20,10 @@ import { predictionSourcePresentation } from './services/predictionSourceService
 import { runPreExtraction } from './services/preExtractionService';
 import {
   getLocalTranscriptionMetrics,
-  getSuccessfulCaptureCount,
   maybePreloadWhisperModel,
   recordSuccessfulTranscription,
   tryLocalTranscribeAudio,
-  WHISPER_TINY_EN_Q5_1,
+  WHISPER_BASE_EN_Q5_1,
 } from './services/localTranscriptionService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
@@ -254,7 +253,7 @@ export function HomeScreen({
   const [contextNotes, setContextNotes] = useState(() => captureContextService.get()?.notes || '');
   const [captureContextPanelDismissed, setCaptureContextPanelDismissed] = useState(false);
   const [localTranscriptionMetrics, setLocalTranscriptionMetrics] = useState(() => getLocalTranscriptionMetrics());
-  const [successfulCaptureCount, setSuccessfulCaptureCount] = useState(() => getSuccessfulCaptureCount());
+  const [, setSuccessfulCaptureCount] = useState(0);
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -741,7 +740,7 @@ export function HomeScreen({
       ];
       const successfulCaptures = recordSuccessfulTranscription();
       setSuccessfulCaptureCount(successfulCaptures);
-      const preload = maybePreloadWhisperModel({ successfulCaptures });
+      const preload = maybePreloadWhisperModel();
       preload?.then(setLocalTranscriptionMetrics).catch(() => {
         setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
       });
@@ -2617,12 +2616,12 @@ export function HomeScreen({
                 )}
                 <p className="mt-1 text-xs text-gray-500">
                   Local voice: {localTranscriptionMetrics?.modelCached
-                    ? `${WHISPER_TINY_EN_Q5_1.id} model cached`
+                    ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
                     : localTranscriptionMetrics?.status === 'failed'
                       ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
-                      : successfulCaptureCount >= 2
-                        ? `preloading ${Math.round(WHISPER_TINY_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`
-                        : `model preload starts after ${2 - successfulCaptureCount} more capture${successfulCaptureCount === 1 ? '' : 's'}`}
+                      : localTranscriptionMetrics?.status === 'unavailable'
+                        ? 'local cache unavailable'
+                        : `preloading ${Math.round(WHISPER_BASE_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`}
                 </p>
               </div>
               <button

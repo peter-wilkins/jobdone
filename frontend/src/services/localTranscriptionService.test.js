@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  WHISPER_TINY_EN_Q5_1,
+  WHISPER_BASE_EN_Q5_1,
   getSuccessfulCaptureCount,
+  isConnectionLikelyMetered,
   maybePreloadWhisperModel,
   preloadWhisperModel,
   recordSuccessfulTranscription,
@@ -47,13 +48,15 @@ test('records successful captures before lazy preload is eligible', () => {
   assert.equal(getSuccessfulCaptureCount(storage), 2);
 });
 
-test('preloads only after repeated successful captures on usable connections', () => {
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 1 }), false);
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 2, online: false }), false);
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 2, connection: { saveData: true } }), false);
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 2, connection: { effectiveType: '2g' } }), false);
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 2, connection: { effectiveType: '4g' } }), true);
-  assert.equal(shouldPreloadWhisperModel({ successfulCaptures: 2, metrics: { modelCached: true } }), false);
+test('preloads opportunistically on usable unmetered connections', () => {
+  assert.equal(shouldPreloadWhisperModel({ online: false }), false);
+  assert.equal(shouldPreloadWhisperModel({ connection: { saveData: true } }), false);
+  assert.equal(shouldPreloadWhisperModel({ connection: { type: 'cellular' } }), false);
+  assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '2g' } }), false);
+  assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '4g' } }), true);
+  assert.equal(shouldPreloadWhisperModel({ metrics: { modelCached: true } }), false);
+  assert.equal(isConnectionLikelyMetered({ type: 'wifi', effectiveType: '4g' }), false);
+  assert.equal(isConnectionLikelyMetered({ type: 'cellular', effectiveType: '4g' }), true);
 });
 
 test('preloads and records whisper model cache metrics', async () => {
@@ -71,8 +74,8 @@ test('preloads and records whisper model cache metrics', async () => {
   });
 
   assert.equal(fetchCalls, 1);
-  assert.equal(metrics.modelId, WHISPER_TINY_EN_Q5_1.id);
-  assert.equal(metrics.modelBytes, 32166155);
+  assert.equal(metrics.modelId, WHISPER_BASE_EN_Q5_1.id);
+  assert.equal(metrics.modelBytes, 59721011);
   assert.equal(metrics.modelCached, true);
   assert.equal(metrics.status, 'downloaded');
 
@@ -107,13 +110,11 @@ test('maybePreloadWhisperModel keeps one preload in flight', async () => {
   };
 
   const first = maybePreloadWhisperModel({
-    successfulCaptures: 2,
     storage,
     cacheStorage,
     fetchImpl,
   });
   const second = maybePreloadWhisperModel({
-    successfulCaptures: 2,
     storage,
     cacheStorage,
     fetchImpl,
