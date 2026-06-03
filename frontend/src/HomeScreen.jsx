@@ -46,6 +46,35 @@ function reviewText(entry) {
     .toLowerCase();
 }
 
+function textEditDistance(left = '', right = '') {
+  const a = String(left);
+  const b = String(right);
+  if (a === b) return 0;
+  if (!a) return b.length;
+  if (!b) return a.length;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function transcriptionSourceLabel(source) {
+  if (source === 'backend') return 'Backend';
+  if (source === 'local') return 'Local';
+  return source || 'Unknown';
+}
+
 function containsContactName(entry, contact) {
   const name = String(contact?.displayName || '')
     .normalize('NFKC')
@@ -677,13 +706,39 @@ export function HomeScreen({
       }
 
       // Transcribe. Local mode is a spike seam; backend remains the fallback.
+      const localStartedAt = performance.now();
       const localResult = await tryLocalTranscribeAudio(entry.audioBlob, { captureContext });
+      const localLatencyMs = Math.round(performance.now() - localStartedAt);
+      const backendStartedAt = performance.now();
       const result = localResult.ok
         ? localResult
         : await apiService.transcribeAudio(entry.audioBlob, { captureContext });
+      const backendLatencyMs = localResult.ok ? null : Math.round(performance.now() - backendStartedAt);
       if (!localResult.ok) {
         console.debug('[LocalTranscription] Backend fallback:', localResult.reason);
       }
+      const selectedSource = localResult.ok ? 'local' : 'backend';
+      const transcriptionCandidates = [
+        {
+          source: 'backend',
+          provider: 'deepgram',
+          transcript: localResult.ok ? '' : result.transcript,
+          selectable: !localResult.ok,
+          selected: selectedSource === 'backend',
+          latencyMs: backendLatencyMs,
+          status: localResult.ok ? 'not_used' : 'ok',
+        },
+        {
+          source: 'local',
+          provider: localResult.provider || 'whisper.cpp',
+          transcript: localResult.ok ? result.transcript : '',
+          selectable: Boolean(localResult.ok),
+          selected: selectedSource === 'local',
+          latencyMs: localLatencyMs,
+          status: localResult.ok ? 'ok' : 'placeholder',
+          reason: localResult.ok ? null : (localResult.reason || 'runtime_not_integrated'),
+        },
+      ];
       const successfulCaptures = recordSuccessfulTranscription();
       setSuccessfulCaptureCount(successfulCaptures);
       const preload = maybePreloadWhisperModel({ successfulCaptures });
@@ -696,6 +751,8 @@ export function HomeScreen({
         transcript: result.transcript,
         summary: result.summary || result.transcript,
         intent: result.intent || 'NOTE',
+        transcriptionSource: selectedSource,
+        transcriptionCandidates,
       });
 
       // Update UI
@@ -733,6 +790,22 @@ export function HomeScreen({
         return newSet;
       });
     }
+  };
+
+  const selectTranscriptionCandidate = async (entry, candidate) => {
+    if (!candidate?.selectable || !candidate.transcript) return;
+    const candidates = (entry.transcriptionCandidates || []).map(item => ({
+      ...item,
+      selected: item.source === candidate.source,
+    }));
+    const updates = {
+      transcript: candidate.transcript,
+      summary: candidate.transcript,
+      transcriptionSource: candidate.source,
+      transcriptionCandidates: candidates,
+    };
+    const updated = await dbService.updateEntry(entry.id, updates);
+    setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...updated } : item));
   };
 
   const startRecording = async ({ flash = false } = {}) => {
@@ -977,6 +1050,30 @@ export function HomeScreen({
             console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
             // Don't fail the UI - entry is safe locally, will retry on next login
           }
+        }
+      }
+
+      if (entry.transcriptionCandidates?.length) {
+        try {
+          const selectedSource = entry.transcriptionSource || entry.transcriptionCandidates.find(candidate => candidate.selected)?.source || 'backend';
+          const selectedCandidate = entry.transcriptionCandidates.find(candidate => candidate.source === selectedSource);
+          await apiService.saveTranscriptionEvaluation({
+            captureId: entry.captureId || entry.id,
+            entryId: timelineEntry.remoteId || null,
+            selectedSource,
+            reviewText: timelineEntry.summary || timelineEntry.transcript || '',
+            editDistance: selectedCandidate?.transcript
+              ? textEditDistance(selectedCandidate.transcript, timelineEntry.summary || timelineEntry.transcript || '')
+              : null,
+            candidates: entry.transcriptionCandidates,
+            metadata: {
+              buildId: BUILD_ID,
+              intent: entry.intent,
+              localFirst: selectedSource === 'local',
+            },
+          });
+        } catch (evaluationErr) {
+          console.warn('[TranscriptionEvaluation] Save failed:', evaluationErr);
         }
       }
 
@@ -1711,6 +1808,8 @@ export function HomeScreen({
       const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
       const reviewEntryText = entry.summary || entry.transcript || '';
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
+      const transcriptionCandidates = entry.transcriptionCandidates || [];
+      const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -1733,6 +1832,51 @@ export function HomeScreen({
             // NOTE layout
             <div className="mb-4">
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
+              {transcriptionCandidates.length > 0 && (
+                <div className="mb-3 grid gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                      Transcription: evaluation
+                    </span>
+                    {selectedTranscriptionSource && (
+                      <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        {transcriptionSourceLabel(selectedTranscriptionSource)} selected
+                      </span>
+                    )}
+                  </div>
+                  {transcriptionCandidates.map(candidate => {
+                    const selected = candidate.source === selectedTranscriptionSource;
+                    const disabled = !candidate.selectable || !candidate.transcript;
+                    return (
+                      <button
+                        key={candidate.source}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => selectTranscriptionCandidate(entry, candidate)}
+                        className={`rounded border px-3 py-2 text-left ${
+                          selected
+                            ? 'border-blue-300 bg-blue-50 text-blue-950'
+                            : disabled
+                              ? 'border-gray-200 bg-gray-50 text-gray-500'
+                              : 'border-gray-200 bg-white text-gray-900'
+                        }`}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium">{transcriptionSourceLabel(candidate.source)}</span>
+                          <span className="text-xs text-gray-500">
+                            {candidate.latencyMs != null ? `${candidate.latencyMs}ms` : candidate.status || 'pending'}
+                          </span>
+                        </span>
+                        {candidate.transcript ? (
+                          <span className="mt-1 block text-sm">{candidate.transcript}</span>
+                        ) : (
+                          <span className="mt-1 block text-xs">{candidate.reason || 'Not ready yet'}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <p className="text-gray-900 mb-2">{reviewEntryText}</p>
               {showSeparateTranscript && (
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>

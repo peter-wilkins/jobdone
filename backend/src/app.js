@@ -10,6 +10,7 @@ import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
 import { registerTeamRoutes } from './routes/teams.js';
+import { registerTranscriptionEvaluationRoutes } from './routes/transcriptionEvaluations.js';
 import { registerRequestIdHooks } from './services/requestId.js';
 import { BUILD_ID_HEADER, registerBuildInfoHooks } from './services/buildInfo.js';
 import { createCorsOriginValidator } from './services/cors.js';
@@ -42,6 +43,7 @@ export function createApp(options = {}) {
   fastify.register(registerStructureRoutes);
   fastify.register(registerLocationRoutes);
   fastify.register(registerTeamRoutes);
+  fastify.register(registerTranscriptionEvaluationRoutes);
 
   fastify.get('/', async () => {
     return {

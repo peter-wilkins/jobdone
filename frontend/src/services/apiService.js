@@ -131,6 +131,23 @@ export class APIService {
     }
   }
 
+  async saveTranscriptionEvaluation(payload) {
+    const body = {
+      ...payload,
+      anonymous_device_id: getFeedbackDeviceId(),
+    };
+    const response = await apiFetch(`${API_BASE_URL}/api/transcription-evaluations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to save transcription evaluation');
+    }
+    return response.json();
+  }
+
   /**
    * Save a confirmed entry to cloud
    * @param {Object} payload - {entryData}
