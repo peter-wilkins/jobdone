@@ -255,7 +255,7 @@ Deferred concept for a future multi-product shell. JobDone V1 invites are Team I
 _Avoid_: Generic Invite, Login Link
 
 **Rejection**:
-Permanent deletion of an Entry before it reaches the Timeline. No recovery.
+Permanent deletion of a Capture before it reaches the Timeline. The user can Reject at any time, regardless of text, attachments, or Work Context selected; MVP trusts that decision without a blocking confirmation. A short undo affordance can be added later if real friction appears.
 _Avoid_: Discard, Cancel
 
 **Capture Bar**:
@@ -422,7 +422,7 @@ _Avoid_: Search bar, Input field, Record button
 - Web Share Target uses one POST endpoint for all inbound shares so text, links, contacts, and files follow the same Capture path
 - Shared Captures open through a dedicated `/share-target` review route
 - The service worker stores raw shared payloads and creates the Capture shell; app code parses and enriches payloads during review
-- A **Capture** moves through: `recording → ready_for_review`; it is committed through Confirmation or permanently deleted through Rejection
+- A default text-first **Capture** starts at `ready_for_review`; optional/beta audio Capture may still pass through `recording`. A Capture is committed through Confirmation or permanently deleted through Rejection
 - A **Query** moves through: `transcribing → ready_for_review` (user sees intent label + transcription, confirms or corrects) → filters Timeline and is saved to recent Queries
 - The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
