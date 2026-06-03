@@ -12,6 +12,7 @@ import {
   resetLocalTranscriptionServiceForTests,
   shouldRaceBackendTranscription,
   shouldPreloadWhisperModel,
+  whisperPreloadBlocker,
   tryLocalTranscribeAudio,
 } from './localTranscriptionService.js';
 
@@ -58,8 +59,23 @@ test('preloads opportunistically on usable unmetered connections', () => {
   assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '2g' } }), false);
   assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '4g' } }), true);
   assert.equal(shouldPreloadWhisperModel({ metrics: { modelCached: true } }), false);
+  assert.equal(whisperPreloadBlocker({ connection: { type: 'cellular' } }), 'cellular');
   assert.equal(isConnectionLikelyMetered({ type: 'wifi', effectiveType: '4g' }), false);
   assert.equal(isConnectionLikelyMetered({ type: 'cellular', effectiveType: '4g' }), true);
+});
+
+test('records paused preload status when auto-download is blocked', () => {
+  resetLocalTranscriptionServiceForTests();
+  const storage = memoryStorage();
+  const preload = maybePreloadWhisperModel({
+    storage,
+    connection: { type: 'cellular' },
+  });
+
+  assert.equal(preload, null);
+  const metrics = JSON.parse(storage.getItem('jobdone.localTranscription.metrics.v1'));
+  assert.equal(metrics.status, 'paused');
+  assert.equal(metrics.reason, 'cellular');
 });
 
 test('preloads and records whisper model cache metrics', async () => {
@@ -94,11 +110,11 @@ test('preloads and records whisper model cache metrics', async () => {
   assert.equal(cachedMetrics.status, 'cached');
 });
 
-test('reports local transcription as unavailable when audio decode is unavailable', async () => {
+test('reports local transcription as unavailable before unsafe worker startup', async () => {
   const result = await tryLocalTranscribeAudio(new Blob(['audio']));
 
   assert.equal(result.ok, false);
-  assert.equal(result.reason, 'audio_decode_unavailable');
+  assert.ok(['shared_array_buffer_unavailable', 'cross_origin_isolation_unavailable'].includes(result.reason));
   assert.equal(typeof result.capabilities.hasWebAssembly, 'boolean');
 });
 

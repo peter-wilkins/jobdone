@@ -2662,6 +2662,8 @@ export function HomeScreen({
                     ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
                     : localTranscriptionMetrics?.status === 'failed'
                       ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
+                      : localTranscriptionMetrics?.status === 'paused'
+                        ? `model preload paused: ${localTranscriptionMetrics.reason || 'connection'}`
                       : localTranscriptionMetrics?.status === 'unavailable'
                         ? 'local cache unavailable'
                         : `preloading ${Math.round(WHISPER_BASE_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`}

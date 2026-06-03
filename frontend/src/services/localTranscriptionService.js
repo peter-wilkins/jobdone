@@ -96,6 +96,7 @@ export function canUseWhisperWasm(global = globalThis) {
     hasSharedArrayBuffer: typeof global.SharedArrayBuffer === 'function',
     hasWorker: typeof global.Worker === 'function',
     hasAudioContext: typeof global.AudioContext === 'function' || typeof global.webkitAudioContext === 'function',
+    isCrossOriginIsolated: Boolean(global.crossOriginIsolated),
   };
 }
 
@@ -107,15 +108,25 @@ export function isConnectionLikelyMetered(connection = safeNavigator()?.connecti
   return false;
 }
 
+export function whisperPreloadBlocker({
+  online = safeNavigator()?.onLine !== false,
+  connection = safeNavigator()?.connection || null,
+  metrics = getLocalTranscriptionMetrics(),
+} = {}) {
+  if (!online) return 'offline';
+  if (metrics?.modelCached) return 'cached';
+  if (connection?.saveData) return 'save_data';
+  if (connection?.type === 'cellular') return 'cellular';
+  if (['slow-2g', '2g'].includes(connection?.effectiveType)) return 'slow_connection';
+  return null;
+}
+
 export function shouldPreloadWhisperModel({
   online = safeNavigator()?.onLine !== false,
   connection = safeNavigator()?.connection || null,
   metrics = getLocalTranscriptionMetrics(),
 } = {}) {
-  if (!online) return false;
-  if (metrics?.modelCached) return false;
-  if (isConnectionLikelyMetered(connection)) return false;
-  return true;
+  return whisperPreloadBlocker({ online, connection, metrics }) === null;
 }
 
 export async function preloadWhisperModel({
@@ -184,7 +195,20 @@ export async function preloadWhisperModel({
 }
 
 export function maybePreloadWhisperModel(options = {}) {
-  if (!shouldPreloadWhisperModel(options)) return null;
+  const blocker = whisperPreloadBlocker(options);
+  if (blocker) {
+    if (blocker !== 'cached') {
+      writeJson(options.storage || safeStorage(), METRICS_KEY, {
+        modelId: (options.model || WHISPER_BASE_EN_Q5_1).id,
+        modelBytes: (options.model || WHISPER_BASE_EN_Q5_1).bytes,
+        modelCached: false,
+        status: 'paused',
+        reason: blocker,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+    return null;
+  }
   preloadPromise ||= preloadWhisperModel(options).finally(() => {
     preloadPromise = null;
   });
@@ -253,6 +277,20 @@ function askWorker(message, { timeoutMs = 30000, transfer = [] } = {}) {
 
 export async function tryLocalTranscribeAudio(audioBlob, { captureContext = null } = {}) {
   const capabilities = canUseWhisperWasm();
+  if (!capabilities.hasSharedArrayBuffer) {
+    return {
+      ok: false,
+      reason: 'shared_array_buffer_unavailable',
+      capabilities,
+    };
+  }
+  if (!capabilities.isCrossOriginIsolated) {
+    return {
+      ok: false,
+      reason: 'cross_origin_isolation_unavailable',
+      capabilities,
+    };
+  }
   let pcm16k;
   try {
     pcm16k = await decodeAudioToPcm16k(audioBlob);
