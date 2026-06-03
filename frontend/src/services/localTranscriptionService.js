@@ -1,6 +1,8 @@
 const CAPTURE_COUNT_KEY = 'jobdone.localTranscription.successfulCaptures.v1';
 const METRICS_KEY = 'jobdone.localTranscription.metrics.v1';
+const ROUTING_KEY = 'jobdone.localTranscription.routing.v1';
 const MODEL_CACHE = 'jobdone-whisper-models-v1';
+const LOCAL_PROMOTION_WIN_STREAK = 5;
 
 export const WHISPER_BASE_EN_Q5_1 = {
   id: 'base.en-q5_1',
@@ -52,6 +54,39 @@ export function getLocalTranscriptionMetrics(storage = safeStorage()) {
 export function recordSuccessfulTranscription(storage = safeStorage()) {
   const next = getSuccessfulCaptureCount(storage) + 1;
   writeJson(storage, CAPTURE_COUNT_KEY, next);
+  return next;
+}
+
+export function getTranscriptionRoutingState(storage = safeStorage()) {
+  return readJson(storage, ROUTING_KEY, {
+    localQualityWinStreak: 0,
+    localPreferred: false,
+    updatedAt: null,
+  });
+}
+
+export function shouldRaceBackendTranscription(storage = safeStorage()) {
+  return !getTranscriptionRoutingState(storage).localPreferred;
+}
+
+export function recordTranscriptionChoice({
+  selectedSource,
+  editDistance = null,
+  originalLength = null,
+  storage = safeStorage(),
+} = {}) {
+  const state = getTranscriptionRoutingState(storage);
+  const length = Number(originalLength) || 0;
+  const distance = Number(editDistance);
+  const smallEdit = !Number.isFinite(distance) || !length || distance <= Math.max(12, Math.round(length * 0.2));
+  const localWin = selectedSource === 'local' && smallEdit;
+  const localQualityWinStreak = localWin ? (Number(state.localQualityWinStreak) || 0) + 1 : 0;
+  const next = {
+    localQualityWinStreak,
+    localPreferred: localQualityWinStreak >= LOCAL_PROMOTION_WIN_STREAK,
+    updatedAt: new Date().toISOString(),
+  };
+  writeJson(storage, ROUTING_KEY, next);
   return next;
 }
 

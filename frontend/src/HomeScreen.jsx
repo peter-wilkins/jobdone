@@ -21,7 +21,9 @@ import { runPreExtraction } from './services/preExtractionService';
 import {
   getLocalTranscriptionMetrics,
   maybePreloadWhisperModel,
+  recordTranscriptionChoice,
   recordSuccessfulTranscription,
+  shouldRaceBackendTranscription,
   tryLocalTranscribeAudio,
   WHISPER_BASE_EN_Q5_1,
 } from './services/localTranscriptionService';
@@ -704,38 +706,73 @@ export function HomeScreen({
         throw new Error('Recording not found');
       }
 
-      // Transcribe. Local mode is a spike seam; backend remains the fallback.
-      const localStartedAt = performance.now();
-      const localResult = await tryLocalTranscribeAudio(entry.audioBlob, { captureContext });
-      const localLatencyMs = Math.round(performance.now() - localStartedAt);
-      const backendStartedAt = performance.now();
-      const result = localResult.ok
-        ? localResult
-        : await apiService.transcribeAudio(entry.audioBlob, { captureContext });
-      const backendLatencyMs = localResult.ok ? null : Math.round(performance.now() - backendStartedAt);
-      if (!localResult.ok) {
-        console.debug('[LocalTranscription] Backend fallback:', localResult.reason);
+      const timedLocal = async () => {
+        const startedAt = performance.now();
+        try {
+          const value = await tryLocalTranscribeAudio(entry.audioBlob, { captureContext });
+          return { source: 'local', value, latencyMs: value.latencyMs ?? Math.round(performance.now() - startedAt) };
+        } catch (error) {
+          return { source: 'local', value: { ok: false, reason: error?.message || 'local_failed' }, latencyMs: Math.round(performance.now() - startedAt) };
+        }
+      };
+      const timedBackend = async () => {
+        const startedAt = performance.now();
+        try {
+          const value = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
+          return { source: 'backend', value: { ...value, ok: true }, latencyMs: Math.round(performance.now() - startedAt) };
+        } catch (error) {
+          return { source: 'backend', value: { ok: false, reason: error?.message || 'backend_failed', error }, latencyMs: Math.round(performance.now() - startedAt) };
+        }
+      };
+
+      const raceBackend = shouldRaceBackendTranscription();
+      const localPromise = timedLocal();
+      const backendPromise = raceBackend ? timedBackend() : null;
+      const firstResult = backendPromise ? await Promise.race([localPromise, backendPromise]) : await localPromise;
+      let localOutcome = firstResult.source === 'local' ? firstResult : null;
+      let backendOutcome = firstResult.source === 'backend' ? firstResult : null;
+
+      if (!firstResult.value.ok) {
+        const fallback = firstResult.source === 'local'
+          ? (backendPromise ? await backendPromise : await timedBackend())
+          : await localPromise;
+        if (fallback.source === 'local') localOutcome = fallback;
+        else backendOutcome = fallback;
       }
-      const selectedSource = localResult.ok ? 'local' : 'backend';
+
+      const selectedOutcome = firstResult.value.ok
+        ? firstResult
+        : [localOutcome, backendOutcome].find(outcome => outcome?.value?.ok);
+      if (!selectedOutcome?.value?.ok) {
+        const failed = firstResult.value.error || new Error(firstResult.value.reason || 'Transcription failed');
+        throw failed;
+      }
+
+      const result = selectedOutcome.value;
+      const selectedSource = selectedOutcome.source;
+      if (selectedSource === 'backend' && !localOutcome?.value?.ok) {
+        console.debug('[LocalTranscription] Backend fallback:', localOutcome?.value?.reason || 'local_unavailable');
+      }
       const transcriptionCandidates = [
         {
           source: 'backend',
           provider: 'deepgram',
-          transcript: localResult.ok ? '' : result.transcript,
-          selectable: !localResult.ok,
+          transcript: backendOutcome?.value?.ok ? backendOutcome.value.transcript : '',
+          selectable: Boolean(backendOutcome?.value?.ok),
           selected: selectedSource === 'backend',
-          latencyMs: backendLatencyMs,
-          status: localResult.ok ? 'not_used' : 'ok',
+          latencyMs: backendOutcome?.latencyMs ?? null,
+          status: backendOutcome?.value?.ok ? 'ok' : (raceBackend ? 'failed' : 'suppressed'),
+          reason: backendOutcome?.value?.ok ? null : (backendOutcome?.value?.reason || (raceBackend ? null : 'local_preferred')),
         },
         {
           source: 'local',
-          provider: localResult.provider || 'whisper.cpp',
-          transcript: localResult.ok ? result.transcript : '',
-          selectable: Boolean(localResult.ok),
+          provider: localOutcome?.value?.provider || 'whisper.cpp',
+          transcript: localOutcome?.value?.ok ? localOutcome.value.transcript : '',
+          selectable: Boolean(localOutcome?.value?.ok),
           selected: selectedSource === 'local',
-          latencyMs: localLatencyMs,
-          status: localResult.ok ? 'ok' : 'placeholder',
-          reason: localResult.ok ? null : (localResult.reason || 'runtime_not_integrated'),
+          latencyMs: localOutcome?.latencyMs ?? null,
+          status: localOutcome?.value?.ok ? 'ok' : 'placeholder',
+          reason: localOutcome?.value?.ok ? null : (localOutcome?.value?.reason || 'runtime_not_integrated'),
         },
       ];
       const successfulCaptures = recordSuccessfulTranscription();
@@ -1056,14 +1093,20 @@ export function HomeScreen({
         try {
           const selectedSource = entry.transcriptionSource || entry.transcriptionCandidates.find(candidate => candidate.selected)?.source || 'backend';
           const selectedCandidate = entry.transcriptionCandidates.find(candidate => candidate.source === selectedSource);
+          const editDistance = selectedCandidate?.transcript
+            ? textEditDistance(selectedCandidate.transcript, timelineEntry.summary || timelineEntry.transcript || '')
+            : null;
+          recordTranscriptionChoice({
+            selectedSource,
+            editDistance,
+            originalLength: selectedCandidate?.transcript?.length || 0,
+          });
           await apiService.saveTranscriptionEvaluation({
             captureId: entry.captureId || entry.id,
             entryId: timelineEntry.remoteId || null,
             selectedSource,
             reviewText: timelineEntry.summary || timelineEntry.transcript || '',
-            editDistance: selectedCandidate?.transcript
-              ? textEditDistance(selectedCandidate.transcript, timelineEntry.summary || timelineEntry.transcript || '')
-              : null,
+            editDistance,
             candidates: entry.transcriptionCandidates,
             metadata: {
               buildId: BUILD_ID,

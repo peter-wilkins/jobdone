@@ -3,11 +3,14 @@ import test from 'node:test';
 import {
   WHISPER_BASE_EN_Q5_1,
   getSuccessfulCaptureCount,
+  getTranscriptionRoutingState,
   isConnectionLikelyMetered,
   maybePreloadWhisperModel,
+  recordTranscriptionChoice,
   preloadWhisperModel,
   recordSuccessfulTranscription,
   resetLocalTranscriptionServiceForTests,
+  shouldRaceBackendTranscription,
   shouldPreloadWhisperModel,
   tryLocalTranscribeAudio,
 } from './localTranscriptionService.js';
@@ -123,4 +126,39 @@ test('maybePreloadWhisperModel keeps one preload in flight', async () => {
   assert.equal(first, second);
   await first;
   assert.equal(fetchCalls, 1);
+});
+
+test('promotes local transcription after repeated good local choices', () => {
+  const storage = memoryStorage();
+
+  for (let i = 0; i < 4; i += 1) {
+    const state = recordTranscriptionChoice({
+      selectedSource: 'local',
+      editDistance: 2,
+      originalLength: 100,
+      storage,
+    });
+    assert.equal(state.localPreferred, false);
+    assert.equal(shouldRaceBackendTranscription(storage), true);
+  }
+
+  const promoted = recordTranscriptionChoice({
+    selectedSource: 'local',
+    editDistance: 2,
+    originalLength: 100,
+    storage,
+  });
+
+  assert.equal(promoted.localPreferred, true);
+  assert.equal(getTranscriptionRoutingState(storage).localQualityWinStreak, 5);
+  assert.equal(shouldRaceBackendTranscription(storage), false);
+});
+
+test('backend choice resets local transcription promotion streak', () => {
+  const storage = memoryStorage();
+  recordTranscriptionChoice({ selectedSource: 'local', editDistance: 0, originalLength: 50, storage });
+  const reset = recordTranscriptionChoice({ selectedSource: 'backend', editDistance: 0, originalLength: 50, storage });
+
+  assert.equal(reset.localQualityWinStreak, 0);
+  assert.equal(reset.localPreferred, false);
 });
