@@ -25,6 +25,17 @@ const STOP_WORDS = new Set([
 ]);
 
 const CANDIDATE_KEYS = ['contacts', 'locations', 'tags', 'teams', 'backlogItems'];
+const TOKEN_ALIASES = new Map([
+  ['rd', 'road'],
+  ['st', 'street'],
+  ['ave', 'avenue'],
+  ['av', 'avenue'],
+  ['ln', 'lane'],
+  ['dr', 'drive'],
+  ['ct', 'court'],
+  ['pl', 'place'],
+  ['ter', 'terrace'],
+]);
 
 function normalizeText(value) {
   return String(value || '')
@@ -38,7 +49,12 @@ function normalizeText(value) {
 function tokenize(value) {
   return normalizeText(value)
     .split(' ')
+    .map(token => TOKEN_ALIASES.get(token) || token)
     .filter(token => token.length > 2 && !STOP_WORDS.has(token));
+}
+
+function normalizeSearchText(value) {
+  return tokenize(value).join(' ');
 }
 
 function candidateLabel(candidate = {}) {
@@ -51,6 +67,21 @@ function candidateLabel(candidate = {}) {
     || '';
 }
 
+function candidateSearchText(candidate = {}) {
+  return [
+    candidate.displayName,
+    candidate.display_name,
+    candidate.description,
+    candidate.title,
+    candidate.label,
+    candidate.name,
+    candidate.addressText,
+    candidate.address_text,
+    candidate.placeText,
+    candidate.place_text,
+  ].filter(Boolean).join(' ');
+}
+
 function isAvailableCandidate(candidate = {}, userId) {
   if (candidate.available === false) return false;
   if (candidate.deleted || candidate.archived) return false;
@@ -61,27 +92,29 @@ function isAvailableCandidate(candidate = {}, userId) {
 }
 
 function exactMentionScore(captureText, label) {
-  const normalizedCapture = normalizeText(captureText);
-  const normalizedLabel = normalizeText(label);
+  const normalizedCapture = normalizeSearchText(captureText);
+  const normalizedLabel = normalizeSearchText(label);
   if (!normalizedCapture || !normalizedLabel) return 0;
   return normalizedCapture.includes(normalizedLabel) ? 100 : 0;
 }
 
-function tokenMentionScore(captureText, label) {
+function tokenMentionScore(captureText, searchText) {
   const captureTokens = new Set(tokenize(captureText));
-  const labelTokens = tokenize(label);
+  const labelTokens = tokenize(searchText);
   if (!captureTokens.size || !labelTokens.length) return 0;
   const matched = labelTokens.filter(token => captureTokens.has(token)).length;
   if (matched === 0) return 0;
   const allTokensMatched = matched === labelTokens.length;
-  return (allTokensMatched ? 50 : 10) + matched;
+  const coverage = matched / labelTokens.length;
+  return Math.round((allTokensMatched ? 40 : 0) + (matched * 15) + (coverage * 30));
 }
 
 function scoreCandidate(captureText, candidate) {
   const label = candidateLabel(candidate);
+  const searchText = candidateSearchText(candidate) || label;
   const exactScore = exactMentionScore(captureText, label);
   if (exactScore) return { score: exactScore, reason: 'exact_name_match', label };
-  const tokenScore = tokenMentionScore(captureText, label);
+  const tokenScore = tokenMentionScore(captureText, searchText);
   if (tokenScore) return { score: tokenScore, reason: 'keyword_match', label };
   return { score: 0, reason: 'no_match', label };
 }
@@ -136,5 +169,6 @@ export function runPreExtraction({
 
 export const preExtractionInternals = {
   normalizeText,
+  normalizeSearchText,
   tokenize,
 };

@@ -290,6 +290,65 @@ test('pre-extraction ranks exact names over weaker keyword matches', () => {
   assert.deepEqual(result.suggestions.contacts.map(candidate => candidate.id), ['exact', 'weak']);
 });
 
+test('pre-extraction matches common address abbreviations', () => {
+  const result = runPreExtraction({
+    captureText: 'Finished the stopcock at Bell Rd.',
+    candidates: {
+      locations: [
+        { id: 'wrong', displayName: 'Bell Lane' },
+        { id: 'right', displayName: 'Bell Road' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.locations[0]?.id, 'right');
+});
+
+test('pre-extraction prefers greedy multi-token overlap over short accidental candidates', () => {
+  const result = runPreExtraction({
+    captureText: 'Replace the kitchen sink tap washer today.',
+    candidates: {
+      backlogItems: [
+        { id: 'short', title: 'Do do', description: 'Do do' },
+        { id: 'target', title: 'Replace sink tap', description: 'Kitchen tap washer replacement' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.backlogItems[0]?.id, 'target');
+  assert.equal(result.suggestions.backlogItems.some(candidate => candidate.id === 'short'), false);
+});
+
+test('pre-extraction property loop prefers higher meaningful overlap across generated backlog items', () => {
+  const actionWords = ['replace', 'clean', 'check', 'repair', 'paint'];
+  const objectWords = ['sink', 'boiler', 'fence', 'pump', 'radiator'];
+  const detailWords = ['washer', 'valve', 'panel', 'seal', 'bracket'];
+  let checked = 0;
+
+  for (const action of actionWords) {
+    for (const object of objectWords) {
+      for (const detail of detailWords) {
+        checked += 1;
+        const result = runPreExtraction({
+          captureText: `${action} the kitchen ${object} ${detail}`,
+          candidates: {
+            backlogItems: [
+              { id: 'weak', title: action, description: 'Tiny accidental match' },
+              { id: 'target', title: `${action} ${object}`, description: `Kitchen ${object} ${detail}` },
+            ],
+          },
+        });
+
+        if (result.suggestions.backlogItems[0]?.id !== 'target') {
+          assert.fail(`Expected target first for ${action}/${object}/${detail}, got ${JSON.stringify(result.suggestions.backlogItems)}`);
+        }
+      }
+    }
+  }
+
+  assert.equal(checked, 125);
+});
+
 test('pre-extraction keeps candidate detail for review controls', () => {
   const result = runPreExtraction({
     captureText: 'Went to 14 Bell Street.',
