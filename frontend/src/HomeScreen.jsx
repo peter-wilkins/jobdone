@@ -99,6 +99,26 @@ function locationDraftFromCandidate(candidate) {
   };
 }
 
+function workContextLabel(item) {
+  return String(item?.description || item?.title || 'Backlog Item').trim();
+}
+
+function workContextTeamLabel(item) {
+  return item?.team?.name || item?.teamName || 'Team';
+}
+
+function workContextSnapshot(item) {
+  return {
+    id: item.id,
+    type: 'backlog_item',
+    label: workContextLabel(item),
+    description: item.description || item.title || '',
+    teamId: item.team?.id || item.team_id || null,
+    teamName: workContextTeamLabel(item),
+    status: item.status || null,
+  };
+}
+
 export function HomeScreen({
   onNavigate,
   user,
@@ -129,6 +149,9 @@ export function HomeScreen({
   const [reviewTags, setReviewTags] = useState({});
   const [reviewStructure, setReviewStructure] = useState({});
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
+  const [reviewWorkContextPanels, setReviewWorkContextPanels] = useState({});
+  const [reviewSelectedWorkContexts, setReviewSelectedWorkContexts] = useState({});
+  const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, claimedItems: [] });
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
   const [confirmingIds, setConfirmingIds] = useState(new Set());
   const [processingIds, setProcessingIds] = useState(new Set());
@@ -160,6 +183,35 @@ export function HomeScreen({
     queryHistoryService.getRecent().then(setRecentQueries);
   }, []);
 
+  const refreshTeamWorkContext = async () => {
+    if (!user || !backendAvailable) {
+      setTeamWorkContext({ hasTeams: false, claimedItems: [] });
+      return;
+    }
+
+    try {
+      const state = await apiService.getMyWorkState();
+      const teams = state.teams || (state.team ? [state.team] : []);
+      const claimedItems = (state.inProgressItems || [])
+        .filter(item => ['claimed', 'submitted', 'needs_more_evidence'].includes(item.status))
+        .filter(item => item?.id && workContextLabel(item))
+        .slice(0, 8);
+      setTeamWorkContext({
+        hasTeams: teams.length > 0,
+        claimedItems,
+      });
+    } catch (err) {
+      console.warn('[Team] Work Context unavailable:', err);
+      setTeamWorkContext({ hasTeams: false, claimedItems: [] });
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshTeamWorkContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, backendAvailable, refreshKey]);
+
   const selectedPredictionCandidates = (entryId) => {
     const structure = reviewStructure[entryId] || {};
     const candidateSet = structure.candidateSet || {};
@@ -170,6 +222,27 @@ export function HomeScreen({
     const tags = (candidateSet.tags || []).filter(candidate => selectedTagIds.has(candidate.id));
     return { structure, candidateSet, prediction, location, contact, tags };
   };
+
+  useEffect(() => {
+    if (teamWorkContext.claimedItems.length !== 1) return;
+    const [onlyClaimedItem] = teamWorkContext.claimedItems;
+    const readyNoteIds = entries
+      .filter(entry => entry.status === 'ready_for_review' && entry.intent !== 'QUERY')
+      .map(entry => entry.id);
+    if (!readyNoteIds.length) return;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReviewSelectedWorkContexts(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const entryId of readyNoteIds) {
+        if (Object.prototype.hasOwnProperty.call(next, entryId)) continue;
+        next[entryId] = [onlyClaimedItem.id];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [entries, teamWorkContext.claimedItems]);
 
   const resetContactCorrection = (entryId) => {
     setReviewContactPanels(prev => ({ ...prev, [entryId]: false }));
@@ -187,6 +260,19 @@ export function HomeScreen({
       const selected = new Set(prev[entryId] || []);
       if (selected.has(tagId)) selected.delete(tagId);
       else selected.add(tagId);
+      return { ...prev, [entryId]: Array.from(selected) };
+    });
+  };
+
+  const toggleWorkContextPanel = (entryId) => {
+    setReviewWorkContextPanels(prev => ({ ...prev, [entryId]: !prev[entryId] }));
+  };
+
+  const toggleReviewWorkContext = (entryId, itemId) => {
+    setReviewSelectedWorkContexts(prev => {
+      const selected = new Set(prev[entryId] || []);
+      if (selected.has(itemId)) selected.delete(itemId);
+      else selected.add(itemId);
       return { ...prev, [entryId]: Array.from(selected) };
     });
   };
@@ -608,7 +694,11 @@ export function HomeScreen({
         return;
       }
       const tags = tagValidations.map(result => ({ label: result.label, categoryName: result.categoryName || 'General' }));
-      const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags });
+      const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[id] || []);
+      const workContexts = teamWorkContext.claimedItems
+        .filter(item => selectedWorkContextIds.has(item.id))
+        .map(workContextSnapshot);
+      const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags, workContexts });
       let timelineEntry = { ...entry, ...confirmedEntry };
 
       // Try to sync to cloud (optional - don't block if it fails)
@@ -694,6 +784,16 @@ export function HomeScreen({
         return next;
       });
       setReviewTags(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewWorkContextPanels(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewSelectedWorkContexts(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -1240,6 +1340,9 @@ export function HomeScreen({
     const entryTags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
       ? entry.tagSnapshots
       : [];
+    const entryWorkContexts = Array.isArray(entry.workContextSnapshots) && entry.workContextSnapshots.length > 0
+      ? entry.workContextSnapshots
+      : [];
 
     if (entry.status === 'recording' || isProcessing) {
       const isQueued = entry.errorMessage === 'offline';
@@ -1328,6 +1431,10 @@ export function HomeScreen({
         groups[category].push(tag);
         return groups;
       }, {});
+      const workContextItems = teamWorkContext.claimedItems || [];
+      const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[entry.id] || []);
+      const selectedWorkContextItems = workContextItems.filter(item => selectedWorkContextIds.has(item.id));
+      const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -1352,6 +1459,83 @@ export function HomeScreen({
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              {workContextItems.length > 0 && (
+                <div className="mb-3">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedWorkContextItems.length > 0 ? (
+                      selectedWorkContextItems.map(item => (
+                        <span
+                          key={item.id}
+                          className="inline-flex max-w-full items-center rounded bg-amber-50 text-sm font-medium text-amber-800"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleWorkContextPanel(entry.id)}
+                            className="min-w-0 px-2.5 py-1 text-left"
+                          >
+                            <span className="block truncate">{workContextLabel(item)}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleReviewWorkContext(entry.id, item.id)}
+                            className="px-2 py-1 text-amber-500"
+                            aria-label={`Remove ${workContextLabel(item)}`}
+                          >
+                            x
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleWorkContextPanel(entry.id)}
+                        className="inline-flex items-center rounded border border-dashed border-amber-300 px-2.5 py-1 text-sm text-amber-800"
+                      >
+                        + Backlog Item
+                      </button>
+                    )}
+                  </div>
+                  {workContextPanelOpen && (
+                    <div className="mt-3 rounded border border-amber-100 bg-amber-50/40 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium text-amber-950">Backlog Item</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleWorkContextPanel(entry.id)}
+                          className="text-sm text-amber-800 underline"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Link this Entry to the work it evidences. You can leave this blank.
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {workContextItems.map(item => {
+                          const selected = selectedWorkContextIds.has(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => toggleReviewWorkContext(entry.id, item.id)}
+                              className={`block w-full rounded border px-3 py-2 text-left ${
+                                selected
+                                  ? 'border-amber-300 bg-white text-amber-900'
+                                  : 'border-amber-100 bg-white/80 text-gray-800'
+                              }`}
+                            >
+                              <span className="block text-sm font-medium">{workContextLabel(item)}</span>
+                              <span className="mt-0.5 block text-xs text-gray-500">
+                                {[workContextTeamLabel(item), item.status === 'needs_more_evidence' ? 'Needs more evidence' : item.status === 'submitted' ? 'Submitted' : 'Claimed'].filter(Boolean).join(' · ')}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="mb-3 flex flex-wrap gap-2">
                 {reviewLocations[entry.id] ? (
                   <span className="inline-flex max-w-full items-center rounded bg-emerald-50 text-sm font-medium text-emerald-700">
@@ -1738,6 +1922,15 @@ export function HomeScreen({
             <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
               <span className="truncate">{primaryContact.displayName}</span>
             </span>
+          </div>
+        )}
+        {entryWorkContexts.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {entryWorkContexts.map(context => (
+              <span key={context.id || context.label} className="inline-flex max-w-full items-center rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                <span className="truncate">{context.label || context.description}</span>
+              </span>
+            ))}
           </div>
         )}
         {entryTags.length > 0 && (

@@ -421,7 +421,7 @@ export class DBService {
   /**
    * Confirm an entry (delete audio, move to saved)
    */
-  async confirmEntry(entryId, { locations = [], contacts = [], tags = [] } = {}) {
+  async confirmEntry(entryId, { locations = [], contacts = [], tags = [], workContexts = [] } = {}) {
     const db = await this.ensureDb();
     const existingLocations = Array.isArray(locations) && locations.length
       ? await this.getLocations('confirmed')
@@ -463,6 +463,8 @@ export class DBService {
         entry.contactSnapshots = [];
         entry.tagIds = [];
         entry.tagSnapshots = [];
+        entry.workContextIds = [];
+        entry.workContextSnapshots = [];
 
         const now = new Date().toISOString();
         const normalizedLocations = locations
@@ -568,6 +570,23 @@ export class DBService {
           });
           entry.tagIds.push(tagId);
           entry.tagSnapshots.push(snapshot);
+        }
+
+        const normalizedWorkContexts = (workContexts || [])
+          .map(context => ({
+            id: context.id || null,
+            type: context.type || 'backlog_item',
+            label: normalizeLocationText(context.label || context.description || ''),
+            description: normalizeLocationText(context.description || context.label || ''),
+            teamId: context.teamId || context.team_id || context.team?.id || null,
+            teamName: context.teamName || context.team_name || context.team?.name || '',
+            status: context.status || null,
+          }))
+          .filter(context => context.id && context.label);
+
+        for (const context of normalizedWorkContexts) {
+          entry.workContextIds.push(context.id);
+          entry.workContextSnapshots.push(context);
         }
 
         const updateRequest = store.put(entry);
