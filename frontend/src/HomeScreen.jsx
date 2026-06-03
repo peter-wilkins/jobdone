@@ -117,6 +117,7 @@ export function HomeScreen({
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
+  const [reviewLocationPanels, setReviewLocationPanels] = useState({});
   const [reviewLocationDrafts, setReviewLocationDrafts] = useState({});
   const [reviewContacts, setReviewContacts] = useState({});
   const [reviewContactPanels, setReviewContactPanels] = useState({});
@@ -172,6 +173,10 @@ export function HomeScreen({
     setReviewContactPanels(prev => ({ ...prev, [entryId]: false }));
     setReviewContactSearch(prev => ({ ...prev, [entryId]: '' }));
     setReviewManualContacts(prev => ({ ...prev, [entryId]: { displayName: '', phone: '', email: '' } }));
+  };
+
+  const toggleLocationPanel = (entryId) => {
+    setReviewLocationPanels(prev => ({ ...prev, [entryId]: !prev[entryId] }));
   };
 
   const togglePredictedTag = (entryId, tagId) => {
@@ -636,6 +641,11 @@ export function HomeScreen({
         return [...inProgress, ...confirmed];
       });
       setReviewLocations(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewLocationPanels(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -1279,6 +1289,7 @@ export function HomeScreen({
       const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
       const selectedLocationDraft = reviewLocationDrafts[entry.id];
+      const locationPanelOpen = Boolean(reviewLocationPanels[entry.id]);
       const canStrengthenSelectedLocation = canStrengthenLocationDraft(selectedLocationDraft);
       const contactCandidates = candidateSet.contacts || [];
       const contactPanelOpen = Boolean(reviewContactPanels[entry.id]);
@@ -1320,38 +1331,49 @@ export function HomeScreen({
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               <div className="mb-3 flex flex-wrap gap-2">
                 {reviewLocations[entry.id] ? (
+                  <span className="inline-flex max-w-full items-center rounded bg-emerald-50 text-sm font-medium text-emerald-700">
+                    <button
+                      type="button"
+                      onClick={() => toggleLocationPanel(entry.id)}
+                      className="min-w-0 px-2.5 py-1 text-left"
+                    >
+                      <span className="block truncate">{reviewLocations[entry.id]}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewLocations(prev => ({ ...prev, [entry.id]: '' }));
+                        setReviewLocationDrafts(prev => {
+                          const next = { ...prev };
+                          delete next[entry.id];
+                          return next;
+                        });
+                      }}
+                      className="px-2 py-1 text-emerald-500"
+                      aria-label="Remove Location"
+                    >
+                      x
+                    </button>
+                  </span>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      setReviewLocations(prev => ({ ...prev, [entry.id]: '' }));
-                      setReviewLocationDrafts(prev => {
-                        const next = { ...prev };
-                        delete next[entry.id];
-                        return next;
-                      });
-                    }}
-                    className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2.5 py-1 text-sm font-medium text-emerald-700"
+                    onClick={() => toggleLocationPanel(entry.id)}
+                    className="inline-flex items-center rounded border border-dashed border-emerald-300 px-2.5 py-1 text-sm text-emerald-700"
                   >
-                    <span className="truncate">{reviewLocations[entry.id]}</span>
-                    <span className="ml-1 text-emerald-500">x</span>
-                  </button>
-                ) : (
-                  <span className="inline-flex items-center rounded border border-dashed border-emerald-300 px-2.5 py-1 text-sm text-emerald-700">
                     + Location
-                  </span>
+                  </button>
                 )}
                 {selectedContact ? (
                   <button
                     type="button"
                     onClick={() => {
-                      setReviewContacts(prev => ({ ...prev, [entry.id]: null }));
                       openContactCorrection(entry.id);
                     }}
                     className="inline-flex max-w-full items-center rounded bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-700"
-                  >
-                    <span className="truncate">{selectedContact.label}</span>
-                    <span className="ml-1 text-violet-500">x</span>
-                  </button>
+                    >
+                      <span className="truncate">{selectedContact.label}</span>
+                    </button>
                 ) : (
                   <button
                     type="button"
@@ -1363,82 +1385,106 @@ export function HomeScreen({
                 )}
               </div>
 
-              <label className="block">
-                <span className="text-sm text-gray-500">Location</span>
-                <input
-                  type="text"
-                  value={reviewLocations[entry.id] || ''}
-                  onChange={(event) => {
-                    setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }));
-                    setReviewLocationDrafts(prev => {
-                      const next = { ...prev };
-                      delete next[entry.id];
-                      return next;
-                    });
-                  }}
-                  placeholder="+ Location"
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
-                />
-              </label>
-              {locationCandidates.length > 0 && (
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {locationCandidates.map(candidate => (
-                    <div
-                      key={candidate.id}
-                      className="shrink-0 rounded border border-emerald-200 bg-white px-2.5 py-1 text-emerald-700"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
-                          setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
-                        }}
-                        className="block max-w-56 text-left text-sm font-medium"
-                      >
-                        <span className="block truncate">{candidate.label}</span>
-                      </button>
-                      {renderCandidateSource(entry.id, 'location', candidate, 'text-emerald-600')}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {canStrengthenSelectedLocation && (
-                <div className="mt-2 rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
+              {locationPanelOpen && (
+                <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/30 p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-emerald-900">Are you here now?</p>
+                    <span className="text-sm font-medium text-emerald-900">Location</span>
                     <button
                       type="button"
-                      onClick={() => handleStrengthenLocationHere(entry)}
-                      className="shrink-0 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 transition"
+                      onClick={() => toggleLocationPanel(entry.id)}
+                      className="text-sm text-emerald-700 underline"
                     >
-                      Add map pin
+                      Close
                     </button>
                   </div>
-                  <p className="mt-1 text-xs text-emerald-700">This will save today&apos;s location to {selectedLocationDraft.displayName} when you confirm.</p>
+                  <label className="mt-2 block">
+                    <input
+                      type="text"
+                      value={reviewLocations[entry.id] || ''}
+                      onChange={(event) => {
+                        setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }));
+                        setReviewLocationDrafts(prev => {
+                          const next = { ...prev };
+                          delete next[entry.id];
+                          return next;
+                        });
+                      }}
+                      placeholder="+ Location"
+                      className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500"
+                    />
+                  </label>
+                  {locationCandidates.length > 0 && (
+                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {locationCandidates.map(candidate => (
+                        <div
+                          key={candidate.id}
+                          className="shrink-0 rounded border border-emerald-200 bg-white px-2.5 py-1 text-emerald-700"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
+                              setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
+                              setReviewLocationPanels(prev => ({ ...prev, [entry.id]: false }));
+                            }}
+                            className="block max-w-56 text-left text-sm font-medium"
+                          >
+                            <span className="block truncate">{candidate.label}</span>
+                          </button>
+                          {renderCandidateSource(entry.id, 'location', candidate, 'text-emerald-600')}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {canStrengthenSelectedLocation && (
+                    <div className="mt-2 rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-emerald-900">Are you here now?</p>
+                        <button
+                          type="button"
+                          onClick={() => handleStrengthenLocationHere(entry)}
+                          className="shrink-0 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 transition"
+                        >
+                          Add map pin
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-emerald-700">This will save today&apos;s location to {selectedLocationDraft.displayName} when you confirm.</p>
+                    </div>
+                  )}
+                  {!reviewLocations[entry.id] && (
+                    <button
+                      type="button"
+                      onClick={() => handleUseCurrentLocation(entry)}
+                      className="mt-2 text-sm text-emerald-700 underline"
+                    >
+                      Use current location for suggestions
+                    </button>
+                  )}
                 </div>
-              )}
-              {!reviewLocations[entry.id] && (
-                <button
-                  type="button"
-                  onClick={() => handleUseCurrentLocation(entry)}
-                  className="mt-2 text-sm text-emerald-700 underline"
-                >
-                  Use current location for suggestions
-                </button>
               )}
 
-              <div className="mt-3">
+              {contactPanelOpen && (
+              <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-gray-500">Contact</span>
-                  <button
-                    type="button"
-                    onClick={() => openContactCorrection(entry.id)}
-                    className="text-sm text-violet-700 underline"
-                  >
-                    {selectedContact ? 'Change Contact' : '+ Contact'}
-                  </button>
-                </div>
-                {contactCandidates.length > 0 ? (
+                  <span className="text-sm font-medium text-violet-900">Contact</span>
+                    <button
+                      type="button"
+                      onClick={() => resetContactCorrection(entry.id)}
+                      className="text-sm text-violet-700 underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {selectedContact && (
+                    <button
+                      type="button"
+                      onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: null }))}
+                      className="mt-2 text-sm text-violet-700 underline"
+                    >
+                      Remove Contact
+                    </button>
+                  )}
+                  {contactCandidates.length > 0 ? (
                   <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
                     {contactCandidates.map(candidate => (
                       <div
@@ -1449,11 +1495,14 @@ export function HomeScreen({
                             : 'border-gray-200 text-gray-700'
                         }`}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }))}
-                          className="block max-w-56 text-left text-sm font-medium"
-                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }));
+                              resetContactCorrection(entry.id);
+                            }}
+                            className="block max-w-56 text-left text-sm font-medium"
+                          >
                           <span className="block truncate">{candidate.label}</span>
                         </button>
                         {renderCandidateSource(entry.id, 'contact', candidate, 'text-violet-600')}
@@ -1463,24 +1512,16 @@ export function HomeScreen({
                 ) : (
                   <p className="mt-1 text-sm text-gray-400">No Contact selected. This is fine if none applies.</p>
                 )}
-                {contactPanelOpen && (
-                  <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3">
+                  <div className="mt-3">
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={contactSearch}
-                        onChange={(event) => handleContactSearchChange(entry.id, event.target.value)}
-                        placeholder="Search saved Contacts"
-                        className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => resetContactCorrection(entry.id)}
-                        className="rounded border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600"
-                      >
-                        Close
-                      </button>
-                    </div>
+                        <input
+                          type="text"
+                          value={contactSearch}
+                          onChange={(event) => handleContactSearchChange(entry.id, event.target.value)}
+                          placeholder="Search saved Contacts"
+                          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
+                        />
+                      </div>
 
                     {contactOptions.length > 0 && (
                       <div className="mt-2 max-h-36 overflow-y-auto rounded border border-white bg-white">
@@ -1554,10 +1595,10 @@ export function HomeScreen({
                       >
                         Create Contact
                       </button>
+                      </div>
                     </div>
                   </div>
                 )}
-              </div>
 
               <div className="mt-3">
                 <span className="text-sm text-gray-500">Tags</span>
