@@ -62,6 +62,14 @@ _Avoid_: Hidden Confirmation, Auto-Save, Final Summary
 An optional review action run after the user has twiddled review context such as Location, Contact, Tags, Work Context, or Backlog Item. Clean Up Text uses the confirmed/reviewed Capture Context to improve the user-visible Entry text, including Markdown formatting, bullet points, deduplication, and clearer wording. It may remove duplication already captured in user-set context, such as repeating a selected Contact in the Entry text. It must not overwrite Context Clues or Work Context values the user has already set.
 _Avoid_: Final Extraction, First Guess, Background Suggestion, Raw Transcript
 
+**Local Transcription**:
+A phone-capable transcription path that turns Capture audio into reviewable text without requiring the backend at that moment. Local Transcription is a product capability: lazy loading, cache status, fallback behaviour, dogfooding metrics, and weak-connectivity UX.
+_Avoid_: Runtime-only Spike, Backend Transcription Replacement
+
+**Transcription Runtime**:
+The concrete self-hosted technology used to perform Local Transcription, such as upstream whisper.cpp WebAssembly or a Rust/WASM runtime. The Runtime is replaceable; it sits behind the Local Transcription seam and may fail independently of the product-level Local Transcription workflow.
+_Avoid_: Product Mode, Capture Flow
+
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
@@ -253,7 +261,8 @@ _Avoid_: Search bar, Input field, Record button
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
 - Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every transcription.
 - Deterministic Pre-Extraction should be phone-capable/client-side where possible. This keeps review snappy, supports offline/local mode, and pairs well with future on-device transcription such as whisper.cpp. Online Clean Up Text can happen later when connectivity returns.
-- On-device transcription is a local-mode spike, not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as local transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
+- Local Transcription is a local-mode product capability, not a specific runtime choice. It owns lazy loading, cache status, backend fallback, dogfood UX, and weak-connectivity behaviour. Transcription Runtime work owns whether JobDone can legally and practically self-host the underlying WASM transcription engine.
+- On-device transcription is not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as Local Transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
 - Clean Up Text is optional. Users who are happy with the text can confirm without waiting for more AI. Clean Up Text may make the message more readable, add Markdown structure such as bullet points, and reduce repeated details already captured by user-set context, but user-set context remains authoritative.
