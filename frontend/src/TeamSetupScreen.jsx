@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
+import { useOutsideDismiss } from './services/outsideDismissService';
 
 const EMPTY_FORM = { description: '', points: 3 };
 const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false };
@@ -110,6 +111,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [isCreatingNewTeam, setIsCreatingNewTeam] = useState(false);
   const [memberTeamsOpen, setMemberTeamsOpen] = useState(false);
+  const memberTeamsRef = useRef(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
@@ -158,6 +160,8 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const hasManagedTeam = Boolean(team.id);
   const selectedOwnedTeamId = hasManagedTeam ? team.id : selectedTeamId;
   const editorTitle = isCreatingNewTeam || !hasManagedTeam ? 'Create Team' : `Edit ${team.name}`;
+
+  useOutsideDismiss(memberTeamsOpen, [memberTeamsRef], () => setMemberTeamsOpen(false));
 
   const selectOwnedTeam = async (ownedTeam) => {
     setSelectedTeamId(ownedTeam.id);
@@ -430,7 +434,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
                 </label>
               )}
               {memberTeams.length > 0 && (
-                <div className="rounded border border-gray-100">
+                <div className="rounded border border-gray-100" ref={memberTeamsRef}>
                   <button
                     type="button"
                     onClick={() => setMemberTeamsOpen(open => !open)}

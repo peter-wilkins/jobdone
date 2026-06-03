@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useOutsideDismiss } from './services/outsideDismissService';
 
 const MENU_ITEMS = [
   { screen: 'home', label: 'Home' },
@@ -18,16 +19,7 @@ export function GlobalMenu({
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    const handleClick = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [isOpen]);
+  useOutsideDismiss(isOpen, [menuRef], () => setIsOpen(false));
 
   const goTo = (screen) => {
     setIsOpen(false);

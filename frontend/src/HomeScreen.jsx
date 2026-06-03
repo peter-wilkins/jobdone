@@ -6,6 +6,7 @@ import { syncService } from './services/syncService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
+import { useOutsideDismiss } from './services/outsideDismissService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -389,17 +390,36 @@ export function HomeScreen({
     });
   }, []);
 
-  // Close dropdown on outside click
+  useOutsideDismiss(queryDropdownOpen, [dropdownRef], () => setQueryDropdownOpen(false));
+
   useEffect(() => {
-    if (!queryDropdownOpen) return;
-    const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setQueryDropdownOpen(false);
-      }
+    const hasOpenReviewPanel = [
+      reviewLocationPanels,
+      reviewContactPanels,
+      reviewWorkContextPanels,
+    ].some(panelState => Object.values(panelState).some(Boolean));
+    if (!hasOpenReviewPanel) return undefined;
+
+    const closeOnOutsidePointer = (event) => {
+      if (event.target?.closest?.('[data-review-dismiss-root]')) return;
+      setReviewLocationPanels({});
+      setReviewContactPanels({});
+      setReviewWorkContextPanels({});
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [queryDropdownOpen]);
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setReviewLocationPanels({});
+      setReviewContactPanels({});
+      setReviewWorkContextPanels({});
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [reviewContactPanels, reviewLocationPanels, reviewWorkContextPanels]);
 
   /**
    * Classify a raw fetch/API error into a user-friendly kind token
@@ -1549,7 +1569,7 @@ export function HomeScreen({
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               {shouldShowWorkContext && (
-                <div className="mb-3">
+                <div className="mb-3" data-review-dismiss-root="work-context">
                   <div className="flex flex-wrap gap-2">
                     {selectedWorkContextItems.length > 0 ? (
                       selectedWorkContextItems.map(item => (
@@ -1585,7 +1605,7 @@ export function HomeScreen({
                     )}
                   </div>
                   {workContextPanelOpen && (
-                    <div className="mt-3 rounded border border-amber-100 bg-amber-50/40 p-3">
+                    <div className="mt-3 rounded border border-amber-100 bg-amber-50/40 p-3" data-review-dismiss-root="work-context-panel">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm font-medium text-amber-950">Backlog Item</span>
                         <button
@@ -1705,7 +1725,7 @@ export function HomeScreen({
               )}
               <div className="mb-3 flex flex-wrap gap-2">
                 {reviewLocations[entry.id] ? (
-                  <span className="inline-flex max-w-full items-center rounded bg-emerald-50 text-sm font-medium text-emerald-700">
+                  <span className="inline-flex max-w-full items-center rounded bg-emerald-50 text-sm font-medium text-emerald-700" data-review-dismiss-root="location-trigger">
                     <button
                       type="button"
                       onClick={() => toggleLocationPanel(entry.id)}
@@ -1732,6 +1752,7 @@ export function HomeScreen({
                 ) : (
                   <button
                     type="button"
+                    data-review-dismiss-root="location-trigger"
                     onClick={() => toggleLocationPanel(entry.id)}
                     className="inline-flex items-center rounded border border-dashed border-emerald-300 px-2.5 py-1 text-sm text-emerald-700"
                   >
@@ -1741,6 +1762,7 @@ export function HomeScreen({
                 {selectedContact ? (
                   <button
                     type="button"
+                    data-review-dismiss-root="contact-trigger"
                     onClick={() => {
                       openContactCorrection(entry.id);
                     }}
@@ -1751,6 +1773,7 @@ export function HomeScreen({
                 ) : (
                   <button
                     type="button"
+                    data-review-dismiss-root="contact-trigger"
                     onClick={() => openContactCorrection(entry.id)}
                     className="inline-flex items-center rounded border border-dashed border-violet-300 px-2.5 py-1 text-sm text-violet-700"
                   >
@@ -1760,7 +1783,7 @@ export function HomeScreen({
               </div>
 
               {locationPanelOpen && (
-                <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/30 p-3">
+                <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/30 p-3" data-review-dismiss-root="location-panel">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-medium text-emerald-900">Location</span>
                     <button
@@ -1841,7 +1864,7 @@ export function HomeScreen({
               )}
 
               {contactPanelOpen && (
-              <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3">
+              <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3" data-review-dismiss-root="contact-panel">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-violet-900">Contact</span>
                     <button
