@@ -44,3 +44,12 @@ CREATE POLICY deny_all_direct_access
   WITH CHECK (false);
 
 GRANT ALL ON TABLE transcription_evaluations TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE transcription_evaluations TO jobdone_backend;
+
+DROP POLICY IF EXISTS backend_direct_access ON transcription_evaluations;
+CREATE POLICY backend_direct_access
+  ON transcription_evaluations
+  FOR ALL
+  TO jobdone_backend
+  USING (true)
+  WITH CHECK (true);
