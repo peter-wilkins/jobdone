@@ -78,6 +78,10 @@ _Avoid_: Hidden Provider Choice, Debug-only Log
 A dogfooding and testing path that compares two or more Transcription Sources, Runtimes, or backend Providers for latency, quality, and failure behaviour without changing the normal Capture path by default. The same Evaluation harness should compare Local Transcription against backend transcription now, and backend Provider A against backend Provider B later. When two transcripts are produced, Evaluation may show both in review and let the user choose the better one; that choice is the first quality signal.
 _Avoid_: Permanent Race Mode, Provider Lock-In
 
+**Beta Tester**:
+A User who has explicitly opted in to preview or diagnostic product behaviour before it is ready for normal users. Beta Tester status can enable extra feedback surfaces such as Transcription Evaluation after JobDone has real users.
+_Avoid_: Hidden Debug Victim, Internal User Only
+
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
@@ -275,7 +279,8 @@ _Avoid_: Search bar, Input field, Record button
 - Transcription Evaluation should be provider-agnostic. Evaluation records should include source/provider, latency, success/failure, and enough user-visible quality signal for dogfooding, but JobDone should not permanently race every Capture by default.
 - When Evaluation produces competing transcripts, Entry review should show both and let the user pick the better starting point before Pre-Extraction runs. The selected transcript becomes quality feedback as well as the text used for Context Clue and Work Context suggestions.
 - Losing Evaluation transcripts are diagnostic material, not normal Entry content. They may be kept with Evaluation metadata for debugging and provider comparison, but should not appear in Timeline, Recall, Share Packs, or normal Entry text.
-- During no-user MVP dogfooding, Transcription Evaluation can be enabled by default so Capture quality feedback is gathered quickly. Before real users, this should move behind a visible debug or feature flag.
+- Transcription Evaluation records should be stored durably on the backend, with local buffering when offline. Provider comparison needs durable rows with Capture identity, selected source, transcript candidates, latency, failure information, and the user's choice.
+- During no-user MVP dogfooding, Transcription Evaluation can be enabled by default so Capture quality feedback is gathered quickly. Before normal users, this should move behind a visible debug or Beta Tester flag.
 - On-device transcription is not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as Local Transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
