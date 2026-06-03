@@ -112,9 +112,10 @@ export function whisperPreloadBlocker({
   online = safeNavigator()?.onLine !== false,
   connection = safeNavigator()?.connection || null,
   metrics = getLocalTranscriptionMetrics(),
+  model = WHISPER_BASE_EN_Q5_1,
 } = {}) {
   if (!online) return 'offline';
-  if (metrics?.modelCached) return 'cached';
+  if (metrics?.modelCached && metrics.modelId === model.id) return 'cached';
   if (connection?.saveData) return 'save_data';
   if (connection?.type === 'cellular') return 'cellular';
   if (['slow-2g', '2g'].includes(connection?.effectiveType)) return 'slow_connection';
@@ -125,8 +126,9 @@ export function shouldPreloadWhisperModel({
   online = safeNavigator()?.onLine !== false,
   connection = safeNavigator()?.connection || null,
   metrics = getLocalTranscriptionMetrics(),
+  model = WHISPER_BASE_EN_Q5_1,
 } = {}) {
-  return whisperPreloadBlocker({ online, connection, metrics }) === null;
+  return whisperPreloadBlocker({ online, connection, metrics, model }) === null;
 }
 
 export async function preloadWhisperModel({

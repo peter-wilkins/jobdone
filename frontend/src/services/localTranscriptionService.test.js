@@ -58,7 +58,8 @@ test('preloads opportunistically on usable unmetered connections', () => {
   assert.equal(shouldPreloadWhisperModel({ connection: { type: 'cellular' } }), false);
   assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '2g' } }), false);
   assert.equal(shouldPreloadWhisperModel({ connection: { effectiveType: '4g' } }), true);
-  assert.equal(shouldPreloadWhisperModel({ metrics: { modelCached: true } }), false);
+  assert.equal(shouldPreloadWhisperModel({ metrics: { modelCached: true, modelId: WHISPER_BASE_EN_Q5_1.id } }), false);
+  assert.equal(shouldPreloadWhisperModel({ metrics: { modelCached: true, modelId: 'tiny.en-q5_1' } }), true);
   assert.equal(whisperPreloadBlocker({ connection: { type: 'cellular' } }), 'cellular');
   assert.equal(isConnectionLikelyMetered({ type: 'wifi', effectiveType: '4g' }), false);
   assert.equal(isConnectionLikelyMetered({ type: 'cellular', effectiveType: '4g' }), true);

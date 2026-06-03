@@ -2658,8 +2658,10 @@ export function HomeScreen({
                   <p className="mt-1 text-xs text-gray-500">Dogfood panel. Saved context is active; edit it here or dismiss for now.</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500">
-                  Local voice: {localTranscriptionMetrics?.modelCached
+                  Local voice: {localTranscriptionMetrics?.modelCached && localTranscriptionMetrics.modelId === WHISPER_BASE_EN_Q5_1.id
                     ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
+                    : localTranscriptionMetrics?.modelCached
+                      ? `cached ${localTranscriptionMetrics.modelId || 'old model'}; loading ${WHISPER_BASE_EN_Q5_1.id}`
                     : localTranscriptionMetrics?.status === 'failed'
                       ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
                       : localTranscriptionMetrics?.status === 'paused'
