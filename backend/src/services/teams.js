@@ -558,6 +558,12 @@ export function shouldAutoApproveSubmission(team = {}, { submitterEmail = null, 
   return Boolean(submitter && claimant && submitter === claimant);
 }
 
+export function isBacklogItemClaimedByEmail(row = {}, userEmail = null) {
+  const email = normalizedEmail(userEmail);
+  if (!email) return true;
+  return normalizedEmail(row.claimed_by_email) === email;
+}
+
 export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
   if (!db) return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
   const teams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
@@ -581,8 +587,14 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID,
   const { data: rows, error } = await query;
   if (error) throw error;
 
-  const inProgressRows = (rows || []).filter(row => ['claimed', 'submitted', 'needs_more_evidence'].includes(row.status));
-  const approvedRows = (rows || []).filter(row => row.status === 'approved');
+  const inProgressRows = (rows || []).filter(row =>
+    ['claimed', 'submitted', 'needs_more_evidence'].includes(row.status) &&
+    isBacklogItemClaimedByEmail(row, userEmail)
+  );
+  const approvedRows = (rows || []).filter(row =>
+    row.status === 'approved' &&
+    isBacklogItemClaimedByEmail(row, userEmail)
+  );
   const requestBacklogIds = [...inProgressRows, ...approvedRows].map(row => row.id);
   const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, userEmail ? teamIds : teamId, requestBacklogIds);
   const teamForRow = row => teamByIdMap.get(row.team_id) || visibleTeams[0] || null;
@@ -1000,7 +1012,7 @@ export async function claimBacklogItem(id, { db = jobdoneDb, teamId = DOGFOOD_TE
   const { data, error } = await query;
   if (error) throw error;
   if (!data) {
-    const notFound = new Error('Someone has already picked this item up.');
+    const notFound = new Error('Great news! Someone else just claimed this task.');
     notFound.statusCode = 409;
     throw notFound;
   }

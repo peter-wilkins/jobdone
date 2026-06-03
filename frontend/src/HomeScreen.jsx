@@ -13,12 +13,7 @@ import {
   validateContactDraftForCreation,
 } from './services/contactPickerService';
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
-import { applyServiceWorkerUpdate, checkForAppUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
-import {
-  getInstallState,
-  listenForInstallPrompt,
-  requestInstall,
-} from './services/installPromptService';
+import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
@@ -133,14 +128,11 @@ export function HomeScreen({
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
   const [confirmingIds, setConfirmingIds] = useState(new Set());
-  const [captureCount, setCaptureCount] = useState(0);
   const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
-  const [fastCaptureEnabled, setFastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
-  const [installState, setInstallState] = useState(getInstallState);
-  const [installMessage, setInstallMessage] = useState(null);
+  const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -233,8 +225,6 @@ export function HomeScreen({
       setUpdateStatus(null);
     });
   }, []);
-
-  useEffect(() => listenForInstallPrompt(setInstallState), []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -464,44 +454,12 @@ export function HomeScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fastCaptureEnabled, canAutoStart, foregroundReturnCount, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
 
-  const handleFastCaptureChange = (enabled) => {
-    preferencesService.setFastCaptureEnabled(enabled);
-    setFastCaptureEnabled(enabled);
-  };
-
-  const handleInstall = async () => {
-    setInstallMessage(null);
-    const result = await requestInstall();
-    if (result.mode === 'manual') {
-      setInstallMessage('In Chrome, open the menu and choose Install app. You can keep using JobDone here too.');
-    } else if (result.outcome === 'dismissed') {
-      setInstallMessage('No problem. You can install from this menu later.');
-    }
-    setInstallState(getInstallState());
-  };
-
   const handleApplyUpdate = async () => {
     if (updateRegistration) {
       await applyServiceWorkerUpdate(updateRegistration);
       return;
     }
     window.location.reload();
-  };
-
-  const handleCheckForUpdate = async () => {
-    setUpdateStatus('checking');
-    try {
-      const hasUpdate = await checkForAppUpdate();
-      if (hasUpdate) {
-        setUpdateStatus('available');
-        window.location.reload();
-      } else {
-        setUpdateStatus('current');
-      }
-    } catch (err) {
-      console.warn('[PWA] Update check failed:', err);
-      setUpdateStatus('failed');
-    }
   };
 
   const stopRecording = async () => {
@@ -784,34 +742,6 @@ export function HomeScreen({
     return isAvailable;
   };
 
-  const handleClearLocalDatabase = async () => {
-    const confirmed = window.confirm('Clear all local JobDone data on this device? This removes local entries, captures, contacts, tags, feedback, and query history.');
-    if (!confirmed) return;
-
-    try {
-      await dbService.clearAll();
-      setEntries([]);
-      setCaptureCount(0);
-      setRecentQueries([]);
-      setActiveQuery(null);
-      setQueryResults(null);
-      setReviewLocations({});
-      setReviewContacts({});
-      setReviewContactPanels({});
-      setReviewContactSearch({});
-      setReviewContactOptions({});
-      setReviewManualContacts({});
-      setReviewTags({});
-      setReviewStructure({});
-      setReviewSelectedTags({});
-      setError(null);
-      window.location.reload();
-    } catch (err) {
-      console.error('Failed to clear local database:', err);
-      setError('Failed to clear local database');
-    }
-  };
-
   const addLocationCandidateForEntry = (entryId, candidate) => {
     setReviewStructure(prev => {
       const current = prev[entryId] || {};
@@ -1035,9 +965,6 @@ export function HomeScreen({
   useEffect(() => {
     const loadJobs = async () => {
       try {
-        const captures = await dbService.getCaptures();
-        setCaptureCount(captures.length);
-
         const inProgressEntries = await dbService.getEntries('recording');
         const readyForReviewEntries = await dbService.getEntries('ready_for_review');
         const failedEntries = await dbService.getEntries('failed');
@@ -1864,15 +1791,6 @@ export function HomeScreen({
           currentScreen="home"
           onNavigate={onNavigate}
           user={user}
-          position="inline"
-          captureCount={captureCount}
-          installState={installState}
-          installMessage={installMessage}
-          onInstall={handleInstall}
-          fastCaptureEnabled={fastCaptureEnabled}
-          onFastCaptureChange={handleFastCaptureChange}
-          onCheckForUpdate={handleCheckForUpdate}
-          onClearLocalDatabase={handleClearLocalDatabase}
         />
       </div>
 

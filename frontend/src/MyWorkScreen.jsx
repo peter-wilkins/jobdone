@@ -102,7 +102,7 @@ function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntries, onSu
   );
 }
 
-function OpenItem({ item, pointsEnabled, onClaim, busy }) {
+function OpenItem({ item, pointsEnabled, onClaim, busy, claimError }) {
   const rowPointsEnabled = itemPointsEnabled(item, pointsEnabled);
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
@@ -115,13 +115,16 @@ function OpenItem({ item, pointsEnabled, onClaim, busy }) {
         </div>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || Boolean(claimError)}
           onClick={() => onClaim(item)}
-          className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded hover:bg-gray-800 disabled:opacity-50"
+          className="shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-gray-900 rounded hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-500"
         >
           Claim
         </button>
       </div>
+      {claimError && (
+        <p className="mt-2 text-xs font-medium text-red-700">{claimError} Pick another one.</p>
+      )}
     </div>
   );
 }
@@ -149,6 +152,7 @@ export function MyWorkScreen({ onBack }) {
   const [approvedItems, setApprovedItems] = useState([]);
   const [recentEntries, setRecentEntries] = useState([]);
   const [busyItemId, setBusyItemId] = useState(null);
+  const [claimErrors, setClaimErrors] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -167,6 +171,10 @@ export function MyWorkScreen({ onBack }) {
       setInProgressItems(state.inProgressItems || []);
       setOpenBacklogItems(state.openBacklogItems || []);
       setApprovedItems(state.approvedItems || []);
+      setClaimErrors(errors => {
+        const openIds = new Set((state.openBacklogItems || []).map(item => item.id));
+        return Object.fromEntries(Object.entries(errors).filter(([id]) => openIds.has(id)));
+      });
     } catch (err) {
       setStaleError(err.message || 'Could not refresh My Work');
     } finally {
@@ -188,7 +196,6 @@ export function MyWorkScreen({ onBack }) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWorkState();
     loadRecentEntries();
   }, [loadRecentEntries, loadWorkState]);
@@ -226,10 +233,17 @@ export function MyWorkScreen({ onBack }) {
     setError(null);
     try {
       await apiService.claimTeamBacklogItem(item.id);
+      setClaimErrors(errors => {
+        const next = { ...errors };
+        delete next[item.id];
+        return next;
+      });
       await loadWorkState();
     } catch (err) {
-      setError(err.message || 'Could not claim Backlog Item');
-      await loadWorkState({ showLoading: false, showRefreshing: false });
+      setClaimErrors(errors => ({
+        ...errors,
+        [item.id]: err.message || 'Great news! Someone else just claimed this task.',
+      }));
     } finally {
       setBusyItemId(null);
     }
@@ -331,6 +345,7 @@ export function MyWorkScreen({ onBack }) {
                     item={item}
                     pointsEnabled={pointsEnabled}
                     busy={busyItemId === item.id}
+                    claimError={claimErrors[item.id]}
                     onClaim={claimItem}
                   />
                 ))
