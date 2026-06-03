@@ -381,7 +381,7 @@ export async function saveTranscriptionEvaluation(identity = {}, evaluation = {}
     edit_distance: Number.isFinite(Number(evaluation.editDistance ?? evaluation.edit_distance))
       ? Math.max(0, Math.round(Number(evaluation.editDistance ?? evaluation.edit_distance)))
       : null,
-    candidates,
+    candidates: JSON.stringify(candidates),
     metadata: {
       ...(evaluation.metadata || {}),
       source: 'frontend_review',
