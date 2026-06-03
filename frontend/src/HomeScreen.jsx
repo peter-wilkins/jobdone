@@ -166,8 +166,12 @@ export function HomeScreen({
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
   const [captureContext, setCaptureContext] = useState(() => captureContextService.get());
-  const [contextTemplateId, setContextTemplateId] = useState(CAPTURE_CONTEXT_TEMPLATES[0].id);
-  const [contextNotes, setContextNotes] = useState('');
+  const [contextTemplateId, setContextTemplateId] = useState(() => {
+    const savedContext = captureContextService.get();
+    return savedContext?.templateId || CAPTURE_CONTEXT_TEMPLATES[0].id;
+  });
+  const [contextNotes, setContextNotes] = useState(() => captureContextService.get()?.notes || '');
+  const [captureContextPanelDismissed, setCaptureContextPanelDismissed] = useState(false);
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -731,6 +735,7 @@ export function HomeScreen({
     const next = buildCaptureContext(contextTemplateId, contextNotes);
     captureContextService.save(next);
     setCaptureContext(next);
+    setCaptureContextPanelDismissed(true);
   };
 
   const OFFLINE_MSG = 'Recall isn\'t available right now. Try again in a moment.';
@@ -2303,10 +2308,24 @@ export function HomeScreen({
         </div>
       )}
 
-      {!captureContext && (
+      {!captureContextPanelDismissed && (
         <div className="border-b border-gray-200 bg-gray-50 px-4 py-4">
           <div className="mx-auto max-w-2xl">
-            <p className="text-sm font-medium text-gray-900">What will you mostly use JobDone for?</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">What will you mostly use JobDone for?</p>
+                {captureContext && (
+                  <p className="mt-1 text-xs text-gray-500">Dogfood panel. Saved context is active; edit it here or dismiss for now.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCaptureContextPanelDismissed(true)}
+                className="shrink-0 rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Dismiss
+              </button>
+            </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {CAPTURE_CONTEXT_TEMPLATES.map(template => (
                 <button
