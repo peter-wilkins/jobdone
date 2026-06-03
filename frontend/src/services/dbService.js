@@ -335,6 +335,47 @@ export class DBService {
   }
 
   /**
+   * Create a text-first entry Capture for review. No audio/transcription required.
+   */
+  async createTextEntry(entryData = {}) {
+    const db = await this.ensureDb();
+    const now = new Date().toISOString();
+    const text = entryData.text || '';
+
+    const entry = {
+      id: this.generateId(),
+      ...entryData,
+      audioBlob: null,
+      audioSize: 0,
+      audioDuration: null,
+      status: 'ready_for_review',
+      syncStatus: 'pending',
+      remoteId: null,
+      created_at: now,
+      synced_at: null,
+      captureId: null,
+      transcript: text,
+      summary: text,
+      intent: entryData.intent || 'NOTE',
+      source: entryData.source || 'text',
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.add(entry);
+
+      request.onsuccess = () => {
+        resolve(entry.id);
+      };
+
+      request.onerror = () => {
+        reject(new Error('Failed to create text entry'));
+      };
+    });
+  }
+
+  /**
    * Update entry with transcription + summary data
    */
   async updateEntryWithTranscription(entryId, { transcript, summary, intent, transcriptionSource, transcriptionCandidates }) {

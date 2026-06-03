@@ -18,6 +18,7 @@ import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './s
 import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
+import { classify } from './services/classifyService';
 import {
   getSuccessfulCaptureCount,
   getLocalTranscriptionMetrics,
@@ -38,6 +39,7 @@ const MIN_STOP_AFTER_MS = 1000;
 const MIN_RECORDING_SECONDS = 1;
 const BACKEND_FIRST_LOCAL_DELAY_MS = 750;
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
+const ENABLE_TRANSCRIPTION_CAPTURE = import.meta.env.VITE_ENABLE_TRANSCRIPTION_CAPTURE === 'true';
 let fastCaptureAttemptedThisRun = false;
 
 function reviewText(entry) {
@@ -241,6 +243,8 @@ export function HomeScreen({
   const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
   const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
   const [reviewTextDrafts, setReviewTextDrafts] = useState({});
+  const [reviewIntentOverrides, setReviewIntentOverrides] = useState({});
+  const [focusEntryId, setFocusEntryId] = useState(null);
   const [busyWorkContextIds, setBusyWorkContextIds] = useState(new Set());
   const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
@@ -269,6 +273,7 @@ export function HomeScreen({
   const structurePredictionRequestedRef = useRef(new Set());
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
+  const textAreaRefs = useRef(new Map());
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -488,6 +493,7 @@ export function HomeScreen({
   }, []);
 
   useEffect(() => {
+    if (!ENABLE_TRANSCRIPTION_CAPTURE) return;
     if (localTranscriptionPreloadAttemptedRef.current) return;
     if (getSuccessfulCaptureCount() < 1) return;
 
@@ -886,6 +892,41 @@ export function HomeScreen({
     setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...updated } : item));
   };
 
+  const startTextCapture = async () => {
+    try {
+      setError(null);
+      const entryId = await dbService.createTextEntry({ source: 'text', intent: 'NOTE' });
+
+      try {
+        const locationResult = await locationClueService.captureCurrentLocation({ allowPrompt: false });
+        if (locationResult.ok) {
+          await dbService.createDeviceLocationContextClue({ entryId, clue: locationResult.clue });
+        }
+      } catch (locationErr) {
+        console.warn('[Location] Capture-time location clue unavailable:', locationErr);
+      }
+
+      const newEntry = await dbService.getEntry(entryId);
+      setReviewTextDrafts(prev => ({ ...prev, [entryId]: '' }));
+      setFocusEntryId(entryId);
+      setEntries(prev => [newEntry, ...prev]);
+    } catch (err) {
+      console.error('Text capture start error:', err);
+      setError('Could not start a new entry.');
+    }
+  };
+
+  useEffect(() => {
+    if (!focusEntryId) return;
+    const timer = window.setTimeout(() => {
+      const textarea = textAreaRefs.current.get(focusEntryId);
+      textarea?.focus();
+      textarea?.setSelectionRange?.(textarea.value.length, textarea.value.length);
+      setFocusEntryId(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusEntryId, entries]);
+
   const startRecording = async ({ flash = false } = {}) => {
     if (isStartingRecording || isStoppingRecording) return;
 
@@ -914,7 +955,8 @@ export function HomeScreen({
 
     handledRecordRequestRef.current = recordRequestId;
     const timer = window.setTimeout(() => {
-      startRecording({ flash: true });
+      if (ENABLE_TRANSCRIPTION_CAPTURE) startRecording({ flash: true });
+      else startTextCapture();
       onRecordRequestHandled?.();
     }, 0);
     return () => window.clearTimeout(timer);
@@ -925,6 +967,7 @@ export function HomeScreen({
     const isForegroundReturn = foregroundReturnCount > handledForegroundReturnRef.current;
     const isInitialAutoStart = foregroundReturnCount === 0;
 
+    if (!ENABLE_TRANSCRIPTION_CAPTURE) return;
     if (!fastCaptureEnabled) return;
     if (isInitialAutoStart && !fastCaptureEnabledAtOpenRef.current) return;
     if (isInitialAutoStart && !canAutoStart) return;
@@ -1057,12 +1100,16 @@ export function HomeScreen({
       setError(null);
       let entry = entries.find(e => e.id === id);
       const draftText = (reviewTextDrafts[id] ?? '').trim();
+      const nextIntent = reviewIntentOverrides[id] || classify(draftText || entry.summary || entry.transcript || '');
       if (draftText && draftText !== (entry.summary || entry.transcript || '').trim()) {
         entry = await dbService.updateEntry(id, {
           transcript: entry.transcript || draftText,
           summary: draftText,
-          intent: entry.intent || 'NOTE',
+          intent: nextIntent,
         });
+        setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
+      } else if (nextIntent !== entry.intent) {
+        entry = await dbService.updateEntry(id, { intent: nextIntent });
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       }
 
@@ -1268,6 +1315,11 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      setReviewIntentOverrides(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (err) {
       console.error('Failed to confirm entry:', err);
       setError('Failed to confirm entry');
@@ -1301,6 +1353,11 @@ export function HomeScreen({
       await dbService.rejectEntry(id);
       setEntries(prev => prev.filter(e => e.id !== id));
       setReviewTextDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewIntentOverrides(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -1890,13 +1947,6 @@ export function HomeScreen({
     }
 
     if (entry.status === 'ready_for_review') {
-      const isQuery = entry.intent === 'QUERY';
-      
-      const toggleIntent = async () => {
-        const newIntent = isQuery ? 'NOTE' : 'QUERY';
-        await dbService.updateEntry(entry.id, { intent: newIntent });
-        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, intent: newIntent } : e));
-      };
       const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
       const selectedLocationDraft = reviewLocationDrafts[entry.id];
@@ -1926,13 +1976,23 @@ export function HomeScreen({
       const selectedWorkContextItems = workContextItems.filter(item => selectedWorkContextIds.has(item.id));
       const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
       const workContextPanelError = reviewWorkContextErrors[entry.id];
-      const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
       const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
       const transcriptionFailed = entry.errorMessage === 'empty_transcription';
       const reviewEntryText = entry.summary || entry.transcript || '';
       const editableReviewText = Object.prototype.hasOwnProperty.call(reviewTextDrafts, entry.id)
         ? reviewTextDrafts[entry.id]
         : reviewEntryText;
+      const isQuery = (reviewIntentOverrides[entry.id] || classify(editableReviewText)) === 'QUERY';
+      const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
+      const toggleIntent = async () => {
+        const newIntent = isQuery ? 'NOTE' : 'QUERY';
+        await dbService.updateEntry(entry.id, { intent: newIntent });
+        setReviewIntentOverrides(prev => ({ ...prev, [entry.id]: newIntent }));
+        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, intent: newIntent } : e));
+      };
+      const updateReviewText = (text) => {
+        setReviewTextDrafts(prev => ({ ...prev, [entry.id]: text }));
+      };
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
       const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
@@ -1962,7 +2022,17 @@ export function HomeScreen({
             // QUERY layout
             <div className="mb-4">
               <p className="text-sm text-gray-500 mb-1">Searching for:</p>
-              <p className="text-gray-900">{entry.transcript}</p>
+              <textarea
+                ref={(node) => {
+                  if (node) textAreaRefs.current.set(entry.id, node);
+                  else textAreaRefs.current.delete(entry.id);
+                }}
+                value={editableReviewText}
+                onChange={(event) => updateReviewText(event.target.value)}
+                rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
+                placeholder="Type a question to search your Timeline."
+                className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           ) : (
             // NOTE layout
@@ -2014,10 +2084,14 @@ export function HomeScreen({
                 </div>
               )}
               <textarea
+                ref={(node) => {
+                  if (node) textAreaRefs.current.set(entry.id, node);
+                  else textAreaRefs.current.delete(entry.id);
+                }}
                 value={editableReviewText}
-                onChange={(event) => setReviewTextDrafts(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                onChange={(event) => updateReviewText(event.target.value)}
                 rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
-                placeholder="Type here, use phone dictation, or wait for transcription."
+                placeholder="Type here or use keyboard dictation."
                 className="mb-2 w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
               {!reviewEntryText && transcriptionPending && (
@@ -2770,19 +2844,21 @@ export function HomeScreen({
                 {captureContext && (
                   <p className="mt-1 text-xs text-gray-500">Dogfood panel. Saved context is active; edit it here or dismiss for now.</p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">
-                  Local voice: {localTranscriptionMetrics?.modelCached && localTranscriptionMetrics.modelId === WHISPER_BASE_EN_Q5_1.id
-                    ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
-                    : localTranscriptionMetrics?.modelCached
-                      ? `cached ${localTranscriptionMetrics.modelId || 'old model'}; loading ${WHISPER_BASE_EN_Q5_1.id}`
-                    : localTranscriptionMetrics?.status === 'failed'
-                      ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
-                      : localTranscriptionMetrics?.status === 'paused'
-                        ? `model preload paused: ${localTranscriptionMetrics.reason || 'connection'}`
-                      : localTranscriptionMetrics?.status === 'unavailable'
-                        ? 'local cache unavailable'
-                        : `preloading ${Math.round(WHISPER_BASE_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`}
-                </p>
+                {ENABLE_TRANSCRIPTION_CAPTURE && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Local voice: {localTranscriptionMetrics?.modelCached && localTranscriptionMetrics.modelId === WHISPER_BASE_EN_Q5_1.id
+                      ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
+                      : localTranscriptionMetrics?.modelCached
+                        ? `cached ${localTranscriptionMetrics.modelId || 'old model'}; loading ${WHISPER_BASE_EN_Q5_1.id}`
+                      : localTranscriptionMetrics?.status === 'failed'
+                        ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
+                        : localTranscriptionMetrics?.status === 'paused'
+                          ? `model preload paused: ${localTranscriptionMetrics.reason || 'connection'}`
+                        : localTranscriptionMetrics?.status === 'unavailable'
+                          ? 'local cache unavailable'
+                          : `preloading ${Math.round(WHISPER_BASE_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -2886,7 +2962,7 @@ export function HomeScreen({
         {!activeQuery && entries.length === 0 && (
           <div className="py-12 text-center text-gray-400">
             <p className="text-sm">No entries logged yet</p>
-            <p className="text-xs mt-1">Tap the mic to start recording</p>
+            <p className="text-xs mt-1">Tap + to start an entry</p>
           </div>
         )}
         {!activeQuery && entries.length > 0 && (
@@ -2896,7 +2972,7 @@ export function HomeScreen({
         )}
       </div>
 
-      {isRecording ? (
+      {ENABLE_TRANSCRIPTION_CAPTURE && isRecording ? (
         <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
           <button
             onClick={cancelRecording}
@@ -2923,7 +2999,7 @@ export function HomeScreen({
             )}
           </button>
         </div>
-      ) : (
+      ) : ENABLE_TRANSCRIPTION_CAPTURE ? (
         <button
           onClick={startRecording}
           className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
@@ -2937,6 +3013,18 @@ export function HomeScreen({
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
             </svg>
           )}
+        </button>
+      ) : (
+        <button
+          onClick={startTextCapture}
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition hover:bg-gray-800 disabled:opacity-70"
+          title="Start entry"
+          aria-label="Start entry"
+          disabled={isLoading}
+        >
+          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+          </svg>
         </button>
       )}
     </div>
