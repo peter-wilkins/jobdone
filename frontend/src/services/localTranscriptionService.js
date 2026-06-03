@@ -163,7 +163,39 @@ function getWorker() {
   return workerInstance;
 }
 
-function askWorker(message, { timeoutMs = 1500 } = {}) {
+function audioContextCtor(global = globalThis) {
+  return global.AudioContext || global.webkitAudioContext || null;
+}
+
+async function decodeAudioToPcm16k(audioBlob, global = globalThis) {
+  const AudioContextCtor = audioContextCtor(global);
+  const OfflineAudioContextCtor = global.OfflineAudioContext || global.webkitOfflineAudioContext;
+  if (!AudioContextCtor || !OfflineAudioContextCtor) {
+    throw new Error('audio_decode_unavailable');
+  }
+
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const context = new AudioContextCtor();
+  try {
+    const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
+    if (decoded.sampleRate === 16000) {
+      return new Float32Array(decoded.getChannelData(0));
+    }
+
+    const frameCount = Math.max(1, Math.ceil(decoded.duration * 16000));
+    const offline = new OfflineAudioContextCtor(1, frameCount, 16000);
+    const source = offline.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offline.destination);
+    source.start(0);
+    const rendered = await offline.startRendering();
+    return new Float32Array(rendered.getChannelData(0));
+  } finally {
+    context.close?.();
+  }
+}
+
+function askWorker(message, { timeoutMs = 30000, transfer = [] } = {}) {
   const worker = getWorker();
   if (!worker) return null;
 
@@ -180,17 +212,29 @@ function askWorker(message, { timeoutMs = 1500 } = {}) {
       resolve(event.data.result);
     }
     worker.addEventListener('message', onMessage);
-    worker.postMessage({ ...message, id });
+    worker.postMessage({ ...message, id }, transfer);
   });
 }
 
 export async function tryLocalTranscribeAudio(audioBlob, { captureContext = null } = {}) {
   const capabilities = canUseWhisperWasm();
+  let pcm16k = null;
+  try {
+    pcm16k = await decodeAudioToPcm16k(audioBlob);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.message || 'audio_decode_failed',
+      capabilities,
+    };
+  }
   const workerResult = await askWorker({
     type: 'transcribe',
-    audioBlob,
+    pcm16k,
     captureContext,
     model: WHISPER_BASE_EN_Q5_1,
+  }, {
+    transfer: [pcm16k.buffer],
   });
   if (workerResult) {
     return {

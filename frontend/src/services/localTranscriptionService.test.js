@@ -91,11 +91,11 @@ test('preloads and records whisper model cache metrics', async () => {
   assert.equal(cachedMetrics.status, 'cached');
 });
 
-test('reports local transcription runtime as not integrated yet', async () => {
+test('reports local transcription as unavailable when audio decode is unavailable', async () => {
   const result = await tryLocalTranscribeAudio(new Blob(['audio']));
 
   assert.equal(result.ok, false);
-  assert.equal(result.reason, 'runtime_not_integrated');
+  assert.equal(result.reason, 'audio_decode_unavailable');
   assert.equal(typeof result.capabilities.hasWebAssembly, 'boolean');
 });
 
