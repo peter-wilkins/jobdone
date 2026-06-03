@@ -48,6 +48,11 @@ core flows. Backend-only changes should prefer API/database smoke checks over
 broad UI testing. Frontend-visible changes should include a targeted visual
 spot-check when practical.
 
+For UI errors, keep the message close to the action that triggered it. Button,
+input, picker, lookup, and form-specific failures should render beside or just
+below that control. Use page-level banners only for whole-screen conditions such
+as initial load failure, stale/offline state, or broad sync/backend availability.
+
 Playwright QA lives under `frontend/qa/` and is intentionally disposable during
 MVP. Keep release smoke coverage to one or two tests. Feature-specific
 end-to-end spike tests may be written while a change is fresh, but if they become
