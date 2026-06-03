@@ -18,6 +18,14 @@ import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './s
 import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
+import {
+  getLocalTranscriptionMetrics,
+  getSuccessfulCaptureCount,
+  maybePreloadWhisperModel,
+  recordSuccessfulTranscription,
+  tryLocalTranscribeAudio,
+  WHISPER_TINY_EN_Q5_1,
+} from './services/localTranscriptionService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
 
@@ -216,6 +224,8 @@ export function HomeScreen({
   });
   const [contextNotes, setContextNotes] = useState(() => captureContextService.get()?.notes || '');
   const [captureContextPanelDismissed, setCaptureContextPanelDismissed] = useState(false);
+  const [localTranscriptionMetrics, setLocalTranscriptionMetrics] = useState(() => getLocalTranscriptionMetrics());
+  const [successfulCaptureCount, setSuccessfulCaptureCount] = useState(() => getSuccessfulCaptureCount());
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -666,8 +676,20 @@ export function HomeScreen({
         throw new Error('Recording not found');
       }
 
-      // Transcribe - backend returns intent in response
-      const result = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
+      // Transcribe. Local mode is a spike seam; backend remains the fallback.
+      const localResult = await tryLocalTranscribeAudio(entry.audioBlob, { captureContext });
+      const result = localResult.ok
+        ? localResult
+        : await apiService.transcribeAudio(entry.audioBlob, { captureContext });
+      if (!localResult.ok) {
+        console.debug('[LocalTranscription] Backend fallback:', localResult.reason);
+      }
+      const successfulCaptures = recordSuccessfulTranscription();
+      setSuccessfulCaptureCount(successfulCaptures);
+      const preload = maybePreloadWhisperModel({ successfulCaptures });
+      preload?.then(setLocalTranscriptionMetrics).catch(() => {
+        setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
+      });
 
       // Update entry with raw transcription data and intent (goes to ready_for_review).
       const updated = await dbService.updateEntryWithTranscription(jobId, {
@@ -2449,6 +2471,15 @@ export function HomeScreen({
                 {captureContext && (
                   <p className="mt-1 text-xs text-gray-500">Dogfood panel. Saved context is active; edit it here or dismiss for now.</p>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Local voice: {localTranscriptionMetrics?.modelCached
+                    ? `${WHISPER_TINY_EN_Q5_1.id} model cached`
+                    : localTranscriptionMetrics?.status === 'failed'
+                      ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
+                      : successfulCaptureCount >= 2
+                        ? `preloading ${Math.round(WHISPER_TINY_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`
+                        : `model preload starts after ${2 - successfulCaptureCount} more capture${successfulCaptureCount === 1 ? '' : 's'}`}
+                </p>
               </div>
               <button
                 type="button"
