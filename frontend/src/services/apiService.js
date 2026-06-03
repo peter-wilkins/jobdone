@@ -21,6 +21,7 @@ const BUILD_ID = ENV.VITE_BUILD_ID || 'dev';
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 const AUDIO_UPLOAD_TIMEOUT_MS = 60000;
 let updateReloadStarted = false;
+const UPDATE_RELOAD_PREFIX = 'jobdone.updateReloadedForBuild.';
 
 function authHeader() {
   const token = authService.getToken();
@@ -31,10 +32,25 @@ export function shouldApplyAppUpdateForBackendBuild(backendBuild, currentBuild =
   return Boolean(backendBuild && backendBuild !== 'dev' && backendBuild !== currentBuild);
 }
 
+export function shouldStartBuildMismatchReload(backendBuild, {
+  currentBuild = BUILD_ID,
+  storage = globalThis.sessionStorage,
+} = {}) {
+  if (!shouldApplyAppUpdateForBackendBuild(backendBuild, currentBuild)) return false;
+  const key = `${UPDATE_RELOAD_PREFIX}${currentBuild}.${backendBuild}`;
+  try {
+    if (storage?.getItem?.(key)) return false;
+    storage?.setItem?.(key, new Date().toISOString());
+  } catch {
+    return !updateReloadStarted;
+  }
+  return true;
+}
+
 async function apiFetch(...args) {
   const response = await fetchWithRequestDiagnostics(...args);
   const backendBuild = response.headers.get('x-jobdone-build');
-  if (response.ok && shouldApplyAppUpdateForBackendBuild(backendBuild) && !updateReloadStarted) {
+  if (response.ok && !updateReloadStarted && shouldStartBuildMismatchReload(backendBuild)) {
     updateReloadStarted = true;
     applyAvailableAppUpdate();
   }
