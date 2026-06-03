@@ -6,7 +6,9 @@ import { authService } from './authService.js';
 import { normalizeRecallEntry } from './entryMapper.js';
 import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
-import { checkForAndApplyAppUpdate } from './serviceWorker.js';
+import { applyAvailableAppUpdate } from './serviceWorker.js';
+
+const ENV = import.meta.env || {};
 
 function defaultApiBaseUrl() {
   const hostname = globalThis.window?.location?.hostname || '';
@@ -14,21 +16,27 @@ function defaultApiBaseUrl() {
   return 'http://localhost:3000';
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || defaultApiBaseUrl();
+const API_BASE_URL = ENV.VITE_API_URL || defaultApiBaseUrl();
+const BUILD_ID = ENV.VITE_BUILD_ID || 'dev';
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 const AUDIO_UPLOAD_TIMEOUT_MS = 60000;
+let updateReloadStarted = false;
 
 function authHeader() {
   const token = authService.getToken();
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+export function shouldApplyAppUpdateForBackendBuild(backendBuild, currentBuild = BUILD_ID) {
+  return Boolean(backendBuild && backendBuild !== 'dev' && backendBuild !== currentBuild);
+}
+
 async function apiFetch(...args) {
   const response = await fetchWithRequestDiagnostics(...args);
-  if (response.ok) {
-    checkForAndApplyAppUpdate().catch(error => {
-      console.warn('[PWA] Background update check failed:', error);
-    });
+  const backendBuild = response.headers.get('x-jobdone-build');
+  if (response.ok && shouldApplyAppUpdateForBackendBuild(backendBuild) && !updateReloadStarted) {
+    updateReloadStarted = true;
+    applyAvailableAppUpdate();
   }
   return response;
 }

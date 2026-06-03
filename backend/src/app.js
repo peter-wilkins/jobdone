@@ -11,6 +11,7 @@ import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerRequestIdHooks } from './services/requestId.js';
+import { BUILD_ID_HEADER, registerBuildInfoHooks } from './services/buildInfo.js';
 import { createCorsOriginValidator } from './services/cors.js';
 
 export function createApp(options = {}) {
@@ -21,6 +22,7 @@ export function createApp(options = {}) {
 
   fastify.register(cors, {
     origin: createCorsOriginValidator(options.allowedCorsOrigins),
+    exposedHeaders: ['x-jobdone-request-id', BUILD_ID_HEADER],
   });
 
   fastify.register(multipart, {
@@ -30,6 +32,7 @@ export function createApp(options = {}) {
   });
 
   registerRequestIdHooks(fastify);
+  registerBuildInfoHooks(fastify, options.buildInfo);
 
   fastify.register(registerAudioRoutes);
   fastify.register(registerSyncRoutes);

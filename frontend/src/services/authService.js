@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const DEFAULT_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q';
 const DEFAULT_APP_URL = 'https://frontend-jobdone1.vercel.app';
+const ENV = import.meta.env || {};
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
-const appUrl = import.meta.env.VITE_APP_URL || DEFAULT_APP_URL;
+const supabaseUrl = ENV.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = ENV.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+const appUrl = ENV.VITE_APP_URL || DEFAULT_APP_URL;
 
 // Supabase client — null if env vars not set (auth disabled)
 export const supabase = supabaseUrl && supabaseAnonKey
