@@ -157,9 +157,15 @@ function mergeCandidatesById(primary = [], secondary = []) {
   });
 }
 
-function suggestionIdsToPreselect(suggestions = []) {
+function suggestionIdsToPreselect(suggestions = [], { allowStrongKeywords = false } = {}) {
   return suggestions
-    .filter(candidate => candidate.reason === 'exact_name_match' && !candidate.ambiguous)
+    .filter(candidate =>
+      !candidate.ambiguous &&
+      (
+        candidate.reason === 'exact_name_match' ||
+        (allowStrongKeywords && candidate.reason === 'keyword_match' && candidate.score >= 90)
+      )
+    )
     .map(candidate => candidate.id)
     .filter(Boolean);
 }
@@ -689,7 +695,7 @@ export function HomeScreen({
               result.prediction?.tagIds || []
             ),
           };
-          const preselectedWorkContextIds = suggestionIdsToPreselect(preSuggestions.backlogItems || []);
+          const preselectedWorkContextIds = suggestionIdsToPreselect(preSuggestions.backlogItems || [], { allowStrongKeywords: true });
           const predictedLocation = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
           const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
 
