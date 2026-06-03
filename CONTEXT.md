@@ -74,6 +74,10 @@ _Avoid_: Product Mode, Capture Flow
 The visible provenance of a Capture transcript, such as local, backend, fallback-to-backend, or evaluation race. Transcription Source helps dogfooding and debugging; it should be visible near the review text for a Capture and may also appear in lightweight app status when testing Local Transcription.
 _Avoid_: Hidden Provider Choice, Debug-only Log
 
+**Transcription Evaluation**:
+A dogfooding and testing path that compares two or more Transcription Sources, Runtimes, or backend Providers for latency, quality, and failure behaviour without changing the normal Capture path by default. The same Evaluation harness should compare Local Transcription against backend transcription now, and backend Provider A against backend Provider B later.
+_Avoid_: Permanent Race Mode, Provider Lock-In
+
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
@@ -268,6 +272,7 @@ _Avoid_: Search bar, Input field, Record button
 - Local Transcription is a local-mode product capability, not a specific runtime choice. It owns lazy loading, cache status, backend fallback, dogfood UX, and weak-connectivity behaviour. Transcription Runtime work owns whether JobDone can legally and practically self-host the underlying WASM transcription engine.
 - Transcription Source should be visible during dogfooding, especially in Entry review. Users and agents should be able to tell whether text came from Local Transcription, backend transcription, fallback-to-backend, or an evaluation race.
 - JobDone may occasionally race Local Transcription and backend transcription to compare latency and quality, but racing is an evaluation mode, not the default user path. The long-term preference is high-quality Local Transcription with backend fallback for unexpected failures.
+- Transcription Evaluation should be provider-agnostic. Evaluation records should include source/provider, latency, success/failure, and enough user-visible quality signal for dogfooding, but JobDone should not permanently race every Capture by default.
 - On-device transcription is not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as Local Transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
