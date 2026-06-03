@@ -2,6 +2,10 @@ const updateListeners = new Set();
 
 let registrationPromise = null;
 let updateRegistration = null;
+let lastUpdateCheckAt = 0;
+let updateCheckPromise = null;
+
+const APP_UPDATE_CHECK_INTERVAL_MS = 60_000;
 
 function getLoadedAssetUrls() {
   const sameOrigin = new URL(window.location.href).origin;
@@ -83,6 +87,36 @@ export async function checkForAppUpdate() {
   const currentBuild = import.meta.env.VITE_BUILD_ID || 'dev';
   const remoteBuild = html.match(/<meta name="jobdone-build" content="([^"]+)"/)?.[1];
   return Boolean(remoteBuild && remoteBuild !== currentBuild);
+}
+
+export async function checkForAndApplyAppUpdate({ force = false } = {}) {
+  if (!globalThis.navigator?.serviceWorker) return false;
+
+  const now = Date.now();
+  if (!force && now - lastUpdateCheckAt < APP_UPDATE_CHECK_INTERVAL_MS) return false;
+  if (updateCheckPromise) return updateCheckPromise;
+
+  lastUpdateCheckAt = now;
+  updateCheckPromise = (async () => {
+    try {
+      const hasUpdate = await checkForAppUpdate();
+      if (updateRegistration?.waiting) {
+        return applyServiceWorkerUpdate(updateRegistration);
+      }
+      if (hasUpdate) {
+        window.location.reload();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('[PWA] Update check failed:', error);
+      return false;
+    } finally {
+      updateCheckPromise = null;
+    }
+  })();
+
+  return updateCheckPromise;
 }
 
 export async function registerServiceWorker() {

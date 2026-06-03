@@ -6,6 +6,7 @@ import { authService } from './authService.js';
 import { normalizeRecallEntry } from './entryMapper.js';
 import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
+import { checkForAndApplyAppUpdate } from './serviceWorker.js';
 
 function defaultApiBaseUrl() {
   const hostname = globalThis.window?.location?.hostname || '';
@@ -22,13 +23,23 @@ function authHeader() {
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+async function apiFetch(...args) {
+  const response = await fetchWithRequestDiagnostics(...args);
+  if (response.ok) {
+    checkForAndApplyAppUpdate().catch(error => {
+      console.warn('[PWA] Background update check failed:', error);
+    });
+  }
+  return response;
+}
+
 export class APIService {
   /**
    * Check if backend is available
    */
   async checkHealth() {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/health`, {}, HEALTH_CHECK_TIMEOUT_MS);
+      const response = await apiFetch(`${API_BASE_URL}/health`, {}, HEALTH_CHECK_TIMEOUT_MS);
       return response.ok;
     } catch (error) {
       console.warn('Backend health check failed:', error);
@@ -57,7 +68,7 @@ export class APIService {
 
       console.log('[API] Sending to backend:', `${API_BASE_URL}/api/transcribe`);
 
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/transcribe`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/transcribe`, {
         method: 'POST',
         body: formData,
       }, AUDIO_UPLOAD_TIMEOUT_MS);
@@ -89,7 +100,7 @@ export class APIService {
    */
   async summarizeTranscript(transcript) {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/summarize`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -118,7 +129,7 @@ export class APIService {
     try {
       console.log('[API] Syncing entry to cloud');
 
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/save`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/sync/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(payload),
@@ -141,7 +152,7 @@ export class APIService {
   /** Fetch all cloud entries for the logged-in user */
   async getCloudEntries() {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/entries`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/sync/entries`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
@@ -153,7 +164,7 @@ export class APIService {
   }
 
   async syncContacts(contacts) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/contacts`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ contacts }),
@@ -166,7 +177,7 @@ export class APIService {
   }
 
   async syncLocations(locations) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/locations`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ locations }),
@@ -180,7 +191,7 @@ export class APIService {
 
   async lookupLocations(query) {
     const params = new URLSearchParams({ q: query });
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/locations/lookup?${params.toString()}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/locations/lookup?${params.toString()}`, {
       headers: authHeader(),
     });
     if (!response.ok) {
@@ -192,7 +203,7 @@ export class APIService {
 
   async getCloudContacts() {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/contacts`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
@@ -205,7 +216,7 @@ export class APIService {
 
   async getCloudLocations() {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/sync/locations`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
@@ -217,7 +228,7 @@ export class APIService {
   }
 
   async predictStructure({ entryData, contextClues = [] }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/structure/predict`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/structure/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ entryData, contextClues }),
@@ -239,7 +250,7 @@ export class APIService {
         ...payload,
         anonymous_device_id: getFeedbackDeviceId(),
       };
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/feedback/save`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/feedback/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(body),
@@ -265,7 +276,7 @@ export class APIService {
         ...payload,
         anonymous_device_id: getFeedbackDeviceId(),
       };
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/crash-reports`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/crash-reports`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(body),
@@ -287,7 +298,7 @@ export class APIService {
    * @returns {Promise<Object>} Saved query
    */
   async saveQuery(text) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/queries`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/queries`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ text }),
@@ -306,7 +317,7 @@ export class APIService {
    */
   async getQueries() {
     try {
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/queries`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/queries`, {
         headers: authHeader(),
       });
       if (!response.ok) return [];
@@ -321,7 +332,7 @@ export class APIService {
    * Delete all user data (GDPR)
    */
   async deleteUserData() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/user/data`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/user/data`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -341,7 +352,7 @@ export class APIService {
     try {
       console.log('[API] Recalling entries for query:', query);
 
-      const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/recall`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/recall`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify({ query }),
@@ -363,7 +374,7 @@ export class APIService {
 
   async getTeamSetupState(teamId = null) {
     const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup${query}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/setup${query}`, {
       headers: authHeader(),
     });
     if (!response.ok) {
@@ -374,7 +385,7 @@ export class APIService {
   }
 
   async getTeamReviewState() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/review`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/review`, {
       headers: authHeader(),
     });
     if (!response.ok) {
@@ -385,7 +396,7 @@ export class APIService {
   }
 
   async updateTeamSetup({ id = null, name, template, requireOwnerSelfReview = false, createNewTeam = false }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/setup`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/setup`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ team_id: id, name, template, require_owner_self_review: requireOwnerSelfReview, create_new_team: createNewTeam }),
@@ -400,7 +411,7 @@ export class APIService {
   }
 
   async deleteTeam(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -412,7 +423,7 @@ export class APIService {
   }
 
   async getMyWorkState() {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/my-work`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/my-work`, {
       headers: authHeader(),
     });
     if (!response.ok) {
@@ -423,7 +434,7 @@ export class APIService {
   }
 
   async createTeamBacklogItem({ teamId, description, points }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ team_id: teamId, description, points }),
@@ -436,7 +447,7 @@ export class APIService {
   }
 
   async updateTeamBacklogItem(id, { teamId, description, points }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ team_id: teamId, description, points }),
@@ -450,7 +461,7 @@ export class APIService {
 
   async deleteTeamBacklogItem(id, teamId = null) {
     const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}${query}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/${id}${query}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -462,7 +473,7 @@ export class APIService {
   }
 
   async claimTeamBacklogItem(id) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}/claim`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/${id}/claim`, {
       method: 'POST',
       headers: authHeader(),
     });
@@ -474,7 +485,7 @@ export class APIService {
   }
 
   async submitTeamBacklogItem(id, { evidence_text }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/backlog-items/${id}/submit`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/${id}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ evidence_text }),
@@ -487,7 +498,7 @@ export class APIService {
   }
 
   async decideTeamApprovalRequest(id, decision, teamId = null) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/approval-requests/${id}/decision`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/approval-requests/${id}/decision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ team_id: teamId, decision }),
@@ -500,7 +511,7 @@ export class APIService {
   }
 
   async createTeamInvite({ teamId, email }) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/invites`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ team_id: teamId, email }),
@@ -514,7 +525,7 @@ export class APIService {
 
   async revokeTeamInvite(id, teamId = null) {
     const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}${query}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/invites/${id}${query}`, {
       method: 'DELETE',
       headers: authHeader(),
     });
@@ -527,7 +538,7 @@ export class APIService {
 
   async resendTeamInvite(id, teamId = null) {
     const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${id}/resend${query}`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/invites/${id}/resend${query}`, {
       method: 'POST',
       headers: authHeader(),
     });
@@ -539,7 +550,7 @@ export class APIService {
   }
 
   async inspectTeamInvite(token) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}`);
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}`);
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || `HTTP ${response.status}: Failed to load invite`);
@@ -548,7 +559,7 @@ export class APIService {
   }
 
   async acceptTeamInvite(token) {
-    const response = await fetchWithRequestDiagnostics(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}/accept`, {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/invites/${encodeURIComponent(token)}/accept`, {
       method: 'POST',
       headers: authHeader(),
     });

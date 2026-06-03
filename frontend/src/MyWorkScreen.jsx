@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
 import { evidenceTextForEntry, suggestEvidenceEntries } from './services/evidenceSuggestionService';
+
+const CLAIM_RACE_FEEDBACK_MS = 90_000;
 
 function pointsText(item, pointsEnabled) {
   if (!pointsEnabled || !item.points) return '';
@@ -157,6 +159,7 @@ export function MyWorkScreen({ onBack }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [staleError, setStaleError] = useState(null);
+  const claimErrorsRef = useRef({});
 
   const loadWorkState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
     if (showLoading) {
@@ -167,13 +170,24 @@ export function MyWorkScreen({ onBack }) {
     setStaleError(null);
     try {
       const state = await apiService.getMyWorkState();
+      const fetchedOpenItems = state.openBacklogItems || [];
       setTeam(state.team || null);
       setInProgressItems(state.inProgressItems || []);
-      setOpenBacklogItems(state.openBacklogItems || []);
+      setOpenBacklogItems(previousOpenItems => {
+        const fetchedIds = new Set(fetchedOpenItems.map(item => item.id));
+        const now = Date.now();
+        const staleRaceItems = previousOpenItems.filter(item => {
+          const claimError = claimErrorsRef.current[item.id];
+          return claimError?.expiresAt > now && !fetchedIds.has(item.id);
+        });
+        return [...fetchedOpenItems, ...staleRaceItems];
+      });
       setApprovedItems(state.approvedItems || []);
       setClaimErrors(errors => {
-        const openIds = new Set((state.openBacklogItems || []).map(item => item.id));
-        return Object.fromEntries(Object.entries(errors).filter(([id]) => openIds.has(id)));
+        const now = Date.now();
+        const next = Object.fromEntries(Object.entries(errors).filter(([, claimError]) => claimError.expiresAt > now));
+        claimErrorsRef.current = next;
+        return next;
       });
     } catch (err) {
       setStaleError(err.message || 'Could not refresh My Work');
@@ -196,6 +210,7 @@ export function MyWorkScreen({ onBack }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWorkState();
     loadRecentEntries();
   }, [loadRecentEntries, loadWorkState]);
@@ -236,14 +251,20 @@ export function MyWorkScreen({ onBack }) {
       setClaimErrors(errors => {
         const next = { ...errors };
         delete next[item.id];
+        claimErrorsRef.current = next;
         return next;
       });
       await loadWorkState();
     } catch (err) {
-      setClaimErrors(errors => ({
-        ...errors,
-        [item.id]: err.message || 'Great news! Someone else just claimed this task.',
-      }));
+      const claimError = {
+        message: err.message || 'Great news! Someone else just claimed this task.',
+        expiresAt: Date.now() + CLAIM_RACE_FEEDBACK_MS,
+      };
+      setClaimErrors(errors => {
+        const next = { ...errors, [item.id]: claimError };
+        claimErrorsRef.current = next;
+        return next;
+      });
     } finally {
       setBusyItemId(null);
     }
@@ -345,7 +366,7 @@ export function MyWorkScreen({ onBack }) {
                     item={item}
                     pointsEnabled={pointsEnabled}
                     busy={busyItemId === item.id}
-                    claimError={claimErrors[item.id]}
+                    claimError={claimErrors[item.id]?.message}
                     onClaim={claimItem}
                   />
                 ))
