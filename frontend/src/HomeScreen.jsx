@@ -21,12 +21,12 @@ import { runPreExtraction } from './services/preExtractionService';
 import { classify } from './services/classifyService';
 import {
   canAddMorePhotos,
-  compressPhotoAttachment,
-  createPendingPhotoAttachments,
+  createPendingPhotoAttachmentsFromFiles,
   formatAttachmentBytes,
   hasFailedPhotoAttachments,
   hasPendingPhotoAttachments,
   MAX_PHOTOS_PER_CAPTURE,
+  preparePhotoAttachment,
 } from './services/photoAttachmentService';
 import {
   getSuccessfulCaptureCount,
@@ -416,7 +416,7 @@ export function HomeScreen({
     if (!attachment?.id || compressingAttachmentIdsRef.current.has(attachment.id)) return;
     compressingAttachmentIdsRef.current.add(attachment.id);
     try {
-      const compressed = await compressPhotoAttachment(attachment);
+      const compressed = await preparePhotoAttachment(attachment);
       await updateEntryAttachments(entryId, attachments =>
         attachments.map(item => item.id === attachment.id ? compressed : item)
       );
@@ -439,11 +439,10 @@ export function HomeScreen({
     if (!files.length) return;
     try {
       setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: null }));
-      const updated = await updateEntryAttachments(entryId, attachments => {
-        const pending = createPendingPhotoAttachments(files, attachments);
-        if (!pending.length) return attachments;
-        return [...attachments, ...pending];
-      });
+      const currentEntry = await dbService.getEntry(entryId);
+      const pending = await createPendingPhotoAttachmentsFromFiles(files, currentEntry?.attachmentSnapshots || []);
+      if (!pending.length) return;
+      const updated = await updateEntryAttachments(entryId, attachments => [...attachments, ...pending]);
       const added = (updated.attachmentSnapshots || [])
         .filter(attachment => attachment.status === 'pending_compression' && attachment.originalBlob);
       for (const attachment of added) {

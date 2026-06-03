@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   canAddMorePhotos,
   compressPhotoAttachment,
+  createPendingPhotoAttachmentsFromFiles,
   createPendingPhotoAttachments,
   formatAttachmentBytes,
   hasPendingPhotoAttachments,
@@ -14,29 +15,8 @@ function fakeFile(name, type = 'image/jpeg', size = 1234) {
   return { name, type, size };
 }
 
-function makeWorkerCtor(responses) {
-  const calls = [];
-  class FakeWorker {
-    constructor(url, options) {
-      this.url = url;
-      this.options = options;
-      calls.push(this);
-    }
-
-    postMessage(message) {
-      this.message = message;
-      const response = responses.shift();
-      queueMicrotask(() => {
-        this.onmessage?.({ data: response });
-      });
-    }
-
-    terminate() {
-      this.terminated = true;
-    }
-  }
-  FakeWorker.calls = calls;
-  return FakeWorker;
+function realImageFile(name = 'garden.jpg') {
+  return new File(['image-bytes'], name, { type: 'image/jpeg' });
 }
 
 test('photo attachment service caps selected photos for one Capture', () => {
@@ -73,40 +53,41 @@ test('photo attachment service formats byte counts', () => {
   assert.equal(formatAttachmentBytes(2048), '2 KB');
 });
 
-test('photo compression retries transient source image decode failures', async () => {
-  const WorkerCtor = makeWorkerCtor([
-    { ok: false, error: 'The source image could not be decoded.' },
-    {
-      ok: true,
-      blob: new Blob(['compressed'], { type: 'image/jpeg' }),
-      metadata: {
-        width: 640,
-        height: 480,
-        mimeType: 'image/jpeg',
-        size: 10,
-        originalName: 'garden.jpg',
-        originalSize: 1234,
-        originalType: 'image/jpeg',
-      },
-    },
-  ]);
+test('photo attachment service copies picker files to stable Blobs', async () => {
+  const pending = await createPendingPhotoAttachmentsFromFiles([realImageFile()], []);
 
-  const result = await compressPhotoAttachment({
-    id: 'attachment-1',
-    kind: 'photo',
-    status: 'pending_compression',
-    originalName: 'garden.jpg',
-    originalType: 'image/jpeg',
-    originalSize: 1234,
-    originalBlob: fakeFile('garden.jpg'),
-  }, {
-    WorkerCtor,
-    retryDelaysMs: [0, 0],
-    workerUrl: 'worker.js',
-  });
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].status, 'pending_compression');
+  assert.equal(pending[0].originalBlob instanceof Blob, true);
+  assert.equal(pending[0].originalSize, 11);
+});
+
+test('photo compression falls back to saving the original Blob when compression fails', async () => {
+  const originalWarn = console.warn;
+  console.warn = () => {};
+
+  let result;
+  try {
+    result = await compressPhotoAttachment({
+      id: 'attachment-1',
+      kind: 'photo',
+      status: 'pending_compression',
+      originalName: 'garden.jpg',
+      originalType: 'image/jpeg',
+      originalSize: 11,
+      originalBlob: realImageFile(),
+    }, {
+      compressor: async () => {
+        throw new Error('The source image could not be decoded.');
+      },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
 
   assert.equal(result.status, 'ready');
-  assert.equal(result.width, 640);
+  assert.equal(result.compressionStatus, 'fallback_original');
+  assert.equal(result.compressionError, 'The source image could not be decoded.');
+  assert.equal(result.blob instanceof Blob, true);
   assert.equal(result.originalBlob, null);
-  assert.equal(WorkerCtor.calls.length, 2);
 });

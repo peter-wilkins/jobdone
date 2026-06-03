@@ -1,7 +1,9 @@
+import imageCompression from 'browser-image-compression';
+
 const MAX_PHOTOS_PER_CAPTURE = 6;
 const DEFAULT_MAX_EDGE = 2000;
 const DEFAULT_QUALITY = 0.8;
-const DECODE_RETRY_DELAYS_MS = [0, 120, 300];
+const DEFAULT_MAX_SIZE_MB = 1.5;
 
 function generateAttachmentId() {
   return `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -27,6 +29,11 @@ export function hasFailedPhotoAttachments(attachments = []) {
   return (attachments || []).some(attachment => attachment?.kind === 'photo' && attachment.status === 'failed');
 }
 
+async function copyFileToStableBlob(file) {
+  const bytes = await file.arrayBuffer();
+  return new Blob([bytes], { type: file.type || 'image/jpeg' });
+}
+
 export function createPendingPhotoAttachments(files = [], existing = []) {
   const existingCount = (existing || []).filter(attachment => attachment?.kind === 'photo').length;
   const remainingSlots = Math.max(0, MAX_PHOTOS_PER_CAPTURE - existingCount);
@@ -50,90 +57,98 @@ export function canAddMorePhotos(attachments = []) {
   return (attachments || []).filter(attachment => attachment?.kind === 'photo').length < MAX_PHOTOS_PER_CAPTURE;
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function isImageDecodeError(error) {
-  return /decode|decoded|source image|bitmap/i.test(error?.message || '');
-}
-
-function compressPhotoAttachmentOnce(attachment, {
-  WorkerCtor,
-  workerUrl,
-  maxEdge,
-  quality,
-} = {}) {
-  return new Promise((resolve, reject) => {
-    const worker = new WorkerCtor(workerUrl, { type: 'module' });
-    worker.onmessage = (event) => {
-      const result = event.data || {};
-      worker.terminate?.();
-      if (!result.ok) {
-        reject(new Error(result.error || 'Photo compression failed.'));
-        return;
-      }
-      resolve({
-        ...attachment,
-        status: 'ready',
-        blob: result.blob,
-        mimeType: result.metadata?.mimeType || result.blob?.type || 'image/jpeg',
-        size: result.metadata?.size || result.blob?.size || 0,
-        width: result.metadata?.width || null,
-        height: result.metadata?.height || null,
-        originalName: result.metadata?.originalName || attachment.originalName,
-        originalSize: result.metadata?.originalSize || attachment.originalSize || 0,
-        originalType: result.metadata?.originalType || attachment.originalType || '',
-        originalBlob: null,
-        compressed_at: new Date().toISOString(),
-      });
-    };
-    worker.onerror = (error) => {
-      worker.terminate?.();
-      reject(new Error(error?.message || 'Photo compression failed.'));
-    };
-    worker.postMessage({
-      jobId: attachment.id,
-      file: attachment.originalBlob,
-      maxEdge,
-      quality,
-    });
-  });
-}
-
 export function compressPhotoAttachment(attachment, {
-  WorkerCtor = globalThis.Worker,
-  workerUrl = new URL('../workers/photoCompression.worker.js', import.meta.url),
   maxEdge = DEFAULT_MAX_EDGE,
   quality = DEFAULT_QUALITY,
-  retryDelaysMs = DECODE_RETRY_DELAYS_MS,
+  maxSizeMB = DEFAULT_MAX_SIZE_MB,
+  compressor = imageCompression,
 } = {}) {
   if (!attachment?.originalBlob) {
     return Promise.reject(new Error('Original Photo is not available for compression.'));
   }
-  if (!WorkerCtor) {
-    return Promise.reject(new Error('Photo compression is unavailable in this browser.'));
-  }
-
-  const delays = retryDelaysMs.length ? retryDelaysMs : [0];
 
   return (async () => {
-    let lastError = null;
-    for (let index = 0; index < delays.length; index += 1) {
-      if (index > 0 && delays[index]) {
-        await sleep(delays[index]);
-      }
-      try {
-        return await compressPhotoAttachmentOnce(attachment, { WorkerCtor, workerUrl, maxEdge, quality });
-      } catch (error) {
-        lastError = error;
-        if (!isImageDecodeError(error)) {
-          throw error;
-        }
-      }
+    const originalBlob = await copyFileToStableBlob(attachment.originalBlob);
+    let blob = originalBlob;
+    let compressionError = null;
+
+    try {
+      blob = await compressor(originalBlob, {
+        maxSizeMB,
+        maxWidthOrHeight: maxEdge,
+        initialQuality: quality,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
+      });
+    } catch (error) {
+      compressionError = error?.message || 'Photo compression failed; saved original Photo instead.';
+      console.warn('[Attachments] Photo compression fallback:', error);
     }
-    throw lastError || new Error('Photo compression failed.');
+
+    return {
+      ...attachment,
+      status: 'ready',
+      blob,
+      mimeType: blob.type || originalBlob.type || 'image/jpeg',
+      size: blob.size || originalBlob.size || 0,
+      width: null,
+      height: null,
+      originalSize: attachment.originalSize || originalBlob.size || 0,
+      originalType: attachment.originalType || originalBlob.type || '',
+      originalBlob: null,
+      compressed_at: new Date().toISOString(),
+      compressionStatus: compressionError ? 'fallback_original' : 'compressed',
+      compressionError,
+    };
   })();
+}
+
+export async function preparePhotoAttachment(attachment) {
+  if (!attachment?.originalBlob) {
+    return Promise.reject(new Error('Original Photo is not available.'));
+  }
+
+  try {
+    return await compressPhotoAttachment(attachment);
+  } catch (error) {
+    if (!attachment.originalBlob?.arrayBuffer) throw error;
+    const blob = await copyFileToStableBlob(attachment.originalBlob);
+    return {
+      ...attachment,
+      status: 'ready',
+      blob,
+      mimeType: blob.type || attachment.originalType || 'image/jpeg',
+      size: blob.size || attachment.originalSize || 0,
+      width: null,
+      height: null,
+      originalBlob: null,
+      compressed_at: new Date().toISOString(),
+      compressionStatus: 'fallback_original',
+      compressionError: error?.message || 'Photo compression failed; saved original Photo instead.',
+    };
+  }
+}
+
+export async function createPendingPhotoAttachmentsFromFiles(files = [], existing = []) {
+  const pending = createPendingPhotoAttachments(files, existing);
+  return Promise.all(pending.map(async attachment => {
+    try {
+      const stableBlob = await copyFileToStableBlob(attachment.originalBlob);
+      return {
+        ...attachment,
+        originalBlob: stableBlob,
+        originalSize: attachment.originalSize || stableBlob.size || 0,
+        originalType: attachment.originalType || stableBlob.type || '',
+      };
+    } catch (error) {
+      return {
+        ...attachment,
+        status: 'failed',
+        originalBlob: null,
+        errorMessage: error?.message || 'The Photo could not be read. Try choosing it again.',
+      };
+    }
+  }));
 }
 
 export { MAX_PHOTOS_PER_CAPTURE };
