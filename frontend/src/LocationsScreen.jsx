@@ -37,6 +37,9 @@ export function LocationsScreen({ onBack, onRecord }) {
   const [detailLookupStatus, setDetailLookupStatus] = useState('idle');
   const [detailLookupResults, setDetailLookupResults] = useState([]);
   const [proposedDetailLookupCandidate, setProposedDetailLookupCandidate] = useState(null);
+  const [lookupError, setLookupError] = useState(null);
+  const [detailLookupError, setDetailLookupError] = useState(null);
+  const [mapPinError, setMapPinError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
@@ -152,10 +155,11 @@ export function LocationsScreen({ onBack, onRecord }) {
 
     setIsMutating(true);
     setError(null);
+    setMapPinError(null);
     try {
       const result = await locationClueService.captureCurrentLocation({ allowPrompt: true });
       if (!result.ok) {
-        setError('Current location is unavailable right now.');
+        setMapPinError('Current location is unavailable right now.');
         return;
       }
 
@@ -177,7 +181,7 @@ export function LocationsScreen({ onBack, onRecord }) {
       await loadLocations();
     } catch (err) {
       console.error('Failed to add current map pin:', err);
-      setError('Current location is unavailable right now.');
+      setMapPinError('Current location is unavailable right now.');
     } finally {
       setIsMutating(false);
     }
@@ -196,14 +200,15 @@ export function LocationsScreen({ onBack, onRecord }) {
     return location;
   }
 
-  async function runAddressLookup(query, setStatus, setResults, setProposal) {
+  async function runAddressLookup(query, setStatus, setResults, setProposal, setLocalError) {
     const trimmed = query.trim();
     if (trimmed.length < 3) {
-      setError('Enter at least 3 characters to search for an address.');
+      setLocalError('Enter at least 3 characters to search for an address.');
       return;
     }
 
     setError(null);
+    setLocalError(null);
     setStatus('loading');
     setProposal(null);
     try {
@@ -214,13 +219,14 @@ export function LocationsScreen({ onBack, onRecord }) {
       console.error('Address lookup failed:', err);
       setResults([]);
       setStatus('failed');
+      setLocalError('Address search is unavailable right now. Manual approximate Locations still work.');
     }
   }
 
   async function handleConfirmLookupCandidate(candidate) {
     const decision = chooseLookupLocationAction(locations, candidate);
     if (decision.action === 'invalid') {
-      setError('Could not use that address.');
+      setLookupError('Could not use that address.');
       return;
     }
 
@@ -232,6 +238,7 @@ export function LocationsScreen({ onBack, onRecord }) {
 
     setIsMutating(true);
     setError(null);
+    setLookupError(null);
     try {
       const { location } = await dbService.createLocation(decision.draft);
       const synced = await syncLocationIfPossible(location);
@@ -243,7 +250,7 @@ export function LocationsScreen({ onBack, onRecord }) {
       selectLocation(synced.id || location.id);
     } catch (err) {
       console.error('Failed to create Location from lookup:', err);
-      setError('Failed to save Location');
+      setLookupError('Failed to save Location.');
     } finally {
       setIsMutating(false);
     }
@@ -255,6 +262,7 @@ export function LocationsScreen({ onBack, onRecord }) {
 
     setIsMutating(true);
     setError(null);
+    setLookupError(null);
     try {
       const { location } = await dbService.createLocation({
         displayName,
@@ -270,7 +278,7 @@ export function LocationsScreen({ onBack, onRecord }) {
       selectLocation(synced.id || location.id);
     } catch (err) {
       console.error('Failed to create approximate Location:', err);
-      setError('Failed to save Location');
+      setLookupError('Failed to save Location.');
     } finally {
       setIsMutating(false);
     }
@@ -280,7 +288,7 @@ export function LocationsScreen({ onBack, onRecord }) {
     if (!location) return;
     const decision = chooseLookupLocationAction(locations.filter(item => item.id !== location.id), candidate);
     if (decision.action === 'invalid') {
-      setError('Could not use that address.');
+      setDetailLookupError('Could not use that address.');
       return;
     }
     if (decision.action === 'reuse') {
@@ -291,6 +299,7 @@ export function LocationsScreen({ onBack, onRecord }) {
 
     setIsMutating(true);
     setError(null);
+    setDetailLookupError(null);
     try {
       const updated = await dbService.updateLocation(location.id, {
         displayName: decision.draft.displayName,
@@ -310,7 +319,7 @@ export function LocationsScreen({ onBack, onRecord }) {
       setProposedDetailLookupCandidate(null);
     } catch (err) {
       console.error('Failed to update Location from lookup:', err);
-      setError('Failed to update Location');
+      setDetailLookupError('Failed to update Location.');
     } finally {
       setIsMutating(false);
     }
@@ -330,8 +339,10 @@ export function LocationsScreen({ onBack, onRecord }) {
         onLookupQueryChange={setDetailLookupQuery}
         lookupStatus={detailLookupStatus}
         lookupResults={detailLookupResults}
+        lookupError={detailLookupError}
         proposedLookupCandidate={proposedDetailLookupCandidate}
-        onLookup={() => runAddressLookup(detailLookupQuery, setDetailLookupStatus, setDetailLookupResults, setProposedDetailLookupCandidate)}
+        mapPinError={mapPinError}
+        onLookup={() => runAddressLookup(detailLookupQuery, setDetailLookupStatus, setDetailLookupResults, setProposedDetailLookupCandidate, setDetailLookupError)}
         onSelectLookupCandidate={setProposedDetailLookupCandidate}
         onConfirmLookupCandidate={handleConfirmDetailLookupCandidate}
         isMutating={isMutating}
@@ -365,9 +376,10 @@ export function LocationsScreen({ onBack, onRecord }) {
           onQueryChange={setLookupQuery}
           status={lookupStatus}
           results={lookupResults}
+          error={lookupError}
           proposedCandidate={proposedLookupCandidate}
           isMutating={isMutating}
-          onLookup={() => runAddressLookup(lookupQuery, setLookupStatus, setLookupResults, setProposedLookupCandidate)}
+          onLookup={() => runAddressLookup(lookupQuery, setLookupStatus, setLookupResults, setProposedLookupCandidate, setLookupError)}
           onSelectCandidate={setProposedLookupCandidate}
           onConfirmCandidate={() => handleConfirmLookupCandidate(proposedLookupCandidate)}
           onCreateApproximate={handleCreateApproximateLocation}
@@ -464,7 +476,9 @@ function LocationDetailScreen({
   onLookupQueryChange,
   lookupStatus,
   lookupResults,
+  lookupError,
   proposedLookupCandidate,
+  mapPinError,
   onLookup,
   onSelectLookupCandidate,
   onConfirmLookupCandidate,
@@ -518,17 +532,21 @@ function LocationDetailScreen({
                       disabled={isMutating}
                       className="mt-3 rounded bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 transition disabled:opacity-50"
                     >
-                      {isMutating ? 'Adding...' : 'Add current map pin'}
-                    </button>
-                  )}
-                  <div className="border-t border-amber-100 pt-4">
+                        {isMutating ? 'Adding...' : 'Add current map pin'}
+                      </button>
+                    )}
+                    {mapPinError && (
+                      <p className="text-sm text-red-700">{mapPinError}</p>
+                    )}
+                    <div className="border-t border-amber-100 pt-4">
                     <AddressLookupPanel
                       title="Search postcode or address"
                       query={lookupQuery}
                       onQueryChange={onLookupQueryChange}
-                      status={lookupStatus}
-                      results={lookupResults}
-                      proposedCandidate={proposedLookupCandidate}
+                        status={lookupStatus}
+                        results={lookupResults}
+                        error={lookupError}
+                        proposedCandidate={proposedLookupCandidate}
                       isMutating={isMutating}
                       tone="amber"
                       onLookup={onLookup}
@@ -579,6 +597,7 @@ function AddressLookupPanel({
   onQueryChange,
   status,
   results,
+  error,
   proposedCandidate,
   isMutating,
   tone = 'emerald',
@@ -619,6 +638,9 @@ function AddressLookupPanel({
       )}
       {status === 'failed' && (
         <p className="mt-2 text-sm text-gray-500">Address search is unavailable right now. Manual approximate Locations still work.</p>
+      )}
+      {error && (
+        <p className="mt-2 text-sm text-red-700">{error}</p>
       )}
 
       {results.length > 0 && (

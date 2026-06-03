@@ -117,9 +117,11 @@ export function HomeScreen({
   const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
+  const [reviewLocationErrors, setReviewLocationErrors] = useState({});
   const [reviewLocationPanels, setReviewLocationPanels] = useState({});
   const [reviewLocationDrafts, setReviewLocationDrafts] = useState({});
   const [reviewContacts, setReviewContacts] = useState({});
+  const [reviewContactErrors, setReviewContactErrors] = useState({});
   const [reviewContactPanels, setReviewContactPanels] = useState({});
   const [reviewContactSearch, setReviewContactSearch] = useState({});
   const [reviewContactOptions, setReviewContactOptions] = useState({});
@@ -173,6 +175,7 @@ export function HomeScreen({
     setReviewContactPanels(prev => ({ ...prev, [entryId]: false }));
     setReviewContactSearch(prev => ({ ...prev, [entryId]: '' }));
     setReviewManualContacts(prev => ({ ...prev, [entryId]: { displayName: '', phone: '', email: '' } }));
+    setReviewContactErrors(prev => ({ ...prev, [entryId]: null }));
   };
 
   const toggleLocationPanel = (entryId) => {
@@ -645,6 +648,11 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      setReviewLocationErrors(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       setReviewLocationPanels(prev => {
         const next = { ...prev };
         delete next[id];
@@ -656,6 +664,11 @@ export function HomeScreen({
         return next;
       });
       setReviewContacts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewContactErrors(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -792,6 +805,7 @@ export function HomeScreen({
 
   const loadContactOptions = async (entryId, query = '') => {
     try {
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: null }));
       const contacts = query.trim()
         ? await dbService.searchContacts(query)
         : await dbService.getContacts('confirmed');
@@ -801,7 +815,7 @@ export function HomeScreen({
       }));
     } catch (err) {
       console.error('Failed to load Contacts for review:', err);
-      setError('Failed to load Contacts');
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: 'Could not load Contacts here.' }));
     }
   };
 
@@ -828,54 +842,60 @@ export function HomeScreen({
   const handlePickNativeContact = async (entryId) => {
     try {
       setError(null);
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: null }));
       const result = await pickContact();
       if (!result.ok) {
-        setError(result.reason === 'unsupported' ? 'Contact Picker is unavailable on this device.' : 'No Contact was selected.');
+        setReviewContactErrors(prev => ({
+          ...prev,
+          [entryId]: result.reason === 'unsupported' ? 'Contact Picker is unavailable on this device.' : 'No Contact was selected.',
+        }));
         return;
       }
 
       const savedContact = await dbService.upsertContact(result.contact);
       const candidate = localContactCandidate(savedContact);
       if (!candidate) {
-        setError('Could not use selected Contact');
+        setReviewContactErrors(prev => ({ ...prev, [entryId]: 'Could not use selected Contact.' }));
         return;
       }
       selectReviewContactCandidate(entryId, candidate);
     } catch (err) {
       console.error('Failed to pick Contact:', err);
-      setError('Could not pick Contact');
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: 'Could not pick Contact.' }));
     }
   };
 
   const handleCreateManualContact = async (entryId) => {
     try {
       setError(null);
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: null }));
       const draft = contactDraftFromManualInput(reviewManualContacts[entryId]);
       const validation = validateContactDraftForCreation(draft);
       if (!validation.valid) {
-        setError(validation.error);
+        setReviewContactErrors(prev => ({ ...prev, [entryId]: validation.error }));
         return;
       }
 
       const savedContact = await dbService.upsertContact(draft);
       const candidate = localContactCandidate(savedContact);
       if (!candidate) {
-        setError('Could not create Contact');
+        setReviewContactErrors(prev => ({ ...prev, [entryId]: 'Could not create Contact.' }));
         return;
       }
       selectReviewContactCandidate(entryId, candidate);
     } catch (err) {
       console.error('Failed to create Contact:', err);
-      setError('Could not create Contact');
+      setReviewContactErrors(prev => ({ ...prev, [entryId]: 'Could not create Contact.' }));
     }
   };
 
   const handleUseCurrentLocation = async (entry) => {
     try {
       setError(null);
+      setReviewLocationErrors(prev => ({ ...prev, [entry.id]: null }));
       const result = await locationClueService.captureCurrentLocation({ allowPrompt: true });
       if (!result.ok) {
-        setError('Current location is unavailable right now.');
+        setReviewLocationErrors(prev => ({ ...prev, [entry.id]: 'Current location is unavailable right now.' }));
         return;
       }
 
@@ -890,7 +910,7 @@ export function HomeScreen({
       });
     } catch (err) {
       console.error('Failed to use current location:', err);
-      setError('Current location is unavailable right now.');
+      setReviewLocationErrors(prev => ({ ...prev, [entry.id]: 'Current location is unavailable right now.' }));
     }
   };
 
@@ -900,9 +920,10 @@ export function HomeScreen({
 
     try {
       setError(null);
+      setReviewLocationErrors(prev => ({ ...prev, [entry.id]: null }));
       const result = await locationClueService.captureCurrentLocation({ allowPrompt: true });
       if (!result.ok) {
-        setError('Current location is unavailable right now.');
+        setReviewLocationErrors(prev => ({ ...prev, [entry.id]: 'Current location is unavailable right now.' }));
         return;
       }
 
@@ -920,7 +941,7 @@ export function HomeScreen({
       });
     } catch (err) {
       console.error('Failed to strengthen Location:', err);
-      setError('Current location is unavailable right now.');
+      setReviewLocationErrors(prev => ({ ...prev, [entry.id]: 'Current location is unavailable right now.' }));
     }
   };
 
@@ -1290,9 +1311,11 @@ export function HomeScreen({
       const locationCandidates = candidateSet.locations || [];
       const selectedLocationDraft = reviewLocationDrafts[entry.id];
       const locationPanelOpen = Boolean(reviewLocationPanels[entry.id]);
+      const locationPanelError = reviewLocationErrors[entry.id];
       const canStrengthenSelectedLocation = canStrengthenLocationDraft(selectedLocationDraft);
       const contactCandidates = candidateSet.contacts || [];
       const contactPanelOpen = Boolean(reviewContactPanels[entry.id]);
+      const contactPanelError = reviewContactErrors[entry.id];
       const contactOptions = reviewContactOptions[entry.id] || [];
       const contactSearch = reviewContactSearch[entry.id] || '';
       const manualContact = reviewManualContacts[entry.id] || { displayName: '', phone: '', email: '' };
@@ -1460,6 +1483,9 @@ export function HomeScreen({
                       Use current location for suggestions
                     </button>
                   )}
+                  {locationPanelError && (
+                    <p className="mt-2 text-sm text-red-700">{locationPanelError}</p>
+                  )}
                 </div>
               )}
 
@@ -1595,10 +1621,13 @@ export function HomeScreen({
                       >
                         Create Contact
                       </button>
-                      </div>
                     </div>
+                    {contactPanelError && (
+                      <p className="mt-2 text-sm text-red-700">{contactPanelError}</p>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
 
               <div className="mt-3">
                 <span className="text-sm text-gray-500">Tags</span>
