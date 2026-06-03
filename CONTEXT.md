@@ -240,9 +240,12 @@ _Avoid_: Search bar, Input field, Record button
 - When a **Query** is active, the Timeline shows the top 10 matching Entries (by semantic similarity, above a loose relevance floor) under a "Showing results for: [query]" header — full Timeline restored on dismiss
 - Offline **Recall** can replay cached results for previously run Queries; new Recall requires the backend
 - If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
-- A voice recording creates a **Capture**; transcription and summarization enrich the Capture before review
+- A voice recording creates a **Capture**; transcription produces reviewable text before the user chooses Context Clues, Work Context, or Team-linked Backlog Items
 - A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
+- Capture cleanup/extraction should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
+- Cleanup/extraction is optional. The review UI can offer an action such as "Clean up text" after transcription and context twiddling, before Confirmation, so users who are happy with the text can confirm without waiting for more AI.
+- The preferred Capture flow is: transcription -> Context Clue and Work Context twiddling -> optional cleanup/extraction using the selected Capture Context -> Confirmation.
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
 - Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
 - Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry
