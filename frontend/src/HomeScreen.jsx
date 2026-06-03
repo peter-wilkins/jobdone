@@ -19,6 +19,7 @@ import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serv
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
 import {
+  getSuccessfulCaptureCount,
   getLocalTranscriptionMetrics,
   maybePreloadWhisperModel,
   recordTranscriptionChoice,
@@ -262,6 +263,7 @@ export function HomeScreen({
   const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
   const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
   const handledForegroundReturnRef = useRef(0);
+  const localTranscriptionPreloadAttemptedRef = useRef(false);
   const structurePredictionRequestedRef = useRef(new Set());
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
@@ -482,6 +484,22 @@ export function HomeScreen({
       setUpdateStatus(null);
     });
   }, []);
+
+  useEffect(() => {
+    if (localTranscriptionPreloadAttemptedRef.current) return;
+    if (getSuccessfulCaptureCount() < 1) return;
+
+    const preload = maybePreloadWhisperModel();
+    if (!preload) {
+      setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
+      return;
+    }
+
+    localTranscriptionPreloadAttemptedRef.current = true;
+    preload.then(setLocalTranscriptionMetrics).catch(() => {
+      setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
+    });
+  }, [foregroundReturnCount]);
 
   useOutsideDismiss(queryDropdownOpen, [dropdownRef], () => setQueryDropdownOpen(false));
 
