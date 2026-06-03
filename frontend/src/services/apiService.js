@@ -60,7 +60,7 @@ export class APIService {
    * @param {Blob} audioBlob - Audio file blob
    * @returns {Promise<{transcript: string, summary: string}>}
    */
-  async transcribeAudio(audioBlob) {
+  async transcribeAudio(audioBlob, { captureContext = null } = {}) {
     try {
       console.log('[API] Transcribing audio:', {
         size: audioBlob.size,
@@ -73,6 +73,9 @@ export class APIService {
 
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
+      if (captureContext) {
+        formData.append('captureContext', JSON.stringify(captureContext));
+      }
 
       console.log('[API] Sending to backend:', `${API_BASE_URL}/api/transcribe`);
 
@@ -106,14 +109,14 @@ export class APIService {
    * @param {string} transcript - Transcript text
    * @returns {Promise<{summary: string}>}
    */
-  async summarizeTranscript(transcript) {
+  async summarizeTranscript(transcript, { captureContext = null } = {}) {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript, captureContext }),
       });
 
       if (!response.ok) {

@@ -23,6 +23,12 @@ function audioMultipartPayload() {
   return form;
 }
 
+function audioMultipartPayloadWithContext(context) {
+  const form = audioMultipartPayload();
+  form.append('captureContext', JSON.stringify(context));
+  return form;
+}
+
 describe('AudioRoute POST /api/transcribe', () => {
   test('returns typed 422 response when no speech is detected', async () => {
     const app = await buildApp({
@@ -88,6 +94,37 @@ describe('AudioRoute POST /api/transcribe', () => {
     assert.equal(JSON.parse(res.body).error, 'Too many requests');
     assert.equal(transcribeCalls, 0);
   });
+
+  test('passes bounded capture context to summarizer', async () => {
+    let summarizerArgs;
+    const app = await buildApp({
+      transcribeAudio: async () => ({ transcript: 'trimmed the hedge by the front gate' }),
+      summarizeAndExtract: async (transcript, options) => {
+        summarizerArgs = { transcript, options };
+        return { summary: 'I trimmed the hedge by the front gate.' };
+      },
+    });
+    const form = audioMultipartPayloadWithContext({ label: 'gardening and home jobs', notes: 'mostly hedges and lawns' });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/transcribe',
+      headers: form.getHeaders(),
+      payload: form,
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).summary, 'I trimmed the hedge by the front gate.');
+    assert.deepEqual(summarizerArgs, {
+      transcript: 'trimmed the hedge by the front gate',
+      options: {
+        captureContext: {
+          label: 'gardening and home jobs',
+          notes: 'mostly hedges and lawns',
+        },
+      },
+    });
+  });
 });
 
 describe('AudioRoute POST /api/summarize', () => {
@@ -111,5 +148,28 @@ describe('AudioRoute POST /api/summarize', () => {
     assert.equal(res.statusCode, 429);
     assert.equal(res.headers['retry-after'], '30');
     assert.equal(summarizeCalls, 0);
+  });
+
+  test('passes JSON capture context to summarizer', async () => {
+    let receivedOptions;
+    const app = await buildApp({
+      summarizeAndExtract: async (transcript, options) => {
+        receivedOptions = options;
+        return { summary: transcript };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/summarize',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        transcript: 'Pruned the apple tree',
+        captureContext: { label: 'gardening and home jobs' },
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(receivedOptions, { captureContext: { label: 'gardening and home jobs' } });
   });
 });

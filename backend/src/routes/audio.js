@@ -3,6 +3,16 @@ import { summarizeAndExtract } from '../services/summarization.js';
 import { classify } from '../services/classify.js';
 import { checkCostlyRouteRateLimit, sendRateLimitReply } from '../services/routeRateLimit.js';
 
+function parseCaptureContext(value) {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Register audio processing routes
  */
@@ -41,6 +51,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
       const parts = request.parts();
       let audioBuffer = null;
       let fileName = 'audio.webm';
+      let captureContext = null;
 
       // Iterate through form parts
       for await (const part of parts) {
@@ -54,6 +65,8 @@ export async function registerAudioRoutes(fastify, deps = {}) {
           
           audioBuffer = Buffer.concat(chunks);
           console.log(`[Transcribe] Received audio file: ${fileName}, size: ${audioBuffer.length} bytes`);
+        } else if (part.type === 'field' && part.fieldname === 'captureContext') {
+          captureContext = parseCaptureContext(part.value);
         }
       }
 
@@ -80,7 +93,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
       
       if (intent === 'NOTE') {
         console.log('[Transcribe] Starting Claude summarization...');
-        const result = await summarizer(transcript);
+        const result = await summarizer(transcript, { captureContext });
         console.log('[Transcribe] Summarization complete');
         
         response.summary = result.summary;
@@ -120,7 +133,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
       const limit = rateLimit(request, { routeType: 'summarize' });
       if (!limit.allowed) return sendRateLimitReply(reply, limit);
 
-      const { transcript } = request.body;
+      const { transcript, captureContext } = request.body;
 
       if (!transcript || typeof transcript !== 'string') {
         return reply.status(400).send({ error: 'transcript field required' });
@@ -133,7 +146,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
 
       // If NOTE, summarize
       if (intent === 'NOTE') {
-        const result = await summarizer(transcript);
+        const result = await summarizer(transcript, { captureContext: parseCaptureContext(captureContext) });
         response.summary = result.summary;
       }
 

@@ -30,6 +30,10 @@ _Avoid_: Appointment Entry, Job, Booking
 External or inferred evidence used to predict Entry structure such as Location, Contact, Tags, or Team-configured Work Context for an Entry. Context Clues support review and prediction but are not themselves Timeline content.
 _Avoid_: Metadata, Signal, Evidence
 
+**Capture Context**:
+Bounded, user-controlled context that helps JobDone summarize, extract, and predict structure for a Capture. Capture Context can come from a personal onboarding answer, a Team purpose/domain, claimed Backlog Items, Work Context, or future domain profiles. Capture Context is data about what the user is likely doing; it is not raw prompt text or model instructions.
+_Avoid_: Prompt, Prompt Injection, Product Mode
+
 **Tag**:
 A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are how JobDone structures operational memory; they are not decorative UI facets.
 _Avoid_: Label, Chip, Metadata
@@ -237,6 +241,8 @@ _Avoid_: Search bar, Input field, Record button
 - Offline **Recall** can replay cached results for previously run Queries; new Recall requires the backend
 - If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
 - A voice recording creates a **Capture**; transcription and summarization enrich the Capture before review
+- A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
+- JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
 - Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
 - Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry

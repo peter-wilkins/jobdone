@@ -7,6 +7,7 @@ import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
+import { buildCaptureContext, captureContextService, CAPTURE_CONTEXT_TEMPLATES } from './services/captureContextService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -164,6 +165,9 @@ export function HomeScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
+  const [captureContext, setCaptureContext] = useState(() => captureContextService.get());
+  const [contextTemplateId, setContextTemplateId] = useState(CAPTURE_CONTEXT_TEMPLATES[0].id);
+  const [contextNotes, setContextNotes] = useState('');
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -531,7 +535,7 @@ export function HomeScreen({
       }
 
       // Transcribe - backend returns intent in response
-      const result = await apiService.transcribeAudio(entry.audioBlob);
+      const result = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
 
       // Update entry with transcription data and intent (goes to ready_for_review)
       const updated = await dbService.updateEntryWithTranscription(jobId, {
@@ -721,6 +725,12 @@ export function HomeScreen({
       setRecordingFlashActive(false);
       setRecordingTime(0);
     }
+  };
+
+  const saveCaptureContext = () => {
+    const next = buildCaptureContext(contextTemplateId, contextNotes);
+    captureContextService.save(next);
+    setCaptureContext(next);
   };
 
   const OFFLINE_MSG = 'Recall isn\'t available right now. Try again in a moment.';
@@ -2290,6 +2300,51 @@ export function HomeScreen({
               Reload
             </button>
           )}
+        </div>
+      )}
+
+      {!captureContext && (
+        <div className="border-b border-gray-200 bg-gray-50 px-4 py-4">
+          <div className="mx-auto max-w-2xl">
+            <p className="text-sm font-medium text-gray-900">What will you mostly use JobDone for?</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {CAPTURE_CONTEXT_TEMPLATES.map(template => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => setContextTemplateId(template.id)}
+                  className={`rounded border px-3 py-2 text-left ${
+                    contextTemplateId === template.id
+                      ? 'border-gray-900 bg-white text-gray-900'
+                      : 'border-gray-200 bg-white text-gray-700'
+                  }`}
+                >
+                  <span className="block text-sm font-medium">{template.label}</span>
+                  <span className="mt-1 block text-xs text-gray-500">{template.examples}</span>
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 block">
+              <span className="text-xs font-medium text-gray-600">Extra context, optional</span>
+              <textarea
+                value={contextNotes}
+                onChange={(event) => setContextNotes(event.target.value)}
+                rows={2}
+                maxLength={240}
+                placeholder="Examples: mostly garden maintenance for my own home; classic cars; rental property repairs."
+                className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
+              />
+            </label>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={saveCaptureContext}
+                className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
