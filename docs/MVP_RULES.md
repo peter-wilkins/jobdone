@@ -38,6 +38,9 @@ and backwards compatibility become mandatory.
   when network, backend, or sync is unavailable.
 - Prefer foreground retry and simple recovery paths over background complexity.
 - Do not silently discard user-entered or captured information.
+- Until JobDone has real users, dogfooding/debug instrumentation may be enabled
+  by default when it speeds learning. Move it behind explicit flags before
+  public use.
 
 ## Testing Defaults
 
