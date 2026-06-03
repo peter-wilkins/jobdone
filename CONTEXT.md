@@ -27,7 +27,7 @@ A real calendar item near the time of a Capture or Entry, used as contextual evi
 _Avoid_: Appointment Entry, Job, Booking
 
 **Context Clue**:
-External or inferred evidence used to predict Location, Contact, or Tags for an Entry. Context Clues support review and prediction but are not themselves Timeline content.
+External or inferred evidence used to predict Entry structure such as Location, Contact, Tags, or Team-configured Work Context for an Entry. Context Clues support review and prediction but are not themselves Timeline content.
 _Avoid_: Metadata, Signal, Evidence
 
 **Tag**:
@@ -47,12 +47,16 @@ The user's reusable set of Tags available for future prediction. It is managed f
 _Avoid_: Tag History, Prompt List
 
 **Prediction Candidate Set**:
-The bounded set of plausible Locations, Contacts, and Tags selected from Context Clues and Tag Vocabulary before AI ranking. The AI chooses from this small contextual set and may propose a new Tag only when no candidate fits.
+The bounded set of plausible Locations, Contacts, Tags, and Team-configured Work Context values selected from Context Clues, Team settings, and Tag Vocabulary before AI ranking. The AI chooses from this small contextual set and may propose a new Tag only when no candidate fits.
 _Avoid_: Full Tag List, Prompt Context, Search Space
 
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
+
+**Work Context**:
+A Team-configured Entry structure dimension that captures what the work belongs to for that Team, beyond global Location, Contact, and Tags. Examples include Backlog Item, Machine, Vehicle, Asset, Project, or another Team-specific operational object. Work Context should use Team language and settings, not product-specific words such as chore.
+_Avoid_: Chore Field, Generic Metadata, Team Tag
 
 **Photo**:
 An image attachment received through a Capture and retained with the Entry after Confirmation.
@@ -234,7 +238,7 @@ _Avoid_: Search bar, Input field, Record button
 - If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
 - A voice recording creates a **Capture**; transcription and summarization enrich the Capture before review
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
-- Predicted Locations, Contacts, Tags, and Context Clues remain review-only until Confirmation
+- Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
 - Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry
 - Confirmation does not require login; confirmed local data syncs after login when available
 - Shared contacts, photos, links, and text always enter as **Captures** and require Confirmation before becoming Entries
@@ -251,6 +255,8 @@ _Avoid_: Search bar, Input field, Record button
 - **Contacts** are local-first and sync to Supabase eventually, using the same per-user normalized identifier rules
 - **Locations**, **Contacts**, and **Tags** are primary retrieval structure for Entries, not secondary decoration
 - **Locations** and **Contacts** use the same pill/filter UX as Tags but remain separate domain entities because they carry identity and context beyond a string label
+- **Locations** and **Contacts** remain special first-class entities because they have phone and platform integrations such as GPS, maps, share contacts, contact evidence, and future contact pickers. A Team may hide Location and/or Contact review controls when they are not useful for that Team, such as a Team that always works in one place.
+- **Work Context** covers Team-specific operational dimensions that should sit beside Location, Contact, and Tags during review without inheriting Location or Contact identity rules. Team settings choose which Work Context dimensions are active for that Team.
 - New Locations and Contacts require stronger evidence than arbitrary Tags: Locations should refer to real places, and Contacts should refer to contactable humans with contact evidence
 - Location identity can combine several pieces of evidence, such as a user-confirmed label, structured address, postcode, coordinates, provider place id, or approximate locality. The Location's kind describes the best current UX/acquisition type, not an exclusive data shape
 - User-confirmed Location labels and addresses outrank provider-derived or GPS-derived fields. Lookup and GPS evidence can support suggestions, maps, and deduplication, but should not silently overwrite user-confirmed Location identity
@@ -382,6 +388,10 @@ _Avoid_: Search bar, Input field, Record button
 - Team evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Team-specific evidence object.
 - Teams do not require objective proof before approval. Trust is between the Team Member and Approver; the app records the submitted Entry evidence and approval decision, while "needs more evidence" gives the Approver a lightweight way to ask for more.
 - My Work can suggest recent personal Timeline Entries as possible evidence inside the submit box for a claimed Backlog Item. Suggestions are optional picks based on the Backlog Item title/description and recent Entries; JobDone must not auto-submit evidence without the Team Member choosing it.
+- Capture review stays personal and frictionless by default. When the user is attaching evidence to Team work, JobDone can first ask for the Team if there is more than one relevant Team, then show that Team's claimed Backlog Items so the user can pick one or more Work Context values. If there is only one relevant Team or one strong claimed Backlog Item candidate, the UI should skip or preselect that step.
+- Entry review is the main place to link evidence to claimed Backlog Items. My Work can still offer submit-evidence shortcuts, but the normal Capture path should let the user confirm content and attach it to Team Work Context before the Entry is committed.
+- If the user has no claimed Backlog Item, or is not doing Team work, the Capture can still become a normal personal Entry. Team evidence can be assembled later by manually linking existing Entries or by creating self-started work where Team settings allow it.
+- The first implemented Work Context dimension for Teams should be **Backlog Item**. Claimed Backlog Items already connect to Claims, Approval Requests, and Share Pack evidence, so they give the smallest useful feedback loop. More generic custom dimensions such as Machine, Vehicle, Asset, or Project can follow after Backlog Item evidence linking is working.
 - Teams with Points enabled should include visible Progress Goals: Team Members can track earned points against targets, earn Bonuses for reaching targets, and see minimum Privilege Thresholds. Privilege consequences are managed outside the app in V1; JobDone tracks and communicates them but does not enforce them.
 - Teams can support habit-building through finite Routines that suggest repeated Backlog Items for a limited period, then stop when the behaviour is likely established or the approval burden outweighs value.
 - JobDone should help Team Owners create useful Routines by suggesting sensible habit-building patterns, rather than forcing them to invent every repeated Backlog Item from scratch.
