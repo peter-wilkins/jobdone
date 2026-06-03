@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canAddMorePhotos,
+  compressPhotoAttachment,
   createPendingPhotoAttachments,
   formatAttachmentBytes,
   hasPendingPhotoAttachments,
@@ -11,6 +12,31 @@ import {
 
 function fakeFile(name, type = 'image/jpeg', size = 1234) {
   return { name, type, size };
+}
+
+function makeWorkerCtor(responses) {
+  const calls = [];
+  class FakeWorker {
+    constructor(url, options) {
+      this.url = url;
+      this.options = options;
+      calls.push(this);
+    }
+
+    postMessage(message) {
+      this.message = message;
+      const response = responses.shift();
+      queueMicrotask(() => {
+        this.onmessage?.({ data: response });
+      });
+    }
+
+    terminate() {
+      this.terminated = true;
+    }
+  }
+  FakeWorker.calls = calls;
+  return FakeWorker;
 }
 
 test('photo attachment service caps selected photos for one Capture', () => {
@@ -45,4 +71,42 @@ test('photo attachment service reports pending and ready attachments', () => {
 test('photo attachment service formats byte counts', () => {
   assert.equal(formatAttachmentBytes(100), '100 B');
   assert.equal(formatAttachmentBytes(2048), '2 KB');
+});
+
+test('photo compression retries transient source image decode failures', async () => {
+  const WorkerCtor = makeWorkerCtor([
+    { ok: false, error: 'The source image could not be decoded.' },
+    {
+      ok: true,
+      blob: new Blob(['compressed'], { type: 'image/jpeg' }),
+      metadata: {
+        width: 640,
+        height: 480,
+        mimeType: 'image/jpeg',
+        size: 10,
+        originalName: 'garden.jpg',
+        originalSize: 1234,
+        originalType: 'image/jpeg',
+      },
+    },
+  ]);
+
+  const result = await compressPhotoAttachment({
+    id: 'attachment-1',
+    kind: 'photo',
+    status: 'pending_compression',
+    originalName: 'garden.jpg',
+    originalType: 'image/jpeg',
+    originalSize: 1234,
+    originalBlob: fakeFile('garden.jpg'),
+  }, {
+    WorkerCtor,
+    retryDelaysMs: [0, 0],
+    workerUrl: 'worker.js',
+  });
+
+  assert.equal(result.status, 'ready');
+  assert.equal(result.width, 640);
+  assert.equal(result.originalBlob, null);
+  assert.equal(WorkerCtor.calls.length, 2);
 });

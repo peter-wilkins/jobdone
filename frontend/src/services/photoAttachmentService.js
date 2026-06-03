@@ -1,6 +1,7 @@
 const MAX_PHOTOS_PER_CAPTURE = 6;
 const DEFAULT_MAX_EDGE = 2000;
 const DEFAULT_QUALITY = 0.8;
+const DECODE_RETRY_DELAYS_MS = [0, 120, 300];
 
 function generateAttachmentId() {
   return `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -49,19 +50,20 @@ export function canAddMorePhotos(attachments = []) {
   return (attachments || []).filter(attachment => attachment?.kind === 'photo').length < MAX_PHOTOS_PER_CAPTURE;
 }
 
-export function compressPhotoAttachment(attachment, {
-  WorkerCtor = globalThis.Worker,
-  workerUrl = new URL('../workers/photoCompression.worker.js', import.meta.url),
-  maxEdge = DEFAULT_MAX_EDGE,
-  quality = DEFAULT_QUALITY,
-} = {}) {
-  if (!attachment?.originalBlob) {
-    return Promise.reject(new Error('Original Photo is not available for compression.'));
-  }
-  if (!WorkerCtor) {
-    return Promise.reject(new Error('Photo compression is unavailable in this browser.'));
-  }
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
+function isImageDecodeError(error) {
+  return /decode|decoded|source image|bitmap/i.test(error?.message || '');
+}
+
+function compressPhotoAttachmentOnce(attachment, {
+  WorkerCtor,
+  workerUrl,
+  maxEdge,
+  quality,
+} = {}) {
   return new Promise((resolve, reject) => {
     const worker = new WorkerCtor(workerUrl, { type: 'module' });
     worker.onmessage = (event) => {
@@ -97,6 +99,41 @@ export function compressPhotoAttachment(attachment, {
       quality,
     });
   });
+}
+
+export function compressPhotoAttachment(attachment, {
+  WorkerCtor = globalThis.Worker,
+  workerUrl = new URL('../workers/photoCompression.worker.js', import.meta.url),
+  maxEdge = DEFAULT_MAX_EDGE,
+  quality = DEFAULT_QUALITY,
+  retryDelaysMs = DECODE_RETRY_DELAYS_MS,
+} = {}) {
+  if (!attachment?.originalBlob) {
+    return Promise.reject(new Error('Original Photo is not available for compression.'));
+  }
+  if (!WorkerCtor) {
+    return Promise.reject(new Error('Photo compression is unavailable in this browser.'));
+  }
+
+  const delays = retryDelaysMs.length ? retryDelaysMs : [0];
+
+  return (async () => {
+    let lastError = null;
+    for (let index = 0; index < delays.length; index += 1) {
+      if (index > 0 && delays[index]) {
+        await sleep(delays[index]);
+      }
+      try {
+        return await compressPhotoAttachmentOnce(attachment, { WorkerCtor, workerUrl, maxEdge, quality });
+      } catch (error) {
+        lastError = error;
+        if (!isImageDecodeError(error)) {
+          throw error;
+        }
+      }
+    }
+    throw lastError || new Error('Photo compression failed.');
+  })();
 }
 
 export { MAX_PHOTOS_PER_CAPTURE };

@@ -1,3 +1,25 @@
+self.decodeDelay = self.decodeDelay || ((ms) => new Promise(resolve => setTimeout(resolve, ms)));
+
+async function decodeImage(file) {
+  const bytes = await file.arrayBuffer();
+  const imageBlob = new Blob([bytes], { type: file.type || 'image/jpeg' });
+  const delays = [0, 80, 220];
+  let lastError = null;
+
+  for (const delay of delays) {
+    if (delay) {
+      await self.decodeDelay(delay);
+    }
+    try {
+      return await createImageBitmap(imageBlob);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Source image could not be decoded.');
+}
+
 self.onmessage = async (event) => {
   const { jobId, file, maxEdge = 2000, quality = 0.8 } = event.data || {};
 
@@ -6,7 +28,7 @@ self.onmessage = async (event) => {
       throw new Error('Choose an image file.');
     }
 
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decodeImage(file);
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));
