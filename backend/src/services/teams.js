@@ -925,6 +925,62 @@ export async function createBacklogItem(input, { db = jobdoneDb, ownerEmail, tea
   return presentBacklogItem(data);
 }
 
+export async function createAndClaimBacklogItem(input, { db = jobdoneDb, userEmail, teamId: selectedTeamId = null } = {}) {
+  if (!db) {
+    const error = new Error('Team database not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const email = normalizedEmail(userEmail);
+  if (!email) {
+    const error = new Error('Login is required to create Team work.');
+    error.statusCode = 401;
+    throw error;
+  }
+  if (!selectedTeamId) {
+    const error = new Error('Choose a Team first.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { data: membershipRows, error: membershipError } = await db.query(
+    `select t.*, tm.role as member_role
+       from ${db.schema}.team_members tm
+       join ${db.schema}.teams t on t.id = tm.team_id
+      where tm.normalized_email = $1
+        and tm.team_id = $2
+      limit 1`,
+    [email, selectedTeamId]
+  );
+  if (membershipError) throw membershipError;
+  const team = (membershipRows || [])[0] || null;
+  if (!team) {
+    const error = new Error('Team not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!team.workers_can_create_backlog_items) {
+    const error = new Error('This Team only allows planned Backlog work.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const values = validateBacklogItemInput(input);
+  const { data, error } = await db
+    .from('backlog_items')
+    .insert([{
+      team_id: selectedTeamId,
+      ...values,
+      status: 'claimed',
+      claimed_by_email: email,
+      updated_at: nowIso(),
+    }])
+    .select('*')
+    .single();
+  if (error) throw error;
+  return presentBacklogItem(data, team);
+}
+
 export async function updateOpenBacklogItem(id, input, { db = jobdoneDb, ownerEmail, teamId: selectedTeamId = null } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');

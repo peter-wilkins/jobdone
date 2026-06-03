@@ -2,6 +2,7 @@ import {
   claimBacklogItem,
   acceptTeamInvite,
   createTeamInvite,
+  createAndClaimBacklogItem,
   createBacklogItem,
   decideApprovalRequest,
   deleteOwnedTeam,
@@ -40,6 +41,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
   const getWorkState = deps.getMyWorkState || deps.getTeamWorkState || getMyWorkState;
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
+  const createAndClaimItem = deps.createAndClaimBacklogItem || createAndClaimBacklogItem;
   const updateItem = deps.updateOpenBacklogItem || updateOpenBacklogItem;
   const deleteTeam = deps.deleteOwnedTeam || deleteOwnedTeam;
   const deleteItem = deps.deleteOpenBacklogItem || deleteOpenBacklogItem;
@@ -120,6 +122,17 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
       const backlogItem = await createItem(request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
+      return reply.status(201).send({ backlogItem });
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+
+  fastify.post('/api/teams/backlog-items/create-and-claim', async (request, reply) => {
+    try {
+      const user = await mustAuth(request, reply);
+      if (!user) return reply;
+      const backlogItem = await createAndClaimItem(request.body || {}, { userEmail: user.email, teamId: teamIdFromRequest(request) });
       return reply.status(201).send({ backlogItem });
     } catch (error) {
       return errorReply(reply, error);

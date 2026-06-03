@@ -454,6 +454,19 @@ export class APIService {
     return response.json();
   }
 
+  async createAndClaimTeamBacklogItem({ teamId, description, points = null }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/create-and-claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ team_id: teamId, description, points }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to create and claim Backlog Item`);
+    }
+    return response.json();
+  }
+
   async updateTeamBacklogItem(id, { teamId, description, points }) {
     const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items/${id}`, {
       method: 'PATCH',

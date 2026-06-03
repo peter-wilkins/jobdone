@@ -31,6 +31,12 @@ async function buildApp(deps = {}) {
       points: input.points,
       status: 'open',
     }),
+    createAndClaimBacklogItem: async (input) => ({
+      id: 'item-1',
+      description: input.description.trim(),
+      points: input.points,
+      status: 'claimed',
+    }),
     updateOpenBacklogItem: async (id, input) => ({
       id,
       description: input.description.trim(),
@@ -276,6 +282,48 @@ describe('Team setup routes', () => {
     assert.equal(body.backlogItem.description, 'Tidy desk');
     assert.equal(body.backlogItem.points, 3);
     assert.equal(body.backlogItem.status, 'open');
+  });
+
+  test('creates and claims a Backlog Item for self-started Team work', async () => {
+    let call;
+    const app = await buildApp({
+      createAndClaimBacklogItem: async (input, context) => {
+        call = { input, context };
+        return { id: 'item-1', description: input.description.trim(), status: 'claimed', team: { id: context.teamId, name: 'Garden Team' } };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/backlog-items/create-and-claim',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ team_id: 'team-1', description: '  Weed patio  ' }),
+    });
+
+    assert.equal(res.statusCode, 201);
+    assert.deepEqual(call.context, { userEmail: 'owner@example.com', teamId: 'team-1' });
+    assert.equal(JSON.parse(res.body).backlogItem.status, 'claimed');
+    assert.equal(JSON.parse(res.body).backlogItem.description, 'Weed patio');
+  });
+
+  test('returns nearby create-and-claim permission message', async () => {
+    const app = await buildApp({
+      createAndClaimBacklogItem: async () => {
+        const error = new Error('This Team only allows planned Backlog work.');
+        error.statusCode = 403;
+        throw error;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/teams/backlog-items/create-and-claim',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ team_id: 'team-1', description: 'Ad hoc job' }),
+    });
+
+    assert.equal(res.statusCode, 403);
+    assert.equal(JSON.parse(res.body).error, 'This Team only allows planned Backlog work.');
   });
 
   test('edits an open Backlog Item', async () => {

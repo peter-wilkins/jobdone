@@ -151,7 +151,11 @@ export function HomeScreen({
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
   const [reviewWorkContextPanels, setReviewWorkContextPanels] = useState({});
   const [reviewSelectedWorkContexts, setReviewSelectedWorkContexts] = useState({});
-  const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, claimedItems: [] });
+  const [reviewWorkContextErrors, setReviewWorkContextErrors] = useState({});
+  const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
+  const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
+  const [busyWorkContextIds, setBusyWorkContextIds] = useState(new Set());
+  const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
   const [confirmingIds, setConfirmingIds] = useState(new Set());
   const [processingIds, setProcessingIds] = useState(new Set());
@@ -185,7 +189,7 @@ export function HomeScreen({
 
   const refreshTeamWorkContext = async () => {
     if (!user || !backendAvailable) {
-      setTeamWorkContext({ hasTeams: false, claimedItems: [] });
+      setTeamWorkContext({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
       return;
     }
 
@@ -198,16 +202,17 @@ export function HomeScreen({
         .slice(0, 8);
       setTeamWorkContext({
         hasTeams: teams.length > 0,
+        teams,
         claimedItems,
+        openBacklogItems: state.openBacklogItems || [],
       });
     } catch (err) {
       console.warn('[Team] Work Context unavailable:', err);
-      setTeamWorkContext({ hasTeams: false, claimedItems: [] });
+      setTeamWorkContext({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
     }
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshTeamWorkContext();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, backendAvailable, refreshKey]);
@@ -231,7 +236,6 @@ export function HomeScreen({
       .map(entry => entry.id);
     if (!readyNoteIds.length) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReviewSelectedWorkContexts(prev => {
       let changed = false;
       const next = { ...prev };
@@ -275,6 +279,71 @@ export function HomeScreen({
       else selected.add(itemId);
       return { ...prev, [entryId]: Array.from(selected) };
     });
+  };
+
+  const markWorkContextBusy = (key, busy) => {
+    setBusyWorkContextIds(prev => {
+      const next = new Set(prev);
+      if (busy) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const selectClaimedWorkContext = (entryId, item) => {
+    setTeamWorkContext(prev => {
+      const exists = prev.claimedItems.some(claimed => claimed.id === item.id);
+      return {
+        ...prev,
+        claimedItems: exists ? prev.claimedItems : [item, ...prev.claimedItems],
+        openBacklogItems: prev.openBacklogItems.filter(openItem => openItem.id !== item.id),
+      };
+    });
+    setReviewSelectedWorkContexts(prev => {
+      const selected = new Set(prev[entryId] || []);
+      selected.add(item.id);
+      return { ...prev, [entryId]: Array.from(selected) };
+    });
+    setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: null }));
+  };
+
+  const claimReviewBacklogItem = async (entryId, item) => {
+    const busyKey = `claim:${item.id}`;
+    markWorkContextBusy(busyKey, true);
+    setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: null }));
+    try {
+      const result = await apiService.claimTeamBacklogItem(item.id);
+      selectClaimedWorkContext(entryId, result.backlogItem || item);
+    } catch (err) {
+      setReviewWorkContextErrors(prev => ({
+        ...prev,
+        [entryId]: err.message || 'Great news! Someone else just claimed this task.',
+      }));
+      await refreshTeamWorkContext();
+    } finally {
+      markWorkContextBusy(busyKey, false);
+    }
+  };
+
+  const createAndClaimReviewBacklogItem = async (entryId, teamId) => {
+    const description = String(reviewNewWorkDescriptions[entryId] || '').trim();
+    if (!description) {
+      setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: 'Add a short description first.' }));
+      return;
+    }
+
+    const busyKey = `create:${entryId}`;
+    markWorkContextBusy(busyKey, true);
+    setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: null }));
+    try {
+      const result = await apiService.createAndClaimTeamBacklogItem({ teamId, description });
+      selectClaimedWorkContext(entryId, result.backlogItem);
+      setReviewNewWorkDescriptions(prev => ({ ...prev, [entryId]: '' }));
+    } catch (err) {
+      setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: err.message || 'Could not create Team work here.' }));
+    } finally {
+      markWorkContextBusy(busyKey, false);
+    }
   };
 
   const candidateExplanationKey = (entryId, kind, candidate) =>
@@ -794,6 +863,21 @@ export function HomeScreen({
         return next;
       });
       setReviewSelectedWorkContexts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewWorkContextErrors(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewNewWorkDescriptions(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setReviewNewWorkTeamIds(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -1432,9 +1516,14 @@ export function HomeScreen({
         return groups;
       }, {});
       const workContextItems = teamWorkContext.claimedItems || [];
+      const openWorkContextItems = teamWorkContext.openBacklogItems || [];
+      const creatableTeams = (teamWorkContext.teams || []).filter(team => team.workers_can_create_backlog_items);
+      const selectedCreateTeamId = reviewNewWorkTeamIds[entry.id] || creatableTeams[0]?.id || '';
       const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[entry.id] || []);
       const selectedWorkContextItems = workContextItems.filter(item => selectedWorkContextIds.has(item.id));
       const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
+      const workContextPanelError = reviewWorkContextErrors[entry.id];
+      const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -1459,7 +1548,7 @@ export function HomeScreen({
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
               <p className="text-gray-900 mb-2">{entry.summary}</p>
               <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
-              {workContextItems.length > 0 && (
+              {shouldShowWorkContext && (
                 <div className="mb-3">
                   <div className="flex flex-wrap gap-2">
                     {selectedWorkContextItems.length > 0 ? (
@@ -1510,28 +1599,106 @@ export function HomeScreen({
                       <p className="mt-1 text-xs text-amber-800">
                         Link this Entry to the work it evidences. You can leave this blank.
                       </p>
-                      <div className="mt-2 space-y-2">
-                        {workContextItems.map(item => {
-                          const selected = selectedWorkContextIds.has(item.id);
-                          return (
+                      {workContextItems.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {workContextItems.map(item => {
+                            const selected = selectedWorkContextIds.has(item.id);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => toggleReviewWorkContext(entry.id, item.id)}
+                                className={`block w-full rounded border px-3 py-2 text-left ${
+                                  selected
+                                    ? 'border-amber-300 bg-white text-amber-900'
+                                    : 'border-amber-100 bg-white/80 text-gray-800'
+                                }`}
+                              >
+                                <span className="block text-sm font-medium">{workContextLabel(item)}</span>
+                                <span className="mt-0.5 block text-xs text-gray-500">
+                                  {[workContextTeamLabel(item), item.status === 'needs_more_evidence' ? 'Needs more evidence' : item.status === 'submitted' ? 'Submitted' : 'Claimed'].filter(Boolean).join(' · ')}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {openWorkContextItems.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-amber-900">Open Backlog</p>
+                          <div className="mt-2 space-y-2">
+                            {openWorkContextItems.map(item => {
+                              const busyKey = `claim:${item.id}`;
+                              const busy = busyWorkContextIds.has(busyKey);
+                              return (
+                                <div key={item.id} className="rounded border border-amber-100 bg-white/80 px-3 py-2">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-gray-900">{workContextLabel(item)}</p>
+                                      <p className="mt-0.5 text-xs text-gray-500">{workContextTeamLabel(item)}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => claimReviewBacklogItem(entry.id, item)}
+                                      disabled={busy}
+                                      className="shrink-0 rounded bg-amber-700 px-3 py-1.5 text-xs font-medium text-white disabled:bg-amber-200"
+                                    >
+                                      {busy ? 'Claiming...' : 'Claim'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {creatableTeams.length > 0 ? (
+                        <div className="mt-3 rounded border border-amber-100 bg-white/70 p-3">
+                          <p className="text-xs font-medium text-amber-900">Create new work</p>
+                          <div className="mt-2 grid gap-2">
+                            {creatableTeams.length > 1 && (
+                              <select
+                                value={selectedCreateTeamId}
+                                onChange={(event) => setReviewNewWorkTeamIds(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                                className="rounded border border-amber-200 bg-white px-3 py-2 text-sm text-gray-900"
+                              >
+                                {creatableTeams.map(team => (
+                                  <option key={team.id} value={team.id}>{team.name}</option>
+                                ))}
+                              </select>
+                            )}
+                            <input
+                              type="text"
+                              value={reviewNewWorkDescriptions[entry.id] || ''}
+                              onChange={(event) => setReviewNewWorkDescriptions(prev => ({ ...prev, [entry.id]: event.target.value }))}
+                              placeholder="Short Backlog Item"
+                              className="rounded border border-amber-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-amber-500"
+                            />
                             <button
-                              key={item.id}
                               type="button"
-                              onClick={() => toggleReviewWorkContext(entry.id, item.id)}
-                              className={`block w-full rounded border px-3 py-2 text-left ${
-                                selected
-                                  ? 'border-amber-300 bg-white text-amber-900'
-                                  : 'border-amber-100 bg-white/80 text-gray-800'
-                              }`}
+                              onClick={() => createAndClaimReviewBacklogItem(entry.id, selectedCreateTeamId)}
+                              disabled={!selectedCreateTeamId || busyWorkContextIds.has(`create:${entry.id}`)}
+                              className="justify-self-start rounded bg-amber-700 px-3 py-2 text-sm font-medium text-white disabled:bg-amber-200"
                             >
-                              <span className="block text-sm font-medium">{workContextLabel(item)}</span>
-                              <span className="mt-0.5 block text-xs text-gray-500">
-                                {[workContextTeamLabel(item), item.status === 'needs_more_evidence' ? 'Needs more evidence' : item.status === 'submitted' ? 'Submitted' : 'Claimed'].filter(Boolean).join(' · ')}
-                              </span>
+                              {busyWorkContextIds.has(`create:${entry.id}`) ? 'Creating...' : 'Create and claim'}
                             </button>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded border border-amber-100 bg-white/70 px-3 py-2 text-xs text-amber-800">
+                          This Team only allows planned Backlog work. Claim an open item or talk to the Team Owner.
+                        </p>
+                      )}
+
+                      {workContextItems.length === 0 && openWorkContextItems.length === 0 && creatableTeams.length === 0 && (
+                        <p className="mt-3 text-xs text-amber-800">No open Backlog Items are available right now.</p>
+                      )}
+
+                      {workContextPanelError && (
+                        <p className="mt-2 text-sm text-red-700">{workContextPanelError}</p>
+                      )}
                     </div>
                   )}
                 </div>
