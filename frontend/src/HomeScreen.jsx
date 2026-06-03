@@ -243,6 +243,7 @@ export function HomeScreen({
   const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
   const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
   const [reviewTextDrafts, setReviewTextDrafts] = useState({});
+  const [debouncedReviewTextDrafts, setDebouncedReviewTextDrafts] = useState({});
   const [reviewIntentOverrides, setReviewIntentOverrides] = useState({});
   const [focusEntryId, setFocusEntryId] = useState(null);
   const [busyWorkContextIds, setBusyWorkContextIds] = useState(new Set());
@@ -552,10 +553,18 @@ export function HomeScreen({
   };
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedReviewTextDrafts(reviewTextDrafts);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [reviewTextDrafts]);
+
+  useEffect(() => {
     const readyNotes = entries.filter(entry =>
       entry.status === 'ready_for_review' &&
       entry.intent !== 'QUERY' &&
-      entry.summary
+      ((debouncedReviewTextDrafts[entry.id] || entry.summary || entry.transcript || '').trim()) &&
+      classify(debouncedReviewTextDrafts[entry.id] || entry.summary || entry.transcript || '') !== 'QUERY'
     );
 
     for (const entry of readyNotes) {
@@ -569,8 +578,13 @@ export function HomeScreen({
             dbService.getLocations('confirmed'),
             dbService.getTags('confirmed'),
           ]);
+          const draftText = Object.prototype.hasOwnProperty.call(debouncedReviewTextDrafts, entry.id)
+            ? debouncedReviewTextDrafts[entry.id]
+            : '';
+          const captureText = (draftText || [entry.summary, entry.transcript].filter(Boolean).join(' ')).trim();
+          const predictionEntry = { ...entry, summary: captureText, transcript: captureText };
           localContactCandidates = localContacts
-            .map(contact => localContactCandidate(contact, contactConfidenceForEntry(entry, contact)))
+            .map(contact => localContactCandidate(contact, contactConfidenceForEntry(predictionEntry, contact)))
             .filter(candidate => candidate?.visible)
             .filter(Boolean)
             .slice(0, 5);
@@ -587,8 +601,7 @@ export function HomeScreen({
           };
           const preExtractionFingerprint = JSON.stringify({
             entryId: entry.id,
-            summary: entry.summary,
-            transcript: entry.transcript,
+            captureText,
             candidateIds: Object.fromEntries(Object.entries(preExtractionCandidates).map(([key, values]) => [
               key,
               values.map(candidate => `${candidate.id}:${candidate.status || ''}`).join('|'),
@@ -598,7 +611,7 @@ export function HomeScreen({
           if (shouldRunPreExtraction) {
             preExtractionFingerprintsRef.current.set(entry.id, preExtractionFingerprint);
             preExtraction = runPreExtraction({
-              captureText: [entry.summary, entry.transcript].filter(Boolean).join(' '),
+              captureText,
               candidates: preExtractionCandidates,
               userId: user?.id || '',
               userSelections: {
@@ -609,7 +622,7 @@ export function HomeScreen({
               },
             });
           }
-          const shouldRunBackendPrediction = user && backendAvailable && !structurePredictionRequestedRef.current.has(entry.id);
+          const shouldRunBackendPrediction = !draftText && user && backendAvailable && !structurePredictionRequestedRef.current.has(entry.id);
           if (!shouldRunPreExtraction && !shouldRunBackendPrediction) {
             return;
           }
@@ -627,7 +640,7 @@ export function HomeScreen({
             try {
               result = await apiService.predictStructure({
                 entryData: {
-                  summary: entry.summary,
+                  summary: captureText || entry.summary,
                   transcript: entry.transcript,
                 },
                 contextClues,
@@ -706,6 +719,7 @@ export function HomeScreen({
     }
   }, [
     entries,
+    debouncedReviewTextDrafts,
     user,
     backendAvailable,
     teamWorkContext.teams,
@@ -1315,6 +1329,11 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      setDebouncedReviewTextDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       setReviewIntentOverrides(prev => {
         const next = { ...prev };
         delete next[id];
@@ -1353,6 +1372,11 @@ export function HomeScreen({
       await dbService.rejectEntry(id);
       setEntries(prev => prev.filter(e => e.id !== id));
       setReviewTextDrafts(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setDebouncedReviewTextDrafts(prev => {
         const next = { ...prev };
         delete next[id];
         return next;
