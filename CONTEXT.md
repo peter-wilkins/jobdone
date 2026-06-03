@@ -91,7 +91,7 @@ A Team-configured Entry structure dimension that captures what the work belongs 
 _Avoid_: Chore Field, Generic Metadata, Team Tag
 
 **Photo**:
-An image attachment received through a Capture and retained with the Entry after Confirmation.
+An image attachment received through a Capture and retained with the Entry after Confirmation. In MVP, Photos are selected through the native Android/platform picker, compressed for web before backend upload, and stored as compressed durable attachments rather than original full-size device images. Compression optimizes for evidence readability first, bandwidth second: receipts, damage photos, handwriting, labels, parts, and site details should remain readable. Photo compression should run in a Web Worker and be resumable/idempotent because the browser may freeze, pause, or discard background page work.
 _Avoid_: Image Entry, Scan, Upload
 
 **Link**:
@@ -99,7 +99,7 @@ A URL attachment received through a Capture, stored with optional metadata but n
 _Avoid_: Bookmark, Web Page, Search Result
 
 **Inbox**:
-The local review queue of unconfirmed Captures awaiting Confirmation or Rejection.
+The local recovery queue of unconfirmed Captures awaiting Confirmation or Rejection when they were not reviewed immediately, such as interrupted Android/platform shares. Inbox is storage and recovery, not the normal Capture product surface.
 _Avoid_: Drafts, Queue, Imports
 
 **Timeline**:
@@ -303,9 +303,12 @@ _Avoid_: Search bar, Input field, Record button
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
 - Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
 - Confirmed Entry associations to Locations, Contacts, Tags, and Context Clues are immutable in MVP; corrections are made by submitting a new Entry
+- Photos attach only to the current Capture before Confirmation in MVP. Confirmed Entries are not edited to add Photos; adding later evidence means creating another Entry and linking it to the same context. A Capture can have multiple Photos for before/after, wide/detail, or multi-page receipt evidence, capped to a small MVP limit.
 - Confirmation does not require login; confirmed local data syncs after login when available
 - Shared contacts, photos, links, and text always enter as **Captures** and require Confirmation before becoming Entries
+- Android/platform shares should open the normal Entry review flow with the shared payload preloaded, so the user can add notes, context, and additional Photos before Confirmation. A separate Inbox review screen is recovery-only for interrupted or unreviewed Captures.
 - One OS share action creates one **Capture**, even when it contains multiple payloads
+- If another Capture is already open and unconfirmed, a new OS share still creates a separate Capture. JobDone does not prompt to merge Captures in MVP; the existing Capture remains recoverable.
 - The **Inbox** persists Captures locally, including offline shared Captures, until Confirmation or Rejection
 - Captures are local-only before Confirmation; only confirmed outcomes sync
 - A **Capture** is created only after all required payloads are stored locally; partial Captures are not valid
