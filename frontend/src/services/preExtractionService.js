@@ -53,6 +53,15 @@ function tokenize(value) {
     .filter(token => token.length > 2 && !STOP_WORDS.has(token));
 }
 
+function stemToken(token) {
+  if (token.length > 5 && token.endsWith('ied')) return `${token.slice(0, -3)}y`;
+  if (token.length > 5 && token.endsWith('ing')) return token.slice(0, -3);
+  if (token.length > 4 && token.endsWith('ed')) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith('es')) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith('s')) return token.slice(0, -1);
+  return token;
+}
+
 function normalizeSearchText(value) {
   return tokenize(value).join(' ');
 }
@@ -98,15 +107,72 @@ function exactMentionScore(captureText, label) {
   return normalizedCapture.includes(normalizedLabel) ? 100 : 0;
 }
 
+function editDistance(left, right) {
+  if (left === right) return 0;
+  if (Math.abs(left.length - right.length) > 2) return 3;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    let rowMin = current[0];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
+      );
+      rowMin = Math.min(rowMin, current[j]);
+    }
+    if (rowMin > 2) return 3;
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+function tokensFuzzilyMatch(captureToken, labelToken) {
+  if (captureToken === labelToken) return true;
+  const captureStem = stemToken(captureToken);
+  const labelStem = stemToken(labelToken);
+  if (captureStem === labelStem) return true;
+  if (captureStem.length >= 5 && labelStem.length >= 5) {
+    const [shorter, longer] = captureStem.length <= labelStem.length
+      ? [captureStem, labelStem]
+      : [labelStem, captureStem];
+    if (longer.startsWith(shorter) || editDistance(captureStem, labelStem) <= 1) return true;
+  }
+  if (captureStem.length >= 7 && labelStem.length >= 7 && editDistance(captureStem, labelStem) <= 2) return true;
+  return false;
+}
+
 function tokenMentionScore(captureText, searchText) {
-  const captureTokens = new Set(tokenize(captureText));
+  const captureTokens = tokenize(captureText);
+  const exactCaptureTokens = new Set(captureTokens);
   const labelTokens = tokenize(searchText);
-  if (!captureTokens.size || !labelTokens.length) return 0;
-  const matched = labelTokens.filter(token => captureTokens.has(token)).length;
+  if (!captureTokens.length || !labelTokens.length) return 0;
+  let matched = 0;
+  let exactMatched = 0;
+  let fuzzyMatched = 0;
+  for (const labelToken of labelTokens) {
+    if (exactCaptureTokens.has(labelToken)) {
+      matched += 1;
+      exactMatched += 1;
+    } else if (captureTokens.some(captureToken => tokensFuzzilyMatch(captureToken, labelToken))) {
+      matched += 1;
+      fuzzyMatched += 1;
+    }
+  }
   if (matched === 0) return 0;
   const allTokensMatched = matched === labelTokens.length;
   const coverage = matched / labelTokens.length;
-  return Math.round((allTokensMatched ? 40 : 0) + (matched * 15) + (coverage * 30));
+  const definiteTokenMatch = matched >= 3;
+  const score = Math.round(
+    (allTokensMatched ? 40 : 0)
+    + (definiteTokenMatch ? 30 : 0)
+    + (exactMatched * 15)
+    + (fuzzyMatched * 12)
+    + (coverage * 30)
+  );
+  return Math.min(score, 95);
 }
 
 function scoreCandidate(captureText, candidate) {
@@ -170,5 +236,6 @@ export function runPreExtraction({
 export const preExtractionInternals = {
   normalizeText,
   normalizeSearchText,
+  stemToken,
   tokenize,
 };

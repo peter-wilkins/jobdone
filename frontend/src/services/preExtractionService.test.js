@@ -333,6 +333,21 @@ test('pre-extraction suggests backlog items from several description words', () 
   assert.equal(result.suggestions.backlogItems[0]?.id, 'target');
 });
 
+test('pre-extraction strongly suggests backlog items when three words match fuzzily', () => {
+  const result = runPreExtraction({
+    captureText: 'Cleaned the kitchen sink traps today.',
+    candidates: {
+      backlogItems: [
+        { id: 'weak', status: 'open', description: 'Clean kitchen windows' },
+        { id: 'target', status: 'open', description: 'Clean kitchen sink trap' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.backlogItems[0]?.id, 'target');
+  assert.ok(result.suggestions.backlogItems[0]?.score >= 90);
+});
+
 test('pre-extraction property loop prefers higher meaningful overlap across generated backlog items', () => {
   const actionWords = ['replace', 'clean', 'check', 'repair', 'paint'];
   const objectWords = ['sink', 'boiler', 'fence', 'pump', 'radiator'];
