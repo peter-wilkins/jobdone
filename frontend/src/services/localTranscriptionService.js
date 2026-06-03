@@ -253,7 +253,7 @@ function askWorker(message, { timeoutMs = 30000, transfer = [] } = {}) {
 
 export async function tryLocalTranscribeAudio(audioBlob, { captureContext = null } = {}) {
   const capabilities = canUseWhisperWasm();
-  let pcm16k = null;
+  let pcm16k;
   try {
     pcm16k = await decodeAudioToPcm16k(audioBlob);
   } catch (error) {
