@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { audioService } from './services/audioService';
 import { dbService, validateTagLabel } from './services/dbService';
 import { apiService } from './services/apiService';
@@ -19,6 +19,15 @@ import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serv
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
 import { classify } from './services/classifyService';
+import {
+  canAddMorePhotos,
+  compressPhotoAttachment,
+  createPendingPhotoAttachments,
+  formatAttachmentBytes,
+  hasFailedPhotoAttachments,
+  hasPendingPhotoAttachments,
+  MAX_PHOTOS_PER_CAPTURE,
+} from './services/photoAttachmentService';
 import {
   getSuccessfulCaptureCount,
   getLocalTranscriptionMetrics,
@@ -78,6 +87,32 @@ function transcriptionSourceLabel(source) {
   if (source === 'backend') return 'Backend';
   if (source === 'local') return 'Local';
   return source || 'Unknown';
+}
+
+function PhotoAttachmentThumb({ attachment }) {
+  const blob = attachment?.blob || attachment?.originalBlob;
+  const url = useMemo(() => blob ? URL.createObjectURL(blob) : '', [blob]);
+
+  useEffect(() => {
+    if (!url) return undefined;
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
+
+  if (!url) {
+    return (
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-gray-200 bg-gray-50 text-xs text-gray-400">
+        Photo
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={attachment.originalName || 'Photo attachment'}
+      className="h-16 w-16 shrink-0 rounded border border-gray-200 object-cover"
+    />
+  );
 }
 
 function containsContactName(entry, contact) {
@@ -246,6 +281,7 @@ export function HomeScreen({
   const [reviewWorkContextPanels, setReviewWorkContextPanels] = useState({});
   const [reviewSelectedWorkContexts, setReviewSelectedWorkContexts] = useState({});
   const [reviewWorkContextErrors, setReviewWorkContextErrors] = useState({});
+  const [reviewAttachmentErrors, setReviewAttachmentErrors] = useState({});
   const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
   const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
   const [reviewTextDrafts, setReviewTextDrafts] = useState({});
@@ -281,7 +317,9 @@ export function HomeScreen({
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
   const textAreaRefs = useRef(new Map());
+  const photoInputRefs = useRef(new Map());
   const textDraftSaveTimersRef = useRef(new Map());
+  const compressingAttachmentIdsRef = useRef(new Set());
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -365,6 +403,78 @@ export function HomeScreen({
     setReviewManualContacts(prev => ({ ...prev, [entryId]: { displayName: '', phone: '', email: '' } }));
     setReviewContactErrors(prev => ({ ...prev, [entryId]: null }));
   };
+
+  const updateEntryAttachments = async (entryId, updater) => {
+    const currentEntry = await dbService.getEntry(entryId);
+    const nextAttachments = updater(currentEntry?.attachmentSnapshots || []);
+    const updated = await dbService.updateEntry(entryId, { attachmentSnapshots: nextAttachments });
+    setEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updated } : entry));
+    return updated;
+  };
+
+  const compressAndPersistAttachment = async (entryId, attachment) => {
+    if (!attachment?.id || compressingAttachmentIdsRef.current.has(attachment.id)) return;
+    compressingAttachmentIdsRef.current.add(attachment.id);
+    try {
+      const compressed = await compressPhotoAttachment(attachment);
+      await updateEntryAttachments(entryId, attachments =>
+        attachments.map(item => item.id === attachment.id ? compressed : item)
+      );
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: null }));
+    } catch (err) {
+      console.warn('[Attachments] Photo compression failed:', err);
+      await updateEntryAttachments(entryId, attachments =>
+        attachments.map(item => item.id === attachment.id
+          ? { ...item, status: 'failed', errorMessage: err.message || 'Photo compression failed.' }
+          : item)
+      );
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: err.message || 'Photo compression failed.' }));
+    } finally {
+      compressingAttachmentIdsRef.current.delete(attachment.id);
+    }
+  };
+
+  const handleAddPhotoAttachments = async (entryId, fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    try {
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: null }));
+      const updated = await updateEntryAttachments(entryId, attachments => {
+        const pending = createPendingPhotoAttachments(files, attachments);
+        if (!pending.length) return attachments;
+        return [...attachments, ...pending];
+      });
+      const added = (updated.attachmentSnapshots || [])
+        .filter(attachment => attachment.status === 'pending_compression' && attachment.originalBlob);
+      for (const attachment of added) {
+        void compressAndPersistAttachment(entryId, attachment);
+      }
+    } catch (err) {
+      console.error('[Attachments] Failed to add Photos:', err);
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: err.message || 'Could not add Photos.' }));
+    }
+  };
+
+  const removePhotoAttachment = async (entryId, attachmentId) => {
+    try {
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: null }));
+      await updateEntryAttachments(entryId, attachments => attachments.filter(attachment => attachment.id !== attachmentId));
+    } catch (err) {
+      setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: err.message || 'Could not remove Photo.' }));
+    }
+  };
+
+  useEffect(() => {
+    for (const entry of entries) {
+      if (entry.status !== 'ready_for_review') continue;
+      for (const attachment of entry.attachmentSnapshots || []) {
+        if (attachment.status === 'pending_compression' && attachment.originalBlob) {
+          void compressAndPersistAttachment(entry.id, attachment);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   const toggleLocationPanel = (entryId) => {
     setReviewLocationPanels(prev => ({ ...prev, [entryId]: !prev[entryId] }));
@@ -1134,6 +1244,14 @@ export function HomeScreen({
     try {
       setError(null);
       let entry = entries.find(e => e.id === id);
+      if (hasPendingPhotoAttachments(entry?.attachmentSnapshots || [])) {
+        setReviewAttachmentErrors(prev => ({ ...prev, [id]: 'Photos are still preparing. Confirm when they are ready.' }));
+        return;
+      }
+      if (hasFailedPhotoAttachments(entry?.attachmentSnapshots || [])) {
+        setReviewAttachmentErrors(prev => ({ ...prev, [id]: 'Remove failed Photos before confirming.' }));
+        return;
+      }
       const draftText = (reviewTextDrafts[id] ?? '').trim();
       const nextIntent = reviewIntentOverrides[id] || classify(draftText || entry.summary || entry.transcript || '');
       if (draftText && draftText !== (entry.summary || entry.transcript || '').trim()) {
@@ -2082,6 +2200,12 @@ export function HomeScreen({
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
       const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
+      const attachmentSnapshots = entry.attachmentSnapshots || [];
+      const photoAttachments = attachmentSnapshots.filter(attachment => attachment.kind === 'photo');
+      const attachmentError = reviewAttachmentErrors[entry.id];
+      const photosPending = hasPendingPhotoAttachments(attachmentSnapshots);
+      const photosFailed = hasFailedPhotoAttachments(attachmentSnapshots);
+      const canAddPhotos = canAddMorePhotos(attachmentSnapshots);
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -2198,6 +2322,66 @@ export function HomeScreen({
               {showSeparateTranscript && (
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               )}
+
+              <div className="mb-3">
+                <input
+                  ref={(node) => {
+                    if (node) photoInputRefs.current.set(entry.id, node);
+                    else photoInputRefs.current.delete(entry.id);
+                  }}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    void handleAddPhotoAttachments(entry.id, event.target.files);
+                    event.target.value = '';
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRefs.current.get(entry.id)?.click()}
+                    disabled={!canAddPhotos}
+                    className="inline-flex items-center rounded border border-dashed border-gray-300 px-2.5 py-1 text-sm text-gray-700 disabled:border-gray-200 disabled:text-gray-400"
+                  >
+                    + Photos
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    {photoAttachments.length}/{MAX_PHOTOS_PER_CAPTURE}
+                  </span>
+                </div>
+                {photoAttachments.length > 0 && (
+                  <div className="mt-2 grid gap-2">
+                    {photoAttachments.map(attachment => (
+                      <div key={attachment.id} className="flex items-center gap-3 rounded border border-gray-200 bg-white px-3 py-2">
+                        <PhotoAttachmentThumb attachment={attachment} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{attachment.originalName || 'Photo'}</p>
+                          <p className="text-xs text-gray-500">
+                            {attachment.status === 'pending_compression'
+                              ? 'Preparing Photo...'
+                              : attachment.status === 'failed'
+                                ? (attachment.errorMessage || 'Compression failed')
+                                : `${attachment.width || '?'}x${attachment.height || '?'} · ${formatAttachmentBytes(attachment.size)}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePhotoAttachment(entry.id, attachment.id)}
+                          className="shrink-0 text-sm text-gray-500 underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {attachmentError && (
+                  <p className="mt-2 text-sm text-red-700">{attachmentError}</p>
+                )}
+              </div>
+
               {shouldShowWorkContext && (
                 <div className="mb-3" data-review-dismiss-root="work-context">
                   <div className="flex flex-wrap gap-2">
@@ -2696,7 +2880,7 @@ export function HomeScreen({
           <div className="flex gap-3">
             <button
               onClick={() => handleConfirm(entry.id)}
-              disabled={isConfirming}
+              disabled={isConfirming || photosPending || photosFailed}
               className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               {isConfirming ? (
@@ -2721,6 +2905,7 @@ export function HomeScreen({
     }
 
     // Confirmed entry
+    const confirmedPhotoAttachments = (entry.attachmentSnapshots || []).filter(attachment => attachment.kind === 'photo' && attachment.status === 'ready');
     return (
       <div key={entry.id} className="py-3 border-b border-gray-100 last:border-b-0">
         <div className="flex items-start justify-between gap-2">
@@ -2742,6 +2927,13 @@ export function HomeScreen({
             <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
               <span className="truncate">{primaryContact.displayName}</span>
             </span>
+          </div>
+        )}
+        {confirmedPhotoAttachments.length > 0 && (
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {confirmedPhotoAttachments.map(attachment => (
+              <PhotoAttachmentThumb key={attachment.id} attachment={attachment} />
+            ))}
           </div>
         )}
         {entryWorkContexts.length > 0 && (

@@ -1,6 +1,42 @@
 import { apiService } from './apiService.js';
 import { authService } from './authService.js';
 import { dbService } from './dbService.js';
+import { readyPhotoAttachments } from './photoAttachmentService.js';
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.includes(',') ? value.split(',').pop() : value);
+    };
+    reader.onerror = () => reject(new Error('Failed to read attachment'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function serializeReadyAttachments(entryData) {
+  const readyPhotos = readyPhotoAttachments(entryData.attachmentSnapshots || []);
+  const serialized = [];
+  for (const attachment of readyPhotos) {
+    if (!attachment.blob) continue;
+    serialized.push({
+      id: attachment.id,
+      kind: 'photo',
+      status: 'ready',
+      filename: attachment.originalName || 'photo.jpg',
+      mimeType: attachment.mimeType || attachment.blob.type || 'image/jpeg',
+      size: attachment.size || attachment.blob.size || 0,
+      width: attachment.width || null,
+      height: attachment.height || null,
+      originalName: attachment.originalName || '',
+      originalSize: attachment.originalSize || 0,
+      originalType: attachment.originalType || '',
+      dataBase64: await blobToBase64(attachment.blob),
+    });
+  }
+  return serialized;
+}
 
 export class SyncService {
   getUserId() {
@@ -28,6 +64,7 @@ export class SyncService {
         ? entryData.tagSnapshots
         : await dbService.getTagsForEntry(entryData.id);
       const contacts = Array.isArray(entryData.contactSnapshots) ? entryData.contactSnapshots : [];
+      const attachments = await serializeReadyAttachments(entryData);
 
       const response = await apiService.syncSave({
         entryData: {
@@ -39,6 +76,7 @@ export class SyncService {
           locations,
           contacts,
           tags,
+          attachments,
         },
       });
 

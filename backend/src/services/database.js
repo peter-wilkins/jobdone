@@ -266,6 +266,65 @@ export async function saveEntry(userId, entryData) {
   }
 }
 
+function normalizeAttachment(attachment = {}) {
+  const kind = String(attachment.kind || '').trim();
+  if (kind !== 'photo') return null;
+  const dataBase64 = String(attachment.dataBase64 || attachment.data_base64 || '').trim();
+  if (!dataBase64) return null;
+  const buffer = Buffer.from(dataBase64, 'base64');
+  if (!buffer.length) return null;
+
+  return {
+    local_id: attachment.id || attachment.localId || attachment.local_id || `attachment-${Date.now()}`,
+    kind,
+    filename: String(attachment.filename || attachment.originalName || 'photo.jpg').slice(0, 240),
+    mime_type: String(attachment.mimeType || attachment.mime_type || 'image/jpeg').slice(0, 120),
+    byte_size: Number.isFinite(Number(attachment.size || attachment.byte_size))
+      ? Math.max(0, Math.round(Number(attachment.size || attachment.byte_size)))
+      : buffer.length,
+    width: Number.isFinite(Number(attachment.width)) ? Math.max(1, Math.round(Number(attachment.width))) : null,
+    height: Number.isFinite(Number(attachment.height)) ? Math.max(1, Math.round(Number(attachment.height))) : null,
+    data: buffer,
+    metadata: {
+      originalName: String(attachment.originalName || attachment.original_name || '').slice(0, 240),
+      originalSize: Number.isFinite(Number(attachment.originalSize || attachment.original_size))
+        ? Math.max(0, Math.round(Number(attachment.originalSize || attachment.original_size)))
+        : null,
+      originalType: String(attachment.originalType || attachment.original_type || '').slice(0, 120),
+    },
+  };
+}
+
+export async function saveEntryAttachments(userId, entryId, attachments = []) {
+  if (!jobdoneDb) {
+    console.warn('[DB] Supabase not configured, skipping attachments save');
+    return [];
+  }
+
+  const rows = (Array.isArray(attachments) ? attachments : [])
+    .map(normalizeAttachment)
+    .filter(Boolean)
+    .map(attachment => ({
+      user_id: userId,
+      entry_id: entryId,
+      ...attachment,
+    }));
+
+  if (!rows.length) return [];
+
+  const { data, error } = await jobdoneDb
+    .from('entry_attachments')
+    .upsert(rows, { onConflict: 'user_id,entry_id,local_id' })
+    .select('id, entry_id, local_id, kind, filename, mime_type, byte_size, width, height, metadata, created_at');
+
+  if (error) {
+    console.error('[DB] Save attachments error:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
 /**
  * Find an existing confirmed entry by Capture ID.
  */

@@ -286,7 +286,31 @@ CREATE INDEX feedback_created_at_idx           ON feedback(created_at DESC);
 
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 
--- 11. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 12. entry_attachments (compressed durable Photo attachments)
+CREATE TABLE entry_attachments (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        TEXT NOT NULL,
+  entry_id       UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+  local_id       TEXT NOT NULL,
+  kind           TEXT NOT NULL CHECK (kind IN ('photo')),
+  filename       TEXT NOT NULL DEFAULT '',
+  mime_type      TEXT NOT NULL DEFAULT 'image/jpeg',
+  byte_size      INTEGER NOT NULL DEFAULT 0,
+  width          INTEGER,
+  height         INTEGER,
+  data           BYTEA NOT NULL,
+  metadata       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX entry_attachments_user_id_idx ON entry_attachments(user_id);
+CREATE INDEX entry_attachments_entry_id_idx ON entry_attachments(entry_id);
+CREATE UNIQUE INDEX entry_attachments_user_entry_local_uidx
+  ON entry_attachments(user_id, entry_id, local_id);
+
+ALTER TABLE entry_attachments ENABLE ROW LEVEL SECURITY;
+
+-- 13. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  extensions.vector(1024),

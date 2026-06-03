@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveLocation, getLocations, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -43,6 +43,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
     saveEntryContacts: deps.saveEntryContacts ?? saveEntryContacts,
     saveEntryTags: deps.saveEntryTags ?? saveEntryTags,
+    saveEntryAttachments: deps.saveEntryAttachments ?? saveEntryAttachments,
     saveLocation: deps.saveLocation ?? saveLocation,
     getLocations: deps.getLocations ?? getLocations,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
@@ -87,7 +88,11 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         const locations = await db.saveEntryLocations(user.id, existing.id, entryData.locations || entryData.locationSnapshots || []);
         const contacts = await db.saveEntryContacts(user.id, existing.id, entryData.contacts || entryData.contactSnapshots || []);
         const tags = await db.saveEntryTags(user.id, existing.id, entryData.tags || entryData.tagSnapshots || []);
-        return { success: true, entry: { ...existing, context_clues: contextClues, locations, contacts, tags } };
+        const incomingAttachments = entryData.attachments || entryData.attachmentSnapshots || [];
+        const attachments = await db.saveEntryAttachments(user.id, existing.id, incomingAttachments);
+        const entry = { ...existing, context_clues: contextClues, locations, contacts, tags };
+        if (attachments.length || incomingAttachments.length) entry.attachments = attachments;
+        return { success: true, entry };
       }
 
       const embedding = await embeddingService.embedText(entryData.summary);
@@ -100,8 +105,12 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const locations = await db.saveEntryLocations(user.id, saved.id, entryData.locations || entryData.locationSnapshots || []);
       const contacts = await db.saveEntryContacts(user.id, saved.id, entryData.contacts || entryData.contactSnapshots || []);
       const tags = await db.saveEntryTags(user.id, saved.id, entryData.tags || entryData.tagSnapshots || []);
+      const incomingAttachments = entryData.attachments || entryData.attachmentSnapshots || [];
+      const attachments = await db.saveEntryAttachments(user.id, saved.id, incomingAttachments);
 
-      return { success: true, entry: { ...saved, context_clues: contextClues, locations, contacts, tags } };
+      const entry = { ...saved, context_clues: contextClues, locations, contacts, tags };
+      if (attachments.length || incomingAttachments.length) entry.attachments = attachments;
+      return { success: true, entry };
     } catch (error) {
       console.error('Sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save entry' });
