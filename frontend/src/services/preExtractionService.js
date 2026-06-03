@@ -92,6 +92,7 @@ function suggestForKind(kind, captureText, candidates = [], userId, limit) {
     .map((candidate, index) => {
       const scoredCandidate = scoreCandidate(captureText, candidate);
       return {
+        ...candidate,
         id: candidate.id,
         kind,
         label: scoredCandidate.label,

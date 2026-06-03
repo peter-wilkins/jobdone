@@ -57,3 +57,12 @@ test('explains co-occurrence suggestions from the visible counterpart only', () 
     'Suggested because this Location has been confirmed with Sarah Jenkins before.'
   );
 });
+
+test('explains deterministic pre-extraction suggestions', () => {
+  const presentation = predictionSourcePresentation({
+    source: 'deterministic_pre_extraction',
+  });
+
+  assert.equal(presentation.hint, 'Text match');
+  assert.match(presentation.explanation, /reviewed Entry text/);
+});

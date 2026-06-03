@@ -17,6 +17,7 @@ import {
 import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './services/locationStrengtheningService';
 import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { predictionSourcePresentation } from './services/predictionSourceService';
+import { runPreExtraction } from './services/preExtractionService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
 
@@ -78,11 +79,54 @@ function localContactCandidate(contact, confidence = 'medium') {
   };
 }
 
+function localLocationCandidate(location) {
+  const label = String(location.displayName || location.display_name || location.placeText || location.addressText || '').trim();
+  if (!location.id || !label) return null;
+  return {
+    id: location.id,
+    label,
+    displayName: label,
+    placeText: location.placeText || location.place_text || label,
+    addressText: location.addressText || location.address_text || '',
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    source: 'local_locations',
+  };
+}
+
+function localTagCandidate(tag) {
+  const label = String(tag.label || tag.name || '').trim();
+  if (!tag.id || !label) return null;
+  return {
+    id: tag.id,
+    label,
+    categoryId: tag.categoryId || tag.category_id || null,
+    categoryName: tag.categoryName || tag.category_name || 'General',
+    source: 'local_tags',
+  };
+}
+
 function mergeCandidatesById(primary = [], secondary = []) {
   const seen = new Set();
   return [...primary, ...secondary].filter(candidate => {
     if (!candidate?.id || seen.has(candidate.id)) return false;
     seen.add(candidate.id);
+    return true;
+  });
+}
+
+function suggestionIdsToPreselect(suggestions = []) {
+  return suggestions
+    .filter(candidate => candidate.reason === 'exact_name_match' && !candidate.ambiguous)
+    .map(candidate => candidate.id)
+    .filter(Boolean);
+}
+
+function mergeIds(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter(id => {
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
 }
@@ -179,6 +223,7 @@ export function HomeScreen({
   const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
   const handledForegroundReturnRef = useRef(0);
   const structurePredictionRequestedRef = useRef(new Set());
+  const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
 
   // Query/Recall state
@@ -444,50 +489,120 @@ export function HomeScreen({
     const readyNotes = entries.filter(entry =>
       entry.status === 'ready_for_review' &&
       entry.intent !== 'QUERY' &&
-      entry.summary &&
-      !structurePredictionRequestedRef.current.has(entry.id)
+      entry.summary
     );
 
     for (const entry of readyNotes) {
-      structurePredictionRequestedRef.current.add(entry.id);
       (async () => {
         let localMatchedContact = null;
         let localContactCandidates = [];
+        let preExtraction = null;
         try {
-          const localContacts = await dbService.getContacts('confirmed');
+          const [localContacts, localLocations, localTags] = await Promise.all([
+            dbService.getContacts('confirmed'),
+            dbService.getLocations('confirmed'),
+            dbService.getTags('confirmed'),
+          ]);
           localContactCandidates = localContacts
             .map(contact => localContactCandidate(contact, contactConfidenceForEntry(entry, contact)))
             .filter(candidate => candidate?.visible)
             .filter(Boolean)
             .slice(0, 5);
+          const localLocationCandidates = localLocations.map(localLocationCandidate).filter(Boolean);
+          const localTagCandidates = localTags.map(localTagCandidate).filter(Boolean);
           localMatchedContact = localContactCandidates.find(candidate => candidate.confidence === 'strong') || null;
 
-          const contextClues = entry.captureId
-            ? await dbService.getContextCluesForCapture(entry.captureId)
-            : await dbService.getContextCluesForEntry(entry.id);
-          const result = user && backendAvailable
-            ? await apiService.predictStructure({
+          const preExtractionCandidates = {
+            contacts: localContactCandidates,
+            locations: localLocationCandidates,
+            tags: localTagCandidates,
+            teams: teamWorkContext.teams || [],
+            backlogItems: teamWorkContext.claimedItems || [],
+          };
+          const preExtractionFingerprint = JSON.stringify({
+            entryId: entry.id,
+            summary: entry.summary,
+            transcript: entry.transcript,
+            candidateIds: Object.fromEntries(Object.entries(preExtractionCandidates).map(([key, values]) => [
+              key,
+              values.map(candidate => `${candidate.id}:${candidate.status || ''}`).join('|'),
+            ])),
+          });
+          const shouldRunPreExtraction = preExtractionFingerprintsRef.current.get(entry.id) !== preExtractionFingerprint;
+          if (shouldRunPreExtraction) {
+            preExtractionFingerprintsRef.current.set(entry.id, preExtractionFingerprint);
+            preExtraction = runPreExtraction({
+              captureText: [entry.summary, entry.transcript].filter(Boolean).join(' '),
+              candidates: preExtractionCandidates,
+              userId: user?.id || '',
+              userSelections: {
+                contacts: reviewContacts[entry.id] ? [reviewContacts[entry.id]] : [],
+                locations: reviewLocationDrafts[entry.id]?.id ? [reviewLocationDrafts[entry.id].id] : [],
+                tags: reviewSelectedTags[entry.id] || [],
+                backlogItems: reviewSelectedWorkContexts[entry.id] || [],
+              },
+            });
+          }
+          const shouldRunBackendPrediction = user && backendAvailable && !structurePredictionRequestedRef.current.has(entry.id);
+          if (!shouldRunPreExtraction && !shouldRunBackendPrediction) {
+            return;
+          }
+          if (shouldRunBackendPrediction) {
+            structurePredictionRequestedRef.current.add(entry.id);
+          }
+          const contextClues = shouldRunBackendPrediction
+            ? entry.captureId
+              ? await dbService.getContextCluesForCapture(entry.captureId)
+              : await dbService.getContextCluesForEntry(entry.id)
+            : [];
+          let backendPredictionError = false;
+          let result = { candidateSet: {}, prediction: {} };
+          if (shouldRunBackendPrediction) {
+            try {
+              result = await apiService.predictStructure({
                 entryData: {
                   summary: entry.summary,
                   transcript: entry.transcript,
                 },
                 contextClues,
-              })
-            : { candidateSet: {}, prediction: {} };
+              });
+            } catch (err) {
+              backendPredictionError = true;
+              console.warn('[Structure] Backend prediction unavailable:', err);
+            }
+          }
+          const preSuggestions = preExtraction?.suggestions || {};
           const candidateSet = {
             ...(result.candidateSet || {}),
-            contacts: mergeCandidatesById(localContactCandidates, result.candidateSet?.contacts || []),
+            locations: mergeCandidatesById(preSuggestions.locations || [], result.candidateSet?.locations || []),
+            contacts: mergeCandidatesById(preSuggestions.contacts || [], mergeCandidatesById(localContactCandidates, result.candidateSet?.contacts || [])),
+            tags: mergeCandidatesById(preSuggestions.tags || [], result.candidateSet?.tags || []),
           };
           const prediction = {
             ...(result.prediction || {}),
-            contactIds: localMatchedContact
-              ? [localMatchedContact.id, ...(result.prediction?.contactIds || []).filter(id => id !== localMatchedContact.id)]
-              : result.prediction?.contactIds || [],
+            locationIds: mergeIds(
+              suggestionIdsToPreselect(preSuggestions.locations || []),
+              result.prediction?.locationIds || []
+            ),
+            contactIds: mergeIds(
+              localMatchedContact
+                ? [localMatchedContact.id, ...suggestionIdsToPreselect(preSuggestions.contacts || [])]
+                : suggestionIdsToPreselect(preSuggestions.contacts || []),
+              result.prediction?.contactIds || []
+            ),
+            tagIds: mergeIds(
+              suggestionIdsToPreselect(preSuggestions.tags || []),
+              result.prediction?.tagIds || []
+            ),
           };
+          const preselectedWorkContextIds = suggestionIdsToPreselect(preSuggestions.backlogItems || []);
           const predictedLocation = (candidateSet.locations || []).find(candidate => candidate.id === prediction.locationIds?.[0]);
           const predictedContact = (candidateSet.contacts || []).find(candidate => candidate.id === prediction.contactIds?.[0]);
 
-          setReviewStructure(prev => ({ ...prev, [entry.id]: { candidateSet, prediction } }));
+          setReviewStructure(prev => ({
+            ...prev,
+            [entry.id]: { error: backendPredictionError && !preExtraction, candidateSet, prediction },
+          }));
           const isDeviceLocationOnly = predictedLocation?.source === 'device_location';
           if (predictedLocation && !isDeviceLocationOnly) {
             setReviewLocations(prev => prev[entry.id] ? prev : { ...prev, [entry.id]: predictedLocation.label });
@@ -498,6 +613,9 @@ export function HomeScreen({
           }
           if (Array.isArray(prediction.tagIds) && prediction.tagIds.length) {
             setReviewSelectedTags(prev => prev[entry.id]?.length ? prev : { ...prev, [entry.id]: prediction.tagIds });
+          }
+          if (preselectedWorkContextIds.length) {
+            setReviewSelectedWorkContexts(prev => prev[entry.id]?.length ? prev : { ...prev, [entry.id]: preselectedWorkContextIds });
           }
         } catch (err) {
           console.warn('[Structure] Prediction unavailable:', err);
@@ -520,7 +638,17 @@ export function HomeScreen({
         }
       })();
     }
-  }, [entries, user, backendAvailable]);
+  }, [
+    entries,
+    user,
+    backendAvailable,
+    teamWorkContext.teams,
+    teamWorkContext.claimedItems,
+    reviewContacts,
+    reviewLocationDrafts,
+    reviewSelectedTags,
+    reviewSelectedWorkContexts,
+  ]);
 
   /**
    * Process a recording: transcribe and extract

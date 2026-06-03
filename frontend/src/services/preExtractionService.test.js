@@ -289,3 +289,35 @@ test('pre-extraction ranks exact names over weaker keyword matches', () => {
 
   assert.deepEqual(result.suggestions.contacts.map(candidate => candidate.id), ['exact', 'weak']);
 });
+
+test('pre-extraction keeps candidate detail for review controls', () => {
+  const result = runPreExtraction({
+    captureText: 'Went to 14 Bell Street.',
+    candidates: {
+      locations: [
+        {
+          id: 'loc-1',
+          displayName: '14 Bell Street',
+          addressText: '14 Bell Street, Exampletown',
+          latitude: 53.1,
+          longitude: -6.2,
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(result.suggestions.locations[0], {
+    id: 'loc-1',
+    displayName: '14 Bell Street',
+    addressText: '14 Bell Street, Exampletown',
+    latitude: 53.1,
+    longitude: -6.2,
+    kind: 'locations',
+    label: '14 Bell Street',
+    score: 100,
+    reason: 'exact_name_match',
+    source: 'deterministic_pre_extraction',
+    ambiguous: false,
+    index: undefined,
+  });
+});

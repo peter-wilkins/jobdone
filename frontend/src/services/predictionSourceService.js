@@ -43,6 +43,21 @@ const SOURCE_COPY = {
     explanation:
       'Suggested from Contacts stored on this device because the reviewed Entry text appears to mention this Contact.',
   },
+  local_locations: {
+    hint: 'Saved Location',
+    explanation:
+      'Suggested from Locations stored on this device because the reviewed Entry text appears to mention this Location.',
+  },
+  local_tags: {
+    hint: 'Saved Tag',
+    explanation:
+      'Suggested from Tags stored on this device because the reviewed Entry text appears to mention this Tag.',
+  },
+  deterministic_pre_extraction: {
+    hint: 'Text match',
+    explanation:
+      'Suggested by matching the reviewed Entry text against your local Contacts, Locations, Tags, Teams, or Backlog Items.',
+  },
   tag_vocabulary: {
     hint: 'Prior Tag',
     explanation:
