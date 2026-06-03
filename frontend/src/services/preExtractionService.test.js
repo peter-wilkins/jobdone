@@ -319,6 +319,20 @@ test('pre-extraction prefers greedy multi-token overlap over short accidental ca
   assert.equal(result.suggestions.backlogItems.some(candidate => candidate.id === 'short'), false);
 });
 
+test('pre-extraction suggests backlog items from several description words', () => {
+  const result = runPreExtraction({
+    captureText: 'Did the kitchen sink trap clean today.',
+    candidates: {
+      backlogItems: [
+        { id: 'weak', status: 'open', description: 'Clean windows' },
+        { id: 'target', status: 'open', description: 'Clean kitchen sink trap' },
+      ],
+    },
+  });
+
+  assert.equal(result.suggestions.backlogItems[0]?.id, 'target');
+});
+
 test('pre-extraction property loop prefers higher meaningful overlap across generated backlog items', () => {
   const actionWords = ['replace', 'clean', 'check', 'repair', 'paint'];
   const objectWords = ['sink', 'boiler', 'fence', 'pump', 'radiator'];

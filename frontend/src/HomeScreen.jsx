@@ -603,12 +603,16 @@ export function HomeScreen({
           const localTagCandidates = localTags.map(localTagCandidate).filter(Boolean);
           localMatchedContact = localContactCandidates.find(candidate => candidate.confidence === 'strong') || null;
 
+          const allWorkContextCandidates = [
+            ...(teamWorkContext.claimedItems || []),
+            ...(teamWorkContext.openBacklogItems || []),
+          ];
           const preExtractionCandidates = {
             contacts: localContactCandidates,
             locations: localLocationCandidates,
             tags: localTagCandidates,
             teams: teamWorkContext.teams || [],
-            backlogItems: teamWorkContext.claimedItems || [],
+            backlogItems: allWorkContextCandidates,
           };
           const preExtractionFingerprint = JSON.stringify({
             entryId: entry.id,
@@ -735,6 +739,7 @@ export function HomeScreen({
     backendAvailable,
     teamWorkContext.teams,
     teamWorkContext.claimedItems,
+    teamWorkContext.openBacklogItems,
     reviewContacts,
     reviewLocationDrafts,
     reviewSelectedTags,
@@ -921,20 +926,19 @@ export function HomeScreen({
     try {
       setError(null);
       const entryId = await dbService.createTextEntry({ source: 'text', intent: 'NOTE' });
-
-      try {
-        const locationResult = await locationClueService.captureCurrentLocation({ allowPrompt: false });
-        if (locationResult.ok) {
-          await dbService.createDeviceLocationContextClue({ entryId, clue: locationResult.clue });
-        }
-      } catch (locationErr) {
-        console.warn('[Location] Capture-time location clue unavailable:', locationErr);
-      }
-
       const newEntry = await dbService.getEntry(entryId);
       setReviewTextDrafts(prev => ({ ...prev, [entryId]: '' }));
       setFocusEntryId(entryId);
       setEntries(prev => [newEntry, ...prev]);
+
+      void (async () => {
+        const locationResult = await locationClueService.captureCurrentLocation({ allowPrompt: false });
+        if (locationResult.ok) {
+          await dbService.createDeviceLocationContextClue({ entryId, clue: locationResult.clue });
+        }
+      })().catch(locationErr => {
+        console.warn('[Location] Capture-time location clue unavailable:', locationErr);
+      });
     } catch (err) {
       console.error('Text capture start error:', err);
       setError('Could not start a new entry.');
@@ -1187,7 +1191,10 @@ export function HomeScreen({
       }
       const tags = tagValidations.map(result => ({ label: result.label, categoryName: result.categoryName || 'General' }));
       const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[id] || []);
-      const workContexts = teamWorkContext.claimedItems
+      const workContexts = [
+        ...(teamWorkContext.claimedItems || []),
+        ...(teamWorkContext.openBacklogItems || []),
+      ]
         .filter(item => selectedWorkContextIds.has(item.id))
         .map(workContextSnapshot);
       const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags, workContexts });
@@ -2011,10 +2018,11 @@ export function HomeScreen({
       }, {});
       const workContextItems = teamWorkContext.claimedItems || [];
       const openWorkContextItems = teamWorkContext.openBacklogItems || [];
+      const allWorkContextItems = [...workContextItems, ...openWorkContextItems];
       const creatableTeams = (teamWorkContext.teams || []).filter(team => team.workers_can_create_backlog_items);
       const selectedCreateTeamId = reviewNewWorkTeamIds[entry.id] || creatableTeams[0]?.id || '';
       const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[entry.id] || []);
-      const selectedWorkContextItems = workContextItems.filter(item => selectedWorkContextIds.has(item.id));
+      const selectedWorkContextItems = allWorkContextItems.filter(item => selectedWorkContextIds.has(item.id));
       const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
       const workContextPanelError = reviewWorkContextErrors[entry.id];
       const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
