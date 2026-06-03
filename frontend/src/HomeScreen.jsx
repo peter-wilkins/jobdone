@@ -651,7 +651,7 @@ export function HomeScreen({
   ]);
 
   /**
-   * Process a recording: transcribe and extract
+   * Process a recording: transcribe and classify
    */
   const processRecording = async (jobId) => {
     if (processingIdsRef.current.has(jobId)) return;
@@ -669,10 +669,10 @@ export function HomeScreen({
       // Transcribe - backend returns intent in response
       const result = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
 
-      // Update entry with transcription data and intent (goes to ready_for_review)
+      // Update entry with raw transcription data and intent (goes to ready_for_review).
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
-        summary: result.summary,
+        summary: result.summary || result.transcript,
         intent: result.intent || 'NOTE',
       });
 
@@ -1687,6 +1687,8 @@ export function HomeScreen({
       const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
       const workContextPanelError = reviewWorkContextErrors[entry.id];
       const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
+      const reviewEntryText = entry.summary || entry.transcript || '';
+      const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -1709,8 +1711,10 @@ export function HomeScreen({
             // NOTE layout
             <div className="mb-4">
               <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
-              <p className="text-gray-900 mb-2">{entry.summary}</p>
-              <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              <p className="text-gray-900 mb-2">{reviewEntryText}</p>
+              {showSeparateTranscript && (
+                <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
+              )}
               {shouldShowWorkContext && (
                 <div className="mb-3" data-review-dismiss-root="work-context">
                   <div className="flex flex-wrap gap-2">

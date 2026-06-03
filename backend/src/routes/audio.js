@@ -31,7 +31,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
 
   /**
    * POST /api/transcribe
-   * Transcribe, classify intent, and (if NOTE) summarize
+   * Transcribe and classify intent. Notes keep raw transcript text until review cleanup.
    *
    * Expects multipart form data:
    * - audio: audio file blob
@@ -40,7 +40,7 @@ export async function registerAudioRoutes(fastify, deps = {}) {
    * {
    *   transcript: string,
    *   intent: 'QUERY' | 'NOTE',
-   *   summary?: string               // Only if intent='NOTE'
+   *   summary?: string               // For NOTE, initially the raw transcript
    * }
    */
   fastify.post('/api/transcribe', async (request, reply) => {
@@ -51,7 +51,6 @@ export async function registerAudioRoutes(fastify, deps = {}) {
       const parts = request.parts();
       let audioBuffer = null;
       let fileName = 'audio.webm';
-      let captureContext = null;
 
       // Iterate through form parts
       for await (const part of parts) {
@@ -65,8 +64,6 @@ export async function registerAudioRoutes(fastify, deps = {}) {
           
           audioBuffer = Buffer.concat(chunks);
           console.log(`[Transcribe] Received audio file: ${fileName}, size: ${audioBuffer.length} bytes`);
-        } else if (part.type === 'field' && part.fieldname === 'captureContext') {
-          captureContext = parseCaptureContext(part.value);
         }
       }
 
@@ -88,15 +85,10 @@ export async function registerAudioRoutes(fastify, deps = {}) {
       const intent = classifier(transcript);
       console.log(`[Transcribe] Intent: ${intent}`);
 
-      // If NOTE, summarize
       const response = { transcript, intent };
-      
+
       if (intent === 'NOTE') {
-        console.log('[Transcribe] Starting Claude summarization...');
-        const result = await summarizer(transcript, { captureContext });
-        console.log('[Transcribe] Summarization complete');
-        
-        response.summary = result.summary;
+        response.summary = transcript;
       }
 
       return response;

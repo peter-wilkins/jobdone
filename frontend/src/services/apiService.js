@@ -56,9 +56,9 @@ export class APIService {
   }
 
   /**
-   * Upload audio blob and get transcription + summary
+   * Upload audio blob and get transcription + intent
    * @param {Blob} audioBlob - Audio file blob
-   * @returns {Promise<{transcript: string, summary: string}>}
+   * @returns {Promise<{transcript: string, intent: string, summary?: string}>}
    */
   async transcribeAudio(audioBlob, { captureContext = null } = {}) {
     try {

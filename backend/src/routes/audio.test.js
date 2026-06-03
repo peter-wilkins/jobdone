@@ -23,12 +23,6 @@ function audioMultipartPayload() {
   return form;
 }
 
-function audioMultipartPayloadWithContext(context) {
-  const form = audioMultipartPayload();
-  form.append('captureContext', JSON.stringify(context));
-  return form;
-}
-
 describe('AudioRoute POST /api/transcribe', () => {
   test('returns typed 422 response when no speech is detected', async () => {
     const app = await buildApp({
@@ -95,16 +89,17 @@ describe('AudioRoute POST /api/transcribe', () => {
     assert.equal(transcribeCalls, 0);
   });
 
-  test('passes bounded capture context to summarizer', async () => {
-    let summarizerArgs;
+  test('does not summarize or extract before review', async () => {
+    let summarizeCalls = 0;
     const app = await buildApp({
       transcribeAudio: async () => ({ transcript: 'trimmed the hedge by the front gate' }),
-      summarizeAndExtract: async (transcript, options) => {
-        summarizerArgs = { transcript, options };
-        return { summary: 'I trimmed the hedge by the front gate.' };
+      summarizeAndExtract: async () => {
+        summarizeCalls += 1;
+        return { summary: 'should not be used' };
       },
     });
-    const form = audioMultipartPayloadWithContext({ label: 'gardening and home jobs', notes: 'mostly hedges and lawns' });
+    const form = audioMultipartPayload();
+    form.append('captureContext', JSON.stringify({ label: 'gardening and home jobs' }));
 
     const res = await app.inject({
       method: 'POST',
@@ -114,16 +109,12 @@ describe('AudioRoute POST /api/transcribe', () => {
     });
 
     assert.equal(res.statusCode, 200);
-    assert.equal(JSON.parse(res.body).summary, 'I trimmed the hedge by the front gate.');
-    assert.deepEqual(summarizerArgs, {
+    assert.deepEqual(JSON.parse(res.body), {
       transcript: 'trimmed the hedge by the front gate',
-      options: {
-        captureContext: {
-          label: 'gardening and home jobs',
-          notes: 'mostly hedges and lawns',
-        },
-      },
+      intent: 'NOTE',
+      summary: 'trimmed the hedge by the front gate',
     });
+    assert.equal(summarizeCalls, 0);
   });
 });
 
