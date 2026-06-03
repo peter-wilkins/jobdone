@@ -275,6 +275,7 @@ export function HomeScreen({
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
   const textAreaRefs = useRef(new Map());
+  const textDraftSaveTimersRef = useRef(new Map());
 
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
@@ -558,6 +559,16 @@ export function HomeScreen({
     }, 400);
     return () => window.clearTimeout(timer);
   }, [reviewTextDrafts]);
+
+  useEffect(() => {
+    const timers = textDraftSaveTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        window.clearTimeout(timer);
+      }
+      timers.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const readyNotes = entries.filter(entry =>
@@ -1329,6 +1340,9 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      const textDraftTimer = textDraftSaveTimersRef.current.get(id);
+      if (textDraftTimer) window.clearTimeout(textDraftTimer);
+      textDraftSaveTimersRef.current.delete(id);
       setDebouncedReviewTextDrafts(prev => {
         const next = { ...prev };
         delete next[id];
@@ -1376,6 +1390,9 @@ export function HomeScreen({
         delete next[id];
         return next;
       });
+      const textDraftTimer = textDraftSaveTimersRef.current.get(id);
+      if (textDraftTimer) window.clearTimeout(textDraftTimer);
+      textDraftSaveTimersRef.current.delete(id);
       setDebouncedReviewTextDrafts(prev => {
         const next = { ...prev };
         delete next[id];
@@ -2016,6 +2033,37 @@ export function HomeScreen({
       };
       const updateReviewText = (text) => {
         setReviewTextDrafts(prev => ({ ...prev, [entry.id]: text }));
+        const existingTimer = textDraftSaveTimersRef.current.get(entry.id);
+        if (existingTimer) window.clearTimeout(existingTimer);
+        const timer = window.setTimeout(async () => {
+          textDraftSaveTimersRef.current.delete(entry.id);
+          try {
+            await dbService.updateEntry(entry.id, {
+              summary: text,
+              transcript: entry.transcript || text,
+              intent: reviewIntentOverrides[entry.id] || classify(text),
+            });
+          } catch (err) {
+            console.warn('[Capture] Draft save failed:', err);
+          }
+        }, 300);
+        textDraftSaveTimersRef.current.set(entry.id, timer);
+      };
+      const saveReviewTextNow = async () => {
+        const existingTimer = textDraftSaveTimersRef.current.get(entry.id);
+        if (existingTimer) {
+          window.clearTimeout(existingTimer);
+          textDraftSaveTimersRef.current.delete(entry.id);
+        }
+        try {
+          await dbService.updateEntry(entry.id, {
+            summary: editableReviewText,
+            transcript: entry.transcript || editableReviewText,
+            intent: reviewIntentOverrides[entry.id] || classify(editableReviewText),
+          });
+        } catch (err) {
+          console.warn('[Capture] Draft save failed:', err);
+        }
       };
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
@@ -2053,6 +2101,7 @@ export function HomeScreen({
                 }}
                 value={editableReviewText}
                 onChange={(event) => updateReviewText(event.target.value)}
+                onBlur={saveReviewTextNow}
                 rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
                 placeholder="Type a question to search your Timeline."
                 className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -2114,6 +2163,7 @@ export function HomeScreen({
                 }}
                 value={editableReviewText}
                 onChange={(event) => updateReviewText(event.target.value)}
+                onBlur={saveReviewTextNow}
                 rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
                 placeholder="Type here or use keyboard dictation."
                 className="mb-2 w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
