@@ -45,6 +45,9 @@ and backwards compatibility become mandatory.
 ## Testing Defaults
 
 - Test on real mobile devices early, especially Android Chrome PWA flows.
+- When testing on Peter's day-to-day phone, do not wipe the device, clear broad
+  personal data, uninstall unrelated apps, or delete user content. Keep tests
+  scoped to JobDone app data and ask before destructive device actions.
 - Do not run the full release/acceptance smoke suite for every small change.
 - Run targeted checks for the current change.
 - Run broader release smoke checks before production releases, when explicitly
