@@ -55,11 +55,11 @@ The bounded set of plausible Locations, Contacts, Tags, and Team-configured Work
 _Avoid_: Full Tag List, Prompt Context, Search Space
 
 **Pre-Extraction**:
-A behind-the-scenes extraction pass run before Confirmation to help JobDone make good Context Clue guesses from the raw Capture, nearby device/platform evidence, and existing user data. Pre-Extraction is advisory: it can suggest or rank review options, but it is not saved as the final Entry structure.
+A behind-the-scenes extraction pass run before Confirmation to help JobDone make good Context Clue guesses from the raw Capture, nearby device/platform evidence, and existing user data. Pre-Extraction is advisory: it can suggest or rank review options, but it is not saved as the final Entry structure. Pre-Extraction should be lazy and deterministic-first in MVP: keyword matching, existing candidate names, and cheap rules should be tried before any LLM fallback.
 _Avoid_: Hidden Confirmation, Auto-Save, Final Summary
 
 **Clean Up Text**:
-An optional review action run after the user has twiddled review context such as Location, Contact, Tags, Work Context, or Backlog Item. Clean Up Text uses the confirmed/reviewed Capture Context to improve the user-visible Entry text and may remove duplication already captured in user-set context, such as repeating a selected Contact in the Entry text. It must not overwrite Context Clues or Work Context values the user has already set.
+An optional review action run after the user has twiddled review context such as Location, Contact, Tags, Work Context, or Backlog Item. Clean Up Text uses the confirmed/reviewed Capture Context to improve the user-visible Entry text, including Markdown formatting, bullet points, deduplication, and clearer wording. It may remove duplication already captured in user-set context, such as repeating a selected Contact in the Entry text. It must not overwrite Context Clues or Work Context values the user has already set.
 _Avoid_: Final Extraction, First Guess, Background Suggestion, Raw Transcript
 
 **Co-occurrence Clue**:
@@ -251,9 +251,9 @@ _Avoid_: Search bar, Input field, Record button
 - A voice recording creates a **Capture**; transcription produces reviewable text before the user chooses Context Clues, Work Context, or Team-linked Backlog Items
 - A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
-- Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets.
+- Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every transcription.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
-- Clean Up Text is optional. Users who are happy with the text can confirm without waiting for more AI. Clean Up Text may make the message more readable and reduce repeated details already captured by user-set context, but user-set context remains authoritative.
+- Clean Up Text is optional. Users who are happy with the text can confirm without waiting for more AI. Clean Up Text may make the message more readable, add Markdown structure such as bullet points, and reduce repeated details already captured by user-set context, but user-set context remains authoritative.
 - The preferred Capture flow is: transcription -> Pre-Extraction guesses -> Context Clue and Work Context twiddling -> optional Clean Up Text using the selected Capture Context -> Confirmation.
 - A **Capture** is committed only through Confirmation, producing an Entry, a Contact update, Location association, Tags, or some combination
 - Predicted Locations, Contacts, Tags, Work Context, and Context Clues remain review-only until Confirmation
