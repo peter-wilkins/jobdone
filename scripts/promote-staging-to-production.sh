@@ -11,7 +11,6 @@ FRONTEND_PRODUCTION_ALIASES=(
   "$FRONTEND_PRODUCTION_PRIMARY_ALIAS"
   "jobdone-frontend-production.vercel.app"
   "frontend-six-sage-63.vercel.app"
-  "frontend-jobdone1.vercel.app"
   "frontend-peter-wilkins-jobdone1.vercel.app"
 )
 BACKEND_PRODUCTION_ALIASES=(
