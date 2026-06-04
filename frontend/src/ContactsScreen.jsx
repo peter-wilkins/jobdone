@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
-import { syncService } from './services/syncService';
+import { syncOrchestratorService } from './services/syncOrchestratorService';
 import { buildContactSummary } from './services/contactParser';
 import {
   isContactPickerSupported,
@@ -164,10 +164,9 @@ export function ContactsScreen({ onBack, onRecord }) {
 
       const created = await dbService.createContact(picked.contact);
       try {
-        const result = await syncService.syncContacts([created]);
-        const cloudContact = result?.contacts?.[0];
-        if (cloudContact?.id) {
-          await dbService.markContactSynced(created.id, cloudContact.id);
+        const result = await syncOrchestratorService.syncContactsAfterLocalChange();
+        if (result && result.ok === false) {
+          console.warn('[Contacts] Contact saved locally but did not sync:', result.issues);
         }
       } catch (syncErr) {
         console.warn('[Contacts] Contact saved locally but did not sync:', syncErr);

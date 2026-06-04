@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  APIService,
   defaultApiBaseUrl,
   shouldApplyAppUpdateForBackendBuild,
   shouldStartBuildMismatchReload,
@@ -59,4 +60,38 @@ test('routes explicit staging and production hostnames to matching backend alias
     defaultApiBaseUrl('frontend-old-preview.vercel.app'),
     'https://jobdone-gamma.vercel.app',
   );
+});
+
+test('cloud entry pulls reject failed responses instead of returning empty data', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'server unavailable' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  try {
+    await assert.rejects(
+      () => new APIService().getCloudEntries(),
+      /server unavailable/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('cloud location pulls reject failed responses instead of returning empty data', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'auth expired' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  try {
+    await assert.rejects(
+      () => new APIService().getCloudLocations(),
+      /auth expired/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

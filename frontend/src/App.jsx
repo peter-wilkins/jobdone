@@ -13,10 +13,8 @@ import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
 import { OnboardingScreen } from './OnboardingScreen';
 import { authService, consumeAuthErrorFromLocation } from './services/authService';
-import { dbService } from './services/dbService';
-import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
-import { syncContactReplica } from './services/localReplicaService';
+import { syncOrchestratorService } from './services/syncOrchestratorService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { diagnosticService } from './services/diagnosticService';
 import { crashReportService } from './services/crashReportService';
@@ -44,68 +42,25 @@ function App() {
   const [recordRequestId, setRecordRequestId] = useState(0);
   const [crashNotice, setCrashNotice] = useState(null);
   const [authNotice, setAuthNotice] = useState(null);
+  const [syncNotice, setSyncNotice] = useState(null);
 
-  /**
-   * Push unsynced local confirmed data to cloud, then pull cloud data not yet on this device.
-   */
-  async function syncConfirmedData() {
+  async function runConfirmedDataSync(reason) {
     try {
-      const unsynced = await dbService.getConfirmedEntriesUnsynced();
-      for (const entry of unsynced) {
-        try {
-          const result = await syncService.syncEntry(entry);
-          if (result?.entry?.id) {
-            await dbService.markEntrySynced(entry.id, result.entry.id);
-            await dbService.upsertCloudEntryLocations(entry.id, result.entry.id, result.entry.locations || []);
-            await dbService.upsertCloudEntryTags(entry.id, result.entry.id, result.entry.tags || []);
-          }
-        } catch (e) {
-          console.warn('[Login] Failed to push entry:', entry.id, e);
-        }
+      const result = await syncOrchestratorService.syncConfirmedData({ reason });
+      if (result.ok) {
+        setSyncNotice(null);
+      } else {
+        setSyncNotice({
+          message: 'Cloud sync hit a problem. Local data is safe; JobDone will retry.',
+        });
       }
-
-      const cloudEntries = await apiService.getCloudEntries();
-      for (const cloudEntry of cloudEntries) {
-        const existsByRemoteId = await dbService.getEntryByRemoteId(cloudEntry.id);
-        if (existsByRemoteId) continue;
-
-        const existingCaptureEntry = cloudEntry.capture_id
-          ? await dbService.getEntryByCaptureId(cloudEntry.capture_id)
-          : null;
-        if (existingCaptureEntry) {
-          if (!existingCaptureEntry.remoteId) {
-            await dbService.markEntrySynced(existingCaptureEntry.id, cloudEntry.id);
-          }
-          continue;
-        }
-
-        const existingByCreatedAt = await dbService.getEntryByCreatedAt(cloudEntry.created_at);
-        if (existingByCreatedAt) {
-          if (!existingByCreatedAt.remoteId) {
-            await dbService.markEntrySynced(existingByCreatedAt.id, cloudEntry.id);
-          }
-        } else {
-          await dbService.addCloudEntry(cloudEntry);
-        }
-      }
-
-      await syncContactReplica();
-
-      const unsyncedLocations = await dbService.getLocationsUnsynced();
-      const locationSyncResult = await syncService.syncLocations(unsyncedLocations);
-      const syncedLocations = locationSyncResult?.locations || [];
-      if (syncedLocations.length) {
-        for (const cloudLocation of syncedLocations) {
-          await dbService.upsertCloudLocation(cloudLocation);
-        }
-      }
-
-      const cloudLocations = await apiService.getCloudLocations();
-      for (const cloudLocation of cloudLocations) {
-        await dbService.upsertCloudLocation(cloudLocation);
-      }
-    } catch (e) {
-      console.error('[Sync] Confirmed data sync failed:', e);
+      return result;
+    } catch (error) {
+      console.error('[Sync] Confirmed data sync failed:', error);
+      setSyncNotice({
+        message: 'Cloud sync hit a problem. Local data is safe; JobDone will retry.',
+      });
+      return { ok: false, issues: [{ message: error?.message || 'Sync failed' }] };
     } finally {
       setRefreshKey(k => k + 1);
     }
@@ -142,7 +97,7 @@ function App() {
     authService.init().then(session => {
       setUser(session?.user || null);
       if (session?.user) {
-        syncConfirmedData();
+        runConfirmedDataSync('initial_session');
       }
     });
 
@@ -155,7 +110,7 @@ function App() {
         // Navigate away from login screen if open
         setScreen(s => s === 'login' ? 'home' : s);
         // Merge local ↔ cloud
-        await syncConfirmedData();
+        await runConfirmedDataSync('signed_in');
         // Sync query history
         await queryHistoryService.syncOnLogin();
       }
@@ -222,14 +177,18 @@ function App() {
       </div>
     </div>
   ) : null;
-  const authStatusBar = authNotice ? (
+  const activeNotice = authNotice || syncNotice;
+  const authStatusBar = activeNotice ? (
     <div className={`fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
-        <span className="text-sm font-medium flex-1">{authNotice.message}</span>
+        <span className="text-sm font-medium flex-1">{activeNotice.message}</span>
         <button
           type="button"
           className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
-          onClick={() => setAuthNotice(null)}
+          onClick={() => {
+            setAuthNotice(null);
+            setSyncNotice(null);
+          }}
         >
           Dismiss
         </button>

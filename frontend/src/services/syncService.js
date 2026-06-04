@@ -88,31 +88,6 @@ export class SyncService {
     }
   }
 
-  async syncContacts(contacts) {
-    if (!authService.isLoggedIn() || !contacts.length) return null;
-
-    const response = await apiService.syncContacts(contacts.map(contact => ({
-      id: contact.id,
-      localId: contact.id,
-      status: contact.status,
-      displayName: contact.displayName,
-      givenName: contact.givenName,
-      familyName: contact.familyName,
-      organization: contact.organization,
-      title: contact.title,
-      note: contact.note,
-      phones: contact.phones,
-      emails: contact.emails,
-      normalizedPhones: contact.normalizedPhones,
-      normalizedEmails: contact.normalizedEmails,
-      primaryPhone: contact.primaryPhone,
-      primaryEmail: contact.primaryEmail,
-      sourceCaptureIds: contact.sourceCaptureIds,
-      created_at: contact.created_at,
-    })));
-    return response;
-  }
-
   async syncLocations(locations) {
     if (!authService.isLoggedIn() || !locations.length) return null;
 

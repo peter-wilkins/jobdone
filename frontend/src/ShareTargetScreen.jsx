@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
+import { syncOrchestratorService } from './services/syncOrchestratorService';
 import { parseContactPayload, buildContactSummary, summarizeContactConflicts, getContactIdentity } from './services/contactParser';
 import { FloatingRecordButton } from './FloatingRecordButton';
 
@@ -190,10 +191,9 @@ export function ShareTargetScreen({ onBack, onRecord, user }) {
 
         if (user && savedContacts.length) {
           try {
-            const result = await syncService.syncContacts(savedContacts);
-            const syncedContacts = result?.contacts || [];
-            for (const cloudContact of syncedContacts) {
-              await dbService.upsertCloudContact(cloudContact);
+            const result = await syncOrchestratorService.syncContactsAfterLocalChange();
+            if (result && result.ok === false) {
+              console.warn('[ShareTarget] Contact sync failed, contact saved locally:', result.issues);
             }
           } catch (syncErr) {
             console.warn('[ShareTarget] Contact sync failed, contact saved locally:', syncErr);

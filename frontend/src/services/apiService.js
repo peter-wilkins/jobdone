@@ -65,6 +65,19 @@ async function apiFetch(...args) {
   return response;
 }
 
+async function throwApiError(response, fallbackMessage) {
+  let message = fallbackMessage;
+  try {
+    const error = await response.json();
+    message = error.error || error.message || message;
+  } catch {
+    // Keep the fallback. Some failed responses are empty or not JSON.
+  }
+  const apiError = new Error(message);
+  apiError.status = response.status;
+  throw apiError;
+}
+
 export class APIService {
   /**
    * Check if backend is available
@@ -203,29 +216,14 @@ export class APIService {
 
   /** Fetch all cloud entries for the logged-in user */
   async getCloudEntries() {
-    try {
-      const response = await apiFetch(`${API_BASE_URL}/api/sync/entries`, {
-        headers: authHeader(),
-      });
-      if (!response.ok) return [];
-      const result = await response.json();
-      return result.entries || [];
-    } catch {
-      return [];
-    }
-  }
-
-  async syncContacts(contacts) {
-    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ contacts }),
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/entries`, {
+      headers: authHeader(),
     });
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Contacts sync failed');
+      await throwApiError(response, 'Failed to fetch cloud entries');
     }
-    return response.json();
+    const result = await response.json();
+    return result.entries || [];
   }
 
   async getContactManifest(localManifest = { contacts: [] }) {
@@ -319,16 +317,14 @@ export class APIService {
   }
 
   async getCloudLocations() {
-    try {
-      const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
-        headers: authHeader(),
-      });
-      if (!response.ok) return [];
-      const result = await response.json();
-      return result.locations || [];
-    } catch {
-      return [];
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      await throwApiError(response, 'Failed to fetch cloud locations');
     }
+    const result = await response.json();
+    return result.locations || [];
   }
 
   async predictStructure({ entryData, contextClues = [] }) {
