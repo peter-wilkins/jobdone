@@ -49,13 +49,13 @@ deploy_backend() {
 
 deploy_frontend() {
   local cwd="$1"
-  npx vercel --cwd "$cwd" build \
-    --target=production \
-    -b VITE_SUPABASE_URL="$JOBDONE_STAGING_SUPABASE_URL" \
-    -b VITE_SUPABASE_ANON_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
-    -b VITE_APP_URL="https://$FRONTEND_STAGING_ALIAS" \
-    -b VITE_API_URL="https://$BACKEND_STAGING_ALIAS" \
-    >&2
+  VITE_SUPABASE_URL="$JOBDONE_STAGING_SUPABASE_URL" \
+    VITE_SUPABASE_ANON_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
+    VITE_APP_URL="https://$FRONTEND_STAGING_ALIAS" \
+    VITE_API_URL="https://$BACKEND_STAGING_ALIAS" \
+    npx vercel --cwd "$cwd" build \
+      --target=production \
+      >&2
   local output
   output="$(npx vercel --cwd "$cwd" deploy \
     --prebuilt \

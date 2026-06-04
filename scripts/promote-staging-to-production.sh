@@ -70,13 +70,13 @@ deploy_backend() {
 }
 
 deploy_frontend() {
-  npx vercel --cwd frontend build \
-    --target=production \
-    -b VITE_SUPABASE_URL="$JOBDONE_PROD_SUPABASE_URL" \
-    -b VITE_SUPABASE_ANON_KEY="$JOBDONE_PROD_SUPABASE_PUBLISHABLE_KEY" \
-    -b VITE_APP_URL="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS" \
-    -b VITE_API_URL="https://$BACKEND_PRODUCTION_PRIMARY_ALIAS" \
-    >&2
+  VITE_SUPABASE_URL="$JOBDONE_PROD_SUPABASE_URL" \
+    VITE_SUPABASE_ANON_KEY="$JOBDONE_PROD_SUPABASE_PUBLISHABLE_KEY" \
+    VITE_APP_URL="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS" \
+    VITE_API_URL="https://$BACKEND_PRODUCTION_PRIMARY_ALIAS" \
+    npx vercel --cwd frontend build \
+      --target=production \
+      >&2
   local output
   output="$(npx vercel --cwd frontend deploy \
     --prebuilt \
