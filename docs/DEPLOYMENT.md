@@ -52,6 +52,14 @@ and backend deployment URLs. Do not edit that file by hand before promotion.
 It uses Vercel production-target builds with `--skip-domain`, so staging is
 public but production aliases are not moved.
 
+Staging deployments inject staging/lab Supabase values from `~/.profile`:
+
+```text
+JOBDONE_STAGING_SUPABASE_DB_URL
+JOBDONE_STAGING_SUPABASE_URL
+JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
+```
+
 ## QA Gate
 
 Before promotion, run the smallest useful checks for the change:
@@ -66,15 +74,25 @@ small and specific to the current change.
 
 ## Promote
 
-Promote the last staged immutable deployments to production aliases:
+Promote the current commit to production aliases:
 
 ```bash
 npm run deploy:promote
 npm run deploy:check:production
 ```
 
-Promotion moves aliases to the staged frontend and backend deployments. It does
-not rebuild.
+Promotion builds a fresh production-environment frontend and backend from the
+same checked-out commit, then moves production aliases. It does not reuse the
+staging deployments because staging and production use different Supabase
+projects/databases.
+
+Production deployments inject production Supabase values from `~/.profile`:
+
+```text
+JOBDONE_PROD_BACKEND_DB_URL
+JOBDONE_PROD_SUPABASE_URL
+JOBDONE_PROD_SUPABASE_PUBLISHABLE_KEY
+```
 
 ## Rollback
 

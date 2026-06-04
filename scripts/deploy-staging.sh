@@ -9,15 +9,60 @@ FRONTEND_STAGING_LEGACY_ALIAS="${FRONTEND_STAGING_LEGACY_ALIAS:-jobdone-frontend
 BACKEND_STAGING_ALIAS="${BACKEND_STAGING_ALIAS:-jobdone-backend-staging.vercel.app}"
 OUT_FILE="${OUT_FILE:-.deploy/last-staging.env}"
 
+# shellcheck disable=SC1090
+. "${HOME}/.profile"
+
+require_env() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    echo "Missing required environment variable: $name" >&2
+    exit 1
+  fi
+}
+
+require_env JOBDONE_STAGING_SUPABASE_DB_URL
+require_env JOBDONE_STAGING_SUPABASE_URL
+require_env JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
+
 extract_deployment_url() {
   grep -Eo 'https://[a-zA-Z0-9.-]+\.vercel\.app' | grep -v 'vercel.com' | tail -n 1
 }
 
-deploy_prebuilt() {
-  local cwd="$1"
-  npx vercel --cwd "$cwd" build --prod >&2
+deploy_backend() {
+  npx vercel --cwd backend build \
+    --target=production \
+    >&2
   local output
-  output="$(npx vercel --cwd "$cwd" deploy --prebuilt --prod --skip-domain --yes 2>&1)"
+  output="$(npx vercel --cwd backend deploy \
+    --prebuilt \
+    --target=production \
+    --skip-domain \
+    --yes \
+    -e SUPABASE_DB_URL="$JOBDONE_STAGING_SUPABASE_DB_URL" \
+    -e SUPABASE_URL="$JOBDONE_STAGING_SUPABASE_URL" \
+    -e SUPABASE_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
+    -e FRONTEND_URL="https://$FRONTEND_STAGING_ALIAS" \
+    2>&1)"
+  printf '%s\n' "$output" >&2
+  printf '%s\n' "$output" | extract_deployment_url
+}
+
+deploy_frontend() {
+  local cwd="$1"
+  npx vercel --cwd "$cwd" build \
+    --target=production \
+    -b VITE_SUPABASE_URL="$JOBDONE_STAGING_SUPABASE_URL" \
+    -b VITE_SUPABASE_ANON_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
+    -b VITE_APP_URL="https://$FRONTEND_STAGING_ALIAS" \
+    -b VITE_API_URL="https://$BACKEND_STAGING_ALIAS" \
+    >&2
+  local output
+  output="$(npx vercel --cwd "$cwd" deploy \
+    --prebuilt \
+    --target=production \
+    --skip-domain \
+    --yes \
+    2>&1)"
   printf '%s\n' "$output" >&2
   printf '%s\n' "$output" | extract_deployment_url
 }
@@ -25,11 +70,11 @@ deploy_prebuilt() {
 mkdir -p "$(dirname "$OUT_FILE")"
 
 echo "Deploying backend to staging..."
-backend_url="$(deploy_prebuilt backend)"
+backend_url="$(deploy_backend)"
 npx vercel alias set "$backend_url" "$BACKEND_STAGING_ALIAS" --cwd backend
 
 echo "Deploying frontend to staging..."
-frontend_url="$(deploy_prebuilt frontend)"
+frontend_url="$(deploy_frontend frontend)"
 npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_ALIAS" --cwd frontend
 npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_LEGACY_ALIAS" --cwd frontend
 
