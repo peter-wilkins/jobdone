@@ -227,6 +227,58 @@ export class APIService {
     return response.json();
   }
 
+  async getContactManifest(localManifest = { contacts: [] }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/manifest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ localManifest }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Contact manifest failed');
+    }
+    return response.json();
+  }
+
+  async pushContacts(contacts) {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ contacts }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Contact push failed');
+    }
+    return response.json();
+  }
+
+  async pullContacts(clientIds) {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ clientIds }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Contact pull failed');
+    }
+    return response.json();
+  }
+
+  async pushContactAliases(aliases) {
+    const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/aliases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ aliases }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Contact alias push failed');
+    }
+    return response.json();
+  }
+
   async syncLocations(locations) {
     const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
       method: 'POST',

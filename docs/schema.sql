@@ -210,35 +210,58 @@ $$;
 -- 8. contacts (local-first Contacts created from confirmed Captures)
 CREATE TABLE contacts (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id            TEXT NOT NULL,
-  local_id           TEXT,
+  "userId"           TEXT NOT NULL,
+  "clientId"         TEXT NOT NULL,
   status             TEXT NOT NULL DEFAULT 'confirmed',
-  display_name       TEXT NOT NULL DEFAULT '',
-  given_name         TEXT NOT NULL DEFAULT '',
-  family_name        TEXT NOT NULL DEFAULT '',
+  "displayName"      TEXT NOT NULL DEFAULT '',
+  "givenName"        TEXT NOT NULL DEFAULT '',
+  "familyName"       TEXT NOT NULL DEFAULT '',
   organization       TEXT NOT NULL DEFAULT '',
   title              TEXT NOT NULL DEFAULT '',
   note               TEXT NOT NULL DEFAULT '',
   phones             JSONB NOT NULL DEFAULT '[]'::jsonb,
   emails             JSONB NOT NULL DEFAULT '[]'::jsonb,
-  normalized_phones  TEXT[] NOT NULL DEFAULT '{}',
-  normalized_emails  TEXT[] NOT NULL DEFAULT '{}',
-  primary_phone      TEXT,
-  primary_email      TEXT,
-  source_capture_ids TEXT[] NOT NULL DEFAULT '{}',
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  "normalizedPhones" TEXT[] NOT NULL DEFAULT '{}',
+  "normalizedEmails" TEXT[] NOT NULL DEFAULT '{}',
+  "primaryPhone"     TEXT,
+  "primaryEmail"     TEXT,
+  "sourceCaptureIds" TEXT[] NOT NULL DEFAULT '{}',
+  "contentHash"      TEXT NOT NULL DEFAULT '',
+  "identityKeys"     TEXT[] NOT NULL DEFAULT '{}',
+  "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX contacts_user_id_idx           ON contacts(user_id);
-CREATE INDEX contacts_updated_at_idx        ON contacts(updated_at DESC);
-CREATE INDEX contacts_normalized_phones_idx ON contacts USING GIN (normalized_phones);
-CREATE INDEX contacts_normalized_emails_idx ON contacts USING GIN (normalized_emails);
-CREATE UNIQUE INDEX contacts_user_id_local_id_uidx ON contacts(user_id, local_id) WHERE local_id IS NOT NULL;
+CREATE INDEX contacts_user_id_idx           ON contacts("userId");
+CREATE INDEX contacts_updated_at_idx        ON contacts("updatedAt" DESC);
+CREATE INDEX contacts_content_hash_idx      ON contacts("userId", "contentHash");
+CREATE INDEX contacts_identity_keys_idx     ON contacts USING GIN ("identityKeys");
+CREATE INDEX contacts_normalized_phones_idx ON contacts USING GIN ("normalizedPhones");
+CREATE INDEX contacts_normalized_emails_idx ON contacts USING GIN ("normalizedEmails");
+CREATE UNIQUE INDEX contacts_user_id_client_id_uidx ON contacts("userId", "clientId");
 
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
 
--- 9. entry_contacts (immutable MVP Entry-to-Contact associations)
+-- 9. contactClientAliases (one-way immutable Client ID aliases)
+CREATE TABLE "contactClientAliases" (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "userId"       TEXT NOT NULL,
+  collection     TEXT NOT NULL DEFAULT 'contacts',
+  "fromClientId" TEXT NOT NULL,
+  "toClientId"   TEXT NOT NULL,
+  reason         TEXT NOT NULL DEFAULT 'unknown',
+  "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK ("fromClientId" <> "toClientId")
+);
+
+CREATE UNIQUE INDEX contact_client_aliases_user_from_uidx
+  ON "contactClientAliases"("userId", "fromClientId");
+CREATE INDEX contact_client_aliases_user_to_idx
+  ON "contactClientAliases"("userId", "toClientId");
+
+ALTER TABLE "contactClientAliases" ENABLE ROW LEVEL SECURITY;
+
+-- 10. entry_contacts (immutable MVP Entry-to-Contact associations)
 CREATE TABLE entry_contacts (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id   TEXT NOT NULL,
@@ -254,7 +277,7 @@ CREATE UNIQUE INDEX entry_contacts_user_entry_contact_uidx ON entry_contacts(use
 
 ALTER TABLE entry_contacts ENABLE ROW LEVEL SECURITY;
 
--- 10. queries (persisted Recall questions)
+-- 11. queries (persisted Recall questions)
 CREATE TABLE queries (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    TEXT NOT NULL,
@@ -266,7 +289,7 @@ CREATE INDEX queries_user_id_idx ON queries(user_id);
 
 ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 
--- 11. feedback (user-submitted issue reports with compact diagnostics)
+-- 12. feedback (user-submitted issue reports with compact diagnostics)
 CREATE TABLE feedback (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           TEXT,
@@ -286,7 +309,7 @@ CREATE INDEX feedback_created_at_idx           ON feedback(created_at DESC);
 
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 
--- 12. entry_attachments (compressed durable Photo attachments)
+-- 13. entry_attachments (compressed durable Photo attachments)
 CREATE TABLE entry_attachments (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id        TEXT NOT NULL,
@@ -310,7 +333,7 @@ CREATE UNIQUE INDEX entry_attachments_user_entry_local_uidx
 
 ALTER TABLE entry_attachments ENABLE ROW LEVEL SECURITY;
 
--- 13. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 14. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  extensions.vector(1024),

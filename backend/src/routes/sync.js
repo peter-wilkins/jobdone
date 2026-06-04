@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 
@@ -39,6 +39,11 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     getEntryByCreatedAt: deps.getEntryByCreatedAt ?? getEntryByCreatedAt,
     saveContact: deps.saveContact ?? saveContact,
     getContacts: deps.getContacts ?? getContacts,
+    getContactManifest: deps.getContactManifest ?? getContactManifest,
+    pullContactsByClientIds: deps.pullContactsByClientIds ?? pullContactsByClientIds,
+    pushReplicaContacts: deps.pushReplicaContacts ?? pushReplicaContacts,
+    saveContactAlias: deps.saveContactAlias ?? saveContactAlias,
+    getContactAliases: deps.getContactAliases ?? getContactAliases,
     saveContextClues: deps.saveContextClues ?? saveContextClues,
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
     saveEntryContacts: deps.saveEntryContacts ?? saveEntryContacts,
@@ -167,6 +172,65 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
   fastify.post('/api/sync/contacts', handleSaveContacts);
   fastify.get('/api/sync/contacts', handleGetContacts);
+
+  fastify.post('/api/sync/contacts/manifest', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      return { success: true, ...(await db.getContactManifest(user.id, request.body?.localManifest || {})) };
+    } catch (error) {
+      console.error('Contacts manifest error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to fetch contact manifest' });
+    }
+  });
+
+  fastify.post('/api/sync/contacts/pull', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const clientIds = Array.isArray(request.body?.clientIds) ? request.body.clientIds : [];
+      const contacts = await db.pullContactsByClientIds(user.id, clientIds);
+      const aliases = await db.getContactAliases(user.id);
+      return { success: true, contacts, aliases };
+    } catch (error) {
+      console.error('Contacts pull error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to pull contacts' });
+    }
+  });
+
+  fastify.post('/api/sync/contacts/push', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
+      const result = await db.pushReplicaContacts(user.id, contacts);
+      return { success: true, contacts: result.contacts || [], aliases: result.aliases || [] };
+    } catch (error) {
+      console.error('Contacts push error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to push contacts' });
+    }
+  });
+
+  fastify.post('/api/sync/contacts/aliases', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const aliases = Array.isArray(request.body?.aliases) ? request.body.aliases : [];
+      const saved = [];
+      for (const alias of aliases) {
+        const row = await db.saveContactAlias(user.id, alias);
+        if (row) saved.push(row);
+      }
+      return { success: true, aliases: saved };
+    } catch (error) {
+      console.error('Contacts alias push error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to push contact aliases' });
+    }
+  });
 
   fastify.post('/api/sync/locations', async (request, reply) => {
     const user = await auth(request, reply);

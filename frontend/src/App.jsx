@@ -16,6 +16,7 @@ import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
+import { syncContactReplica } from './services/localReplicaService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { diagnosticService } from './services/diagnosticService';
 import { crashReportService } from './services/crashReportService';
@@ -87,19 +88,7 @@ function App() {
         }
       }
 
-      const unsyncedContacts = await dbService.getContactsUnsynced();
-      const contactSyncResult = await syncService.syncContacts(unsyncedContacts);
-      const syncedContacts = contactSyncResult?.contacts || [];
-      if (syncedContacts.length) {
-        for (const cloudContact of syncedContacts) {
-          await dbService.upsertCloudContact(cloudContact);
-        }
-      }
-
-      const cloudContacts = await apiService.getCloudContacts();
-      for (const cloudContact of cloudContacts) {
-        await dbService.upsertCloudContact(cloudContact);
-      }
+      await syncContactReplica();
 
       const unsyncedLocations = await dbService.getLocationsUnsynced();
       const locationSyncResult = await syncService.syncLocations(unsyncedLocations);

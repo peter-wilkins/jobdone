@@ -72,12 +72,72 @@ function mergeByKey(existingValues = [], incomingValues = []) {
 }
 
 function contactsMatch(existing, incoming) {
+  if (existing.clientId && incoming.clientId && existing.clientId === incoming.clientId) return true;
   if (existing.local_id && incoming.localId && existing.local_id === incoming.localId) return true;
+  if (existing.contentHash && incoming.contentHash && existing.contentHash === incoming.contentHash) return true;
 
-  const existingEmails = new Set(existing.normalized_emails || []);
-  const existingPhones = new Set(existing.normalized_phones || []);
+  const existingEmails = new Set(existing.normalizedEmails || existing.normalized_emails || []);
+  const existingPhones = new Set(existing.normalizedPhones || existing.normalized_phones || []);
   return (incoming.normalizedEmails || []).some(email => existingEmails.has(email)) ||
     (incoming.normalizedPhones || []).some(phone => existingPhones.has(phone));
+}
+
+function stableHash(value) {
+  const input = JSON.stringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function sortContactValues(values = []) {
+  return [...(values || [])]
+    .map(value => ({
+      value: String(value?.value || ''),
+      normalized: String(value?.normalized || value?.value || '').toLowerCase(),
+      label: String(value?.label || ''),
+    }))
+    .sort((left, right) => `${left.normalized}:${left.value}`.localeCompare(`${right.normalized}:${right.value}`));
+}
+
+function contactContentHash(contact = {}) {
+  return stableHash({
+    displayName: String(contact.displayName || contact.display_name || '').trim(),
+    givenName: String(contact.givenName || contact.given_name || '').trim(),
+    familyName: String(contact.familyName || contact.family_name || '').trim(),
+    organization: String(contact.organization || '').trim(),
+    title: String(contact.title || '').trim(),
+    note: String(contact.note || '').trim(),
+    phones: sortContactValues(contact.phones),
+    emails: sortContactValues(contact.emails),
+    normalizedPhones: unique(contact.normalizedPhones || contact.normalized_phones).sort(),
+    normalizedEmails: unique(contact.normalizedEmails || contact.normalized_emails).sort(),
+    primaryPhone: contact.primaryPhone || contact.primary_phone || '',
+    primaryEmail: contact.primaryEmail || contact.primary_email || '',
+  });
+}
+
+function contactIdentityKeys(contact = {}) {
+  return unique([
+    ...unique(contact.normalizedEmails || contact.normalized_emails).map(value => `email:${value}`),
+    ...unique(contact.normalizedPhones || contact.normalized_phones).map(value => `phone:${value}`),
+  ]);
+}
+
+function contactClientId(contact = {}) {
+  return contact.clientId || contact.localId || contact.local_id || contact.id || '';
+}
+
+function contactManifestRow(contact = {}) {
+  return {
+    clientId: contact.clientId,
+    serverId: contact.id || contact.serverId || null,
+    status: contact.status || 'confirmed',
+    contentHash: contact.contentHash || contactContentHash(contact),
+    identityKeys: contact.identityKeys || contactIdentityKeys(contact),
+  };
 }
 
 export function normalizeLocationIdentityText(value) {
@@ -998,64 +1058,123 @@ export async function saveEntryTags(userId, entryId, tags = []) {
 }
 
 export async function saveContact(userId, contactData) {
+  const result = await saveContactForReplica(userId, contactData);
+  return result.contact;
+}
+
+export async function saveContactAlias(userId, alias = {}) {
+  if (!jobdoneDb || !alias.fromClientId || !alias.toClientId || alias.fromClientId === alias.toClientId) return null;
+
+  const row = {
+    userId,
+    collection: alias.collection || 'contacts',
+    fromClientId: alias.fromClientId,
+    toClientId: alias.toClientId,
+    reason: alias.reason || 'unknown',
+    createdAt: alias.createdAt || new Date().toISOString(),
+  };
+
+  const { data, error } = await jobdoneDb
+    .from('contactClientAliases')
+    .upsert([row], { onConflict: 'userId,fromClientId' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getContactAliases(userId) {
+  if (!jobdoneDb) return [];
+  const { data, error } = await jobdoneDb
+    .from('contactClientAliases')
+    .select('*')
+    .eq('userId', userId)
+    .order('createdAt', { ascending: true });
+  if (error) {
+    if (error.code === '42P01' || /contactClientAliases/i.test(error.message || '')) return [];
+    throw error;
+  }
+  return data || [];
+}
+
+export async function saveContactForReplica(userId, contactData) {
   if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping contact save');
-    return null;
+    return { contact: null, aliases: [] };
   }
 
   const normalizedEmails = unique(contactData.normalizedEmails || contactData.normalized_emails);
   const normalizedPhones = unique(contactData.normalizedPhones || contactData.normalized_phones);
+  const clientId = contactClientId(contactData);
+  const contentHash = contactData.contentHash || contactContentHash({ ...contactData, normalizedEmails, normalizedPhones });
   const existingContacts = await getContacts(userId);
   const existing = existingContacts.find(contact => contactsMatch(contact, {
+    clientId,
     localId: contactData.localId || contactData.local_id || contactData.id,
+    contentHash,
     normalizedEmails,
     normalizedPhones,
   }));
+  const aliases = [];
 
   const payload = {
-    user_id: userId,
-    local_id: contactData.localId || contactData.local_id || contactData.id || null,
+    userId,
+    clientId: existing?.clientId || clientId,
     status: contactData.status || 'confirmed',
-    display_name: contactData.displayName || contactData.display_name || '',
-    given_name: contactData.givenName || contactData.given_name || '',
-    family_name: contactData.familyName || contactData.family_name || '',
+    displayName: contactData.displayName || contactData.display_name || '',
+    givenName: contactData.givenName || contactData.given_name || '',
+    familyName: contactData.familyName || contactData.family_name || '',
     organization: contactData.organization || '',
     title: contactData.title || '',
     note: contactData.note || '',
     phones: contactData.phones || [],
     emails: contactData.emails || [],
-    normalized_phones: normalizedPhones,
-    normalized_emails: normalizedEmails,
-    primary_phone: contactData.primaryPhone || contactData.primary_phone || normalizedPhones[0] || null,
-    primary_email: contactData.primaryEmail || contactData.primary_email || normalizedEmails[0] || null,
-    source_capture_ids: unique(contactData.sourceCaptureIds || contactData.source_capture_ids),
-    updated_at: new Date().toISOString(),
+    normalizedPhones,
+    normalizedEmails,
+    primaryPhone: contactData.primaryPhone || contactData.primary_phone || normalizedPhones[0] || null,
+    primaryEmail: contactData.primaryEmail || contactData.primary_email || normalizedEmails[0] || null,
+    sourceCaptureIds: unique(contactData.sourceCaptureIds || contactData.source_capture_ids),
+    contentHash,
+    identityKeys: contactData.identityKeys || contactIdentityKeys({ normalizedEmails, normalizedPhones }),
+    updatedAt: new Date().toISOString(),
   };
 
   if (!existing) {
     const { data, error } = await jobdoneDb
       .from('contacts')
-      .insert([{ ...payload, created_at: new Date(contactData.created_at || Date.now()).toISOString() }])
+      .insert([{ ...payload, createdAt: new Date(contactData.createdAt || contactData.created_at || Date.now()).toISOString() }])
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return { contact: data, aliases };
+  }
+
+  if (clientId && existing.clientId && clientId !== existing.clientId) {
+    const alias = await saveContactAlias(userId, {
+      collection: 'contacts',
+      fromClientId: clientId,
+      toClientId: existing.clientId,
+      reason: existing.contentHash === contentHash ? 'content_hash_match' : 'identity_key_match',
+    });
+    if (alias) aliases.push(alias);
   }
 
   const merged = {
     ...payload,
-    local_id: existing.local_id || payload.local_id,
-    display_name: payload.display_name || existing.display_name,
-    given_name: payload.given_name || existing.given_name,
-    family_name: payload.family_name || existing.family_name,
+    clientId: existing.clientId || payload.clientId,
+    displayName: payload.displayName || existing.displayName,
+    givenName: payload.givenName || existing.givenName,
+    familyName: payload.familyName || existing.familyName,
     organization: payload.organization || existing.organization,
     title: payload.title || existing.title,
     note: payload.note || existing.note,
     phones: mergeByKey(existing.phones, payload.phones),
     emails: mergeByKey(existing.emails, payload.emails),
-    normalized_phones: unique([...(existing.normalized_phones || []), ...normalizedPhones]),
-    normalized_emails: unique([...(existing.normalized_emails || []), ...normalizedEmails]),
-    source_capture_ids: unique([...(existing.source_capture_ids || []), ...payload.source_capture_ids]),
+    normalizedPhones: unique([...(existing.normalizedPhones || []), ...normalizedPhones]),
+    normalizedEmails: unique([...(existing.normalizedEmails || []), ...normalizedEmails]),
+    sourceCaptureIds: unique([...(existing.sourceCaptureIds || []), ...payload.sourceCaptureIds]),
+    identityKeys: unique([...(existing.identityKeys || []), ...(payload.identityKeys || [])]),
+    contentHash: existing.contentHash || payload.contentHash,
   };
 
   const { data, error } = await jobdoneDb
@@ -1065,7 +1184,7 @@ export async function saveContact(userId, contactData) {
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return { contact: data, aliases };
 }
 
 export async function getContacts(userId) {
@@ -1077,11 +1196,42 @@ export async function getContacts(userId) {
   const { data, error } = await jobdoneDb
       .from('contacts')
     .select('*')
-    .eq('user_id', userId)
+    .eq('userId', userId)
     .eq('status', 'confirmed')
-    .order('updated_at', { ascending: false });
+    .order('updatedAt', { ascending: false });
   if (error) throw error;
   return data || [];
+}
+
+export async function getContactManifest(userId) {
+  const contacts = await getContacts(userId);
+  const aliases = await getContactAliases(userId);
+  return {
+    contacts: contacts.map(contactManifestRow),
+    aliases,
+  };
+}
+
+export async function pullContactsByClientIds(userId, clientIds = []) {
+  if (!jobdoneDb || !clientIds.length) return [];
+  const { data, error } = await jobdoneDb
+    .from('contacts')
+    .select('*')
+    .eq('userId', userId)
+    .in('clientId', clientIds);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function pushReplicaContacts(userId, contacts = []) {
+  const saved = [];
+  const aliases = [];
+  for (const contact of contacts) {
+    const result = await saveContactForReplica(userId, contact);
+    if (result.contact) saved.push(result.contact);
+    aliases.push(...(result.aliases || []));
+  }
+  return { contacts: saved, aliases };
 }
 
 export async function getLocations(userId) {
@@ -1107,7 +1257,7 @@ export function buildContactLocationCooccurrences(contactLinks = [], locationLin
     const list = contactsByEntry.get(link.entry_id) || [];
     list.push({
       id: link.contacts.id,
-      label: link.contacts.display_name,
+      label: link.contacts.displayName || link.contacts.display_name,
       seenAt: link.created_at,
     });
     contactsByEntry.set(link.entry_id, list);
@@ -1156,7 +1306,7 @@ export async function getContactLocationCooccurrences(userId) {
   const [{ data: contactLinks, error: contactError }, { data: locationLinks, error: locationError }] = await Promise.all([
     jobdoneDb
       .from('entry_contacts')
-      .select('entry_id, created_at, contacts(id, display_name)')
+      .select('entry_id, created_at, contacts(*)')
       .eq('user_id', userId),
     jobdoneDb
       .from('entry_locations')

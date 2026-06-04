@@ -24,6 +24,11 @@ async function buildApp(deps = {}) {
     requireAuth: async () => ({ id: 'user-1' }),
     getEntries: async () => [],
     getContacts: async () => [],
+    getContactManifest: async () => ({ contacts: [], aliases: [] }),
+    pullContactsByClientIds: async () => [],
+    pushReplicaContacts: async () => ({ contacts: [], aliases: [] }),
+    getContactAliases: async () => [],
+    saveContactAlias: async (userId, alias) => ({ userId, ...alias }),
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
     saveEntryLocations: async () => [],
@@ -558,7 +563,7 @@ describe('SyncRoute Contacts sync', () => {
     const app = await buildApp({
       saveContact: async (userId, contact) => {
         savedArgs = { userId, contact };
-        return { id: 'contact-cloud-1', user_id: userId, local_id: contact.localId };
+        return { id: 'contact-cloud-1', userId, clientId: contact.clientId || contact.localId };
       },
     });
 
@@ -574,11 +579,11 @@ describe('SyncRoute Contacts sync', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(savedArgs.userId, 'user-1');
     assert.equal(savedArgs.contact.displayName, 'Ann Smith');
-    assert.equal(JSON.parse(res.body).contacts[0].local_id, 'contact-local-1');
+    assert.equal(JSON.parse(res.body).contacts[0].clientId, 'contact-local-1');
   });
 
   test('fetches cloud contacts for authenticated user', async () => {
-    const cloudContacts = [{ id: 'contact-cloud-1', display_name: 'Ann Smith' }];
+    const cloudContacts = [{ id: 'contact-cloud-1', clientId: 'contact-local-1', displayName: 'Ann Smith' }];
     const app = await buildApp({
       getContacts: async (userId) => {
         assert.equal(userId, 'user-1');
@@ -593,6 +598,96 @@ describe('SyncRoute Contacts sync', () => {
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(JSON.parse(res.body).contacts, cloudContacts);
+  });
+
+  test('returns contact manifest without full payloads', async () => {
+    const app = await buildApp({
+      getContactManifest: async (userId, localManifest) => {
+        assert.equal(userId, 'user-1');
+        assert.deepEqual(localManifest.contacts, [{ clientId: 'contact-local-1', contentHash: 'hash-a' }]);
+        return {
+          contacts: [{ clientId: 'contact-local-1', serverId: 'server-1', contentHash: 'hash-a', status: 'confirmed' }],
+          aliases: [],
+        };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts/manifest',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ localManifest: { contacts: [{ clientId: 'contact-local-1', contentHash: 'hash-a' }] } }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).contacts, [
+      { clientId: 'contact-local-1', serverId: 'server-1', contentHash: 'hash-a', status: 'confirmed' },
+    ]);
+  });
+
+  test('pulls requested contacts by client id', async () => {
+    const app = await buildApp({
+      pullContactsByClientIds: async (userId, clientIds) => {
+        assert.equal(userId, 'user-1');
+        assert.deepEqual(clientIds, ['contact-remote-1']);
+        return [{ id: 'server-1', clientId: 'contact-remote-1', displayName: 'Beth Jones' }];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts/pull',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clientIds: ['contact-remote-1'] }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).contacts[0].clientId, 'contact-remote-1');
+  });
+
+  test('pushes contacts and returns immutable aliases', async () => {
+    const app = await buildApp({
+      pushReplicaContacts: async (userId, contacts) => {
+        assert.equal(userId, 'user-1');
+        assert.equal(contacts[0].clientId, 'contact-alan');
+        return {
+          contacts: [{ id: 'server-1', clientId: 'contact-alain', displayName: 'Alain' }],
+          aliases: [{ fromClientId: 'contact-alan', toClientId: 'contact-alain', reason: 'identity_key_match' }],
+        };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts/push',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contacts: [{ clientId: 'contact-alan', displayName: 'Alan' }] }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).aliases[0].toClientId, 'contact-alain');
+  });
+
+  test('syncs locally discovered aliases to backend', async () => {
+    const app = await buildApp({
+      saveContactAlias: async (userId, alias) => {
+        assert.equal(userId, 'user-1');
+        assert.equal(alias.fromClientId, 'contact-alan');
+        return { userId, ...alias };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts/aliases',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        aliases: [{ fromClientId: 'contact-alan', toClientId: 'contact-alain', reason: 'content_hash_match' }],
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).aliases[0].reason, 'content_hash_match');
   });
 });
 

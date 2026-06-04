@@ -7,7 +7,7 @@ import { entryMatchesLocation } from './locationPresentationService.js';
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 12;
+const DB_VERSION = 13;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -20,6 +20,7 @@ const TAGS_STORE = 'tags';
 const TAG_VOCABULARY_STORE = 'tagVocabulary';
 const ENTRY_TAGS_STORE = 'entryTags';
 const CONTACTS_STORE = 'contacts';
+const CONTACT_ALIASES_STORE = 'contactClientAliases';
 const DEFAULT_TAG_CATEGORY = {
   id: 'tag-category-general',
   name: 'General',
@@ -214,6 +215,14 @@ export class DBService {
           contactStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
         }
 
+        // v13: one-way immutable Client ID aliases for Contact merge/collapse.
+        if (!db.objectStoreNames.contains(CONTACT_ALIASES_STORE)) {
+          const aliasStore = db.createObjectStore(CONTACT_ALIASES_STORE, { keyPath: 'fromClientId' });
+          aliasStore.createIndex('toClientId', 'toClientId', { unique: false });
+          aliasStore.createIndex('collection', 'collection', { unique: false });
+          aliasStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
         // v9: local Context Clue snapshots. Capture-linked clues stay local until Confirmation.
         if (!db.objectStoreNames.contains(CONTEXT_CLUES_STORE)) {
           const contextCluesStore = db.createObjectStore(CONTEXT_CLUES_STORE, { keyPath: 'id' });
@@ -278,14 +287,8 @@ export class DBService {
       try {
         return await openOnce();
       } catch (error) {
-        console.warn('[DB] Open failed, resetting local database:', error.message);
-        await new Promise((resolve) => {
-          const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
-          deleteRequest.onsuccess = () => resolve();
-          deleteRequest.onerror = () => resolve();
-          deleteRequest.onblocked = () => resolve();
-        });
-        return await openOnce();
+        console.error('[DB] Open failed; preserving local database:', error.message);
+        throw error;
       } finally {
         this.initPromise = null;
       }
@@ -1546,14 +1549,68 @@ export class DBService {
 
   async getContacts(status = 'confirmed') {
     const db = await this.ensureDb();
+    const aliases = await this.getContactAliases();
     return new Promise((resolve, reject) => {
       const store = db.transaction([CONTACTS_STORE], 'readonly').objectStore(CONTACTS_STORE);
       const request = status ? store.index('status').getAll(status) : store.getAll();
       request.onsuccess = () => {
-        const contacts = (request.result || []).sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+        const aliasMap = new Map(aliases.map(alias => [alias.fromClientId, alias.toClientId]));
+        const byId = new Map((request.result || []).map(contact => [contact.id, contact]));
+        const contacts = (request.result || [])
+          .filter(contact => !(aliasMap.has(contact.id) && byId.has(aliasMap.get(contact.id))))
+          .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
         resolve(contacts);
       };
       request.onerror = () => reject(new Error('Failed to fetch contacts'));
+    });
+  }
+
+  async getContactsForReplica() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([CONTACTS_STORE], 'readonly').objectStore(CONTACTS_STORE);
+      const request = store.index('status').getAll('confirmed');
+      request.onsuccess = () => resolve((request.result || []));
+      request.onerror = () => reject(new Error('Failed to fetch contacts for replica'));
+    });
+  }
+
+  async getContactAliases() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      if (!db.objectStoreNames.contains(CONTACT_ALIASES_STORE)) {
+        resolve([]);
+        return;
+      }
+      const request = db.transaction([CONTACT_ALIASES_STORE], 'readonly').objectStore(CONTACT_ALIASES_STORE).getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error('Failed to fetch contact aliases'));
+    });
+  }
+
+  async saveContactAlias(alias = {}) {
+    if (!alias.fromClientId || !alias.toClientId || alias.fromClientId === alias.toClientId) return null;
+    const db = await this.ensureDb();
+    const row = {
+      collection: 'contacts',
+      reason: 'unknown',
+      created_at: new Date().toISOString(),
+      ...alias,
+    };
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([CONTACT_ALIASES_STORE], 'readwrite').objectStore(CONTACT_ALIASES_STORE);
+      const getRequest = store.get(row.fromClientId);
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result;
+        if (existing) {
+          resolve(existing);
+          return;
+        }
+        const putRequest = store.put(row);
+        putRequest.onsuccess = () => resolve(row);
+        putRequest.onerror = () => reject(new Error('Failed to save contact alias'));
+      };
+      getRequest.onerror = () => reject(new Error('Failed to read contact alias'));
     });
   }
 
@@ -1698,16 +1755,17 @@ export class DBService {
   }
 
   async upsertCloudContact(cloudContact) {
-    const normalizedEmails = Array.from(new Set((cloudContact.normalized_emails || []).filter(Boolean)));
-    const normalizedPhones = Array.from(new Set((cloudContact.normalized_phones || []).filter(Boolean)));
-    const localId = cloudContact.local_id || null;
+    const normalizedEmails = Array.from(new Set((cloudContact.normalizedEmails || cloudContact.normalized_emails || []).filter(Boolean)));
+    const normalizedPhones = Array.from(new Set((cloudContact.normalizedPhones || cloudContact.normalized_phones || []).filter(Boolean)));
+    const localId = cloudContact.clientId || cloudContact.local_id || cloudContact.localId || null;
     const existingByLocalId = localId ? await this.getContact(localId) : null;
     const matches = await this.findContactsByContactKeys({ normalizedEmails, normalizedPhones });
-    const existing = existingByLocalId || matches.find(contact => contact.remoteId === cloudContact.id) || matches[0] || null;
+    const serverId = cloudContact.serverId || cloudContact.id || null;
+    const existing = existingByLocalId || matches.find(contact => contact.remoteId === serverId) || matches[0] || null;
     const contactData = {
-      displayName: cloudContact.display_name || '',
-      givenName: cloudContact.given_name || '',
-      familyName: cloudContact.family_name || '',
+      displayName: cloudContact.displayName || cloudContact.display_name || '',
+      givenName: cloudContact.givenName || cloudContact.given_name || '',
+      familyName: cloudContact.familyName || cloudContact.family_name || '',
       organization: cloudContact.organization || '',
       title: cloudContact.title || '',
       note: cloudContact.note || '',
@@ -1715,10 +1773,10 @@ export class DBService {
       emails: cloudContact.emails || [],
       normalizedPhones,
       normalizedEmails,
-      primaryPhone: cloudContact.primary_phone || normalizedPhones[0] || null,
-      primaryEmail: cloudContact.primary_email || normalizedEmails[0] || null,
-      sourceCaptureIds: cloudContact.source_capture_ids || [],
-      remoteId: cloudContact.id,
+      primaryPhone: cloudContact.primaryPhone || cloudContact.primary_phone || normalizedPhones[0] || null,
+      primaryEmail: cloudContact.primaryEmail || cloudContact.primary_email || normalizedEmails[0] || null,
+      sourceCaptureIds: cloudContact.sourceCaptureIds || cloudContact.source_capture_ids || [],
+      remoteId: serverId,
       syncStatus: 'synced',
       synced_at: new Date().toISOString(),
     };
@@ -1727,8 +1785,8 @@ export class DBService {
       return this.createContact({
         ...contactData,
         id: localId || this.generateContactId(),
-        created_at: cloudContact.created_at || new Date().toISOString(),
-        updated_at: cloudContact.updated_at || cloudContact.created_at || new Date().toISOString(),
+        created_at: cloudContact.createdAt || cloudContact.created_at || new Date().toISOString(),
+        updated_at: cloudContact.updatedAt || cloudContact.updated_at || cloudContact.createdAt || cloudContact.created_at || new Date().toISOString(),
       });
     }
 
@@ -1742,7 +1800,7 @@ export class DBService {
       normalizedPhones: Array.from(new Set([...(existing.normalizedPhones || []), ...normalizedPhones])),
       normalizedEmails: Array.from(new Set([...(existing.normalizedEmails || []), ...normalizedEmails])),
       sourceCaptureIds: Array.from(new Set([...(existing.sourceCaptureIds || []), ...contactData.sourceCaptureIds])),
-      updated_at: cloudContact.updated_at || existing.updated_at,
+      updated_at: cloudContact.updatedAt || cloudContact.updated_at || existing.updated_at,
     };
 
     return new Promise((resolve, reject) => {
@@ -2338,4 +2396,6 @@ export class DBService {
 export const dbService = new DBService();
 
 // Initialize on import
-dbService.init().catch(console.error);
+if (typeof indexedDB !== 'undefined') {
+  dbService.init().catch(console.error);
+}
