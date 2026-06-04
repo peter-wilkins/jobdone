@@ -3,6 +3,7 @@ import { useOutsideDismiss } from './services/outsideDismissService';
 
 const MENU_ITEMS = [
   { screen: 'home', label: 'Home' },
+  { screen: 'onboarding', label: 'Onboarding' },
   { screen: 'inbox', label: 'Inbox' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },

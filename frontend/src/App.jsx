@@ -11,6 +11,7 @@ import { TeamReviewScreen } from './TeamReviewScreen';
 import { MyWorkScreen } from './MyWorkScreen';
 import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
+import { OnboardingScreen } from './OnboardingScreen';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
@@ -26,7 +27,7 @@ function screenFromLocation() {
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'share-target', 'team-review', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
 }
 
 function isPlainHomeOpen() {
@@ -254,6 +255,10 @@ function App() {
 
   if (screen === 'login') {
     return <>{environmentBanner}{crashStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+  }
+
+  if (screen === 'onboarding') {
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<OnboardingScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'team-setup') {

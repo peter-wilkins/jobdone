@@ -7,7 +7,7 @@ import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
-import { buildCaptureContext, captureContextService, CAPTURE_CONTEXT_TEMPLATES } from './services/captureContextService';
+import { captureContextService } from './services/captureContextService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -36,7 +36,6 @@ import {
   recordSuccessfulTranscription,
   shouldRaceBackendTranscription,
   tryLocalTranscribeAudio,
-  WHISPER_BASE_EN_Q5_1,
 } from './services/localTranscriptionService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
@@ -297,14 +296,8 @@ export function HomeScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
-  const [captureContext, setCaptureContext] = useState(() => captureContextService.get());
-  const [contextTemplateId, setContextTemplateId] = useState(() => {
-    const savedContext = captureContextService.get();
-    return savedContext?.templateId || CAPTURE_CONTEXT_TEMPLATES[0].id;
-  });
-  const [contextNotes, setContextNotes] = useState(() => captureContextService.get()?.notes || '');
-  const [captureContextPanelDismissed, setCaptureContextPanelDismissed] = useState(false);
-  const [localTranscriptionMetrics, setLocalTranscriptionMetrics] = useState(() => getLocalTranscriptionMetrics());
+  const [captureContext] = useState(() => captureContextService.get());
+  const [, setLocalTranscriptionMetrics] = useState(() => getLocalTranscriptionMetrics());
   const [, setSuccessfulCaptureCount] = useState(0);
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
@@ -1223,13 +1216,6 @@ export function HomeScreen({
       setRecordingFlashActive(false);
       setRecordingTime(0);
     }
-  };
-
-  const saveCaptureContext = () => {
-    const next = buildCaptureContext(contextTemplateId, contextNotes);
-    captureContextService.save(next);
-    setCaptureContext(next);
-    setCaptureContextPanelDismissed(true);
   };
 
   const OFFLINE_MSG = 'Recall isn\'t available right now. Try again in a moment.';
@@ -3111,80 +3097,6 @@ export function HomeScreen({
               Reload
             </button>
           )}
-        </div>
-      )}
-
-      {!captureContextPanelDismissed && (
-        <div className="border-b border-gray-200 bg-gray-50 px-4 py-4">
-          <div className="mx-auto max-w-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-gray-900">What will you mostly use JobDone for?</p>
-                {captureContext && (
-                  <p className="mt-1 text-xs text-gray-500">Dogfood panel. Saved context is active; edit it here or dismiss for now.</p>
-                )}
-                {ENABLE_TRANSCRIPTION_CAPTURE && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Local voice: {localTranscriptionMetrics?.modelCached && localTranscriptionMetrics.modelId === WHISPER_BASE_EN_Q5_1.id
-                      ? `${WHISPER_BASE_EN_Q5_1.id} model cached`
-                      : localTranscriptionMetrics?.modelCached
-                        ? `cached ${localTranscriptionMetrics.modelId || 'old model'}; loading ${WHISPER_BASE_EN_Q5_1.id}`
-                      : localTranscriptionMetrics?.status === 'failed'
-                        ? `model preload failed: ${localTranscriptionMetrics.reason || 'unknown'}`
-                        : localTranscriptionMetrics?.status === 'paused'
-                          ? `model preload paused: ${localTranscriptionMetrics.reason || 'connection'}`
-                        : localTranscriptionMetrics?.status === 'unavailable'
-                          ? 'local cache unavailable'
-                          : `preloading ${Math.round(WHISPER_BASE_EN_Q5_1.bytes / 1024 / 1024)} MB model when connection allows`}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setCaptureContextPanelDismissed(true)}
-                className="shrink-0 rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-              >
-                Dismiss
-              </button>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {CAPTURE_CONTEXT_TEMPLATES.map(template => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => setContextTemplateId(template.id)}
-                  className={`rounded border px-3 py-2 text-left ${
-                    contextTemplateId === template.id
-                      ? 'border-gray-900 bg-white text-gray-900'
-                      : 'border-gray-200 bg-white text-gray-700'
-                  }`}
-                >
-                  <span className="block text-sm font-medium">{template.label}</span>
-                  <span className="mt-1 block text-xs text-gray-500">{template.examples}</span>
-                </button>
-              ))}
-            </div>
-            <label className="mt-3 block">
-              <span className="text-xs font-medium text-gray-600">Extra context, optional</span>
-              <textarea
-                value={contextNotes}
-                onChange={(event) => setContextNotes(event.target.value)}
-                rows={2}
-                maxLength={240}
-                placeholder="Examples: mostly garden maintenance for my own home; classic cars; rental property repairs."
-                className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
-              />
-            </label>
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={saveCaptureContext}
-                className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                Save
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
