@@ -6,6 +6,13 @@ const ENV = import.meta.env || {};
 
 const supabaseUrl = ENV.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const supabaseAnonKey = ENV.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+export const authClientOptions = {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+};
 
 export function authRedirectUrl({
   configuredAppUrl = ENV.VITE_APP_URL,
@@ -16,7 +23,7 @@ export function authRedirectUrl({
 
 // Supabase client — null if env vars not set (auth disabled)
 export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, authClientOptions)
   : null;
 
 class AuthService {

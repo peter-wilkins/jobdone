@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authRedirectUrl } from './authService.js';
+import { authClientOptions, authRedirectUrl } from './authService.js';
 
 test('auth redirect uses current browser origin when no app URL is configured', () => {
   assert.equal(
@@ -20,4 +20,10 @@ test('auth redirect trims configured app URL trailing slash', () => {
     }),
     'https://jobdone-production.vercel.app',
   );
+});
+
+test('auth sessions persist until explicit sign out', () => {
+  assert.equal(authClientOptions.auth.persistSession, true);
+  assert.equal(authClientOptions.auth.autoRefreshToken, true);
+  assert.equal(authClientOptions.auth.detectSessionInUrl, true);
 });

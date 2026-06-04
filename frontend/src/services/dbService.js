@@ -126,6 +126,28 @@ export function entryMentionsContact(entry, contact) {
 
 export const entryMentionsPerson = entryMentionsContact;
 
+export function mergeEntryUpdates(entry = {}, updates = {}) {
+  if (entry.status === 'confirmed') {
+    const safeUpdates = { ...(updates || {}) };
+    delete safeUpdates.status;
+    delete safeUpdates.transcript;
+    delete safeUpdates.summary;
+    delete safeUpdates.intent;
+    delete safeUpdates.audioBlob;
+    delete safeUpdates.attachmentSnapshots;
+    return {
+      ...entry,
+      ...safeUpdates,
+      status: 'confirmed',
+    };
+  }
+
+  return {
+    ...entry,
+    ...(updates || {}),
+  };
+}
+
 export class DBService {
   constructor() {
     this.db = null;
@@ -396,13 +418,20 @@ export class DBService {
           return;
         }
 
-        entry.transcript = transcript;
-        entry.summary = summary;
-        if (intent) entry.intent = intent;
-        if (transcriptionSource) entry.transcriptionSource = transcriptionSource;
-        if (Array.isArray(transcriptionCandidates)) entry.transcriptionCandidates = transcriptionCandidates;
-        entry.errorMessage = null;
-        entry.status = 'ready_for_review';
+        if (entry.status === 'confirmed') {
+          resolve(entry);
+          return;
+        }
+
+        Object.assign(entry, mergeEntryUpdates(entry, {
+          transcript,
+          summary,
+          intent: intent || entry.intent,
+          transcriptionSource: transcriptionSource || entry.transcriptionSource,
+          transcriptionCandidates: Array.isArray(transcriptionCandidates) ? transcriptionCandidates : entry.transcriptionCandidates,
+          errorMessage: null,
+          status: 'ready_for_review',
+        }));
 
         const updateRequest = store.put(entry);
 
@@ -444,8 +473,7 @@ export class DBService {
           return;
         }
 
-        // Apply updates
-        Object.assign(entry, updates);
+        Object.assign(entry, mergeEntryUpdates(entry, updates));
 
         const updateRequest = store.put(entry);
 
