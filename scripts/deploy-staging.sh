@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 FRONTEND_STAGING_ALIAS="${FRONTEND_STAGING_ALIAS:-jobdone-staging.vercel.app}"
 FRONTEND_STAGING_LEGACY_ALIAS="${FRONTEND_STAGING_LEGACY_ALIAS:-jobdone-frontend-staging.vercel.app}"
+FRONTEND_REMOVED_ALIAS="${FRONTEND_REMOVED_ALIAS:-frontend-jobdone1.vercel.app}"
 BACKEND_STAGING_ALIAS="${BACKEND_STAGING_ALIAS:-jobdone-backend-staging.vercel.app}"
 OUT_FILE="${OUT_FILE:-.deploy/last-staging.env}"
 
@@ -77,6 +78,7 @@ echo "Deploying frontend to staging..."
 frontend_url="$(deploy_frontend frontend)"
 npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_ALIAS" --cwd frontend
 npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_LEGACY_ALIAS" --cwd frontend
+npx vercel alias remove "$FRONTEND_REMOVED_ALIAS" --cwd frontend --yes >/dev/null 2>&1 || true
 
 cat > "$OUT_FILE" <<EOF
 GIT_SHA=$(git rev-parse --short HEAD)

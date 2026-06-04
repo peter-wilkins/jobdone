@@ -13,6 +13,9 @@ FRONTEND_PRODUCTION_ALIASES=(
   "frontend-six-sage-63.vercel.app"
   "frontend-peter-wilkins-jobdone1.vercel.app"
 )
+FRONTEND_REMOVED_ALIASES=(
+  "frontend-jobdone1.vercel.app"
+)
 BACKEND_PRODUCTION_ALIASES=(
   "$BACKEND_PRODUCTION_PRIMARY_ALIAS"
   "jobdone-gamma.vercel.app"
@@ -97,6 +100,9 @@ for alias in "${BACKEND_PRODUCTION_ALIASES[@]}"; do
 done
 for alias in "${FRONTEND_PRODUCTION_ALIASES[@]}"; do
   npx vercel alias set "$FRONTEND_DEPLOYMENT_URL" "$alias" --cwd frontend
+done
+for alias in "${FRONTEND_REMOVED_ALIASES[@]}"; do
+  npx vercel alias remove "$alias" --cwd frontend --yes >/dev/null 2>&1 || true
 done
 
 echo "Production promoted:"
