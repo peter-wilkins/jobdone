@@ -70,6 +70,16 @@ export function consumeAuthErrorFromLocation({
   };
 }
 
+export function signInEmailData() {
+  return {
+    email_kind: 'sign_in',
+    app_name: 'JobDone',
+    action_text: 'Sign in',
+    headline: 'Sign in to JobDone',
+    message: 'Tap the button to sign in on this device. No password needed.',
+  };
+}
+
 // Supabase client — null if env vars not set (auth disabled)
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey, authClientOptions)
@@ -105,7 +115,10 @@ class AuthService {
     const redirectTo = authRedirectUrl();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: redirectTo },
+      options: {
+        emailRedirectTo: redirectTo,
+        data: signInEmailData(),
+      },
     });
     if (error) throw error;
   }

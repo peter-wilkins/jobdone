@@ -17,7 +17,6 @@ test('builds custom Supabase template data for Team invite emails', () => {
     invite_url: 'https://frontend.example/invite?token=abc',
     action_text: 'Join Team',
     headline: 'Join Dog Food Team on JobDone',
-    message: 'You have been invited to a Team on JobDone. Tap the link to sign in and see your Backlog.',
+    message: 'Open your Team Backlog, claim work, and capture evidence while it is fresh.',
   });
 });
-

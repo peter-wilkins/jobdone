@@ -158,7 +158,7 @@ export function teamInviteEmailData({ inviteUrl, teamName, inviterEmail } = {}) 
     invite_url: inviteUrl,
     action_text: 'Join Team',
     headline: `Join ${String(teamName || 'a JobDone Team').slice(0, 120)} on JobDone`,
-    message: 'You have been invited to a Team on JobDone. Tap the link to sign in and see your Backlog.',
+    message: 'Open your Team Backlog, claim work, and capture evidence while it is fresh.',
   };
 }
 

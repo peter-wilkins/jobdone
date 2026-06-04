@@ -14,6 +14,8 @@
     "deploy:promote": "bash scripts/promote-staging-to-production.sh",
     "deploy:check:staging": "bash scripts/check-deploy.sh staging",
     "deploy:check:production": "bash scripts/check-deploy.sh production",
-    "logs:backend": "bash scripts/tail-backend-prod-logs.sh"
+    "logs:backend": "bash scripts/tail-backend-prod-logs.sh",
+    "auth:emails:dry-run": "node scripts/apply-supabase-auth-email-templates.js",
+    "auth:emails:apply": "node scripts/apply-supabase-auth-email-templates.js --apply"
   }
 }
