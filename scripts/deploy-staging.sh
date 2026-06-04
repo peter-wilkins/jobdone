@@ -14,9 +14,9 @@ extract_deployment_url() {
 
 deploy_prebuilt() {
   local cwd="$1"
-  npx vercel --cwd "$cwd" build >&2
+  npx vercel --cwd "$cwd" build --prod >&2
   local output
-  output="$(npx vercel --cwd "$cwd" deploy --prebuilt --yes 2>&1)"
+  output="$(npx vercel --cwd "$cwd" deploy --prebuilt --prod --skip-domain --yes 2>&1)"
   printf '%s\n' "$output" >&2
   printf '%s\n' "$output" | extract_deployment_url
 }

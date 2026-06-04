@@ -30,6 +30,7 @@ yarn-error.log*
 # Temp
 .tmp/
 tmp/
+.deploy/
 .vercel
 .env*.local
 

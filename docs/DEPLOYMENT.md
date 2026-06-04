@@ -28,6 +28,8 @@ npm run deploy:check:staging
 
 `deploy:staging` writes `.deploy/last-staging.env` with the immutable frontend
 and backend deployment URLs. Do not edit that file by hand before promotion.
+It uses Vercel production-target builds with `--skip-domain`, so staging is
+public but production aliases are not moved.
 
 ## QA Gate
 
