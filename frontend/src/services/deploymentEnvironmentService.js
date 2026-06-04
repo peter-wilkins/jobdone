@@ -9,12 +9,7 @@ export function deploymentEnvironmentForHostname(hostname = globalThis.window?.l
       bannerClassName: 'bg-amber-500 text-amber-950',
     };
   }
-  if (
-    normalized.includes('production') ||
-    normalized === 'frontend-six-sage-63.vercel.app' ||
-    normalized === 'frontend-peter-wilkins-jobdone1.vercel.app' ||
-    normalized === 'frontend-jobdone1.vercel.app'
-  ) {
+  if (normalized === 'jobdone-frontend-production.vercel.app' || normalized === 'jobdone.continuumkit.org') {
     return {
       kind: 'production',
       label: 'PRODUCTION',

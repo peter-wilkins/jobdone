@@ -24,7 +24,7 @@ When `QA_BASE_URL` is unset, Playwright starts JobDone's Vite dev server on
 Run against production:
 
 ```bash
-QA_BASE_URL=https://jobdone-production.vercel.app npm --prefix frontend run qa:smoke
+QA_BASE_URL=https://jobdone-frontend-production.vercel.app npm --prefix frontend run qa:smoke
 ```
 
 The config uses installed Google Chrome by default because this lab machine's

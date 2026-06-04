@@ -13,6 +13,7 @@ const ENV = import.meta.env || {};
 
 export function defaultApiBaseUrl(hostname = globalThis.window?.location?.hostname || '') {
   if (hostname.includes('staging')) return 'https://jobdone-backend-staging.vercel.app';
+  if (hostname === 'jobdone.continuumkit.org') return 'https://jobdone-backend-production.vercel.app';
   if (hostname.includes('production')) return 'https://jobdone-backend-production.vercel.app';
   if (hostname.endsWith('.vercel.app')) return 'https://jobdone-gamma.vercel.app';
   return 'http://localhost:3000';

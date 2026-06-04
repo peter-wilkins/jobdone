@@ -18,10 +18,8 @@
         const host = window.location.hostname.toLowerCase();
         const manifest = document.getElementById('jobdone-manifest');
         const staging = host.includes('staging');
-        const production = host.includes('production') ||
-          host === 'frontend-six-sage-63.vercel.app' ||
-          host === 'frontend-peter-wilkins-jobdone1.vercel.app' ||
-          host === 'frontend-jobdone1.vercel.app';
+        const production = host === 'jobdone-frontend-production.vercel.app' ||
+          host === 'jobdone.continuumkit.org';
         if (staging) {
           manifest.href = '/manifest-staging.webmanifest?v=%VITE_BUILD_ID%';
           document.title = 'JobDone Staging';

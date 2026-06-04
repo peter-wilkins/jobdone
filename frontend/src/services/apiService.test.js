@@ -48,15 +48,15 @@ test('routes explicit staging and production hostnames to matching backend alias
     'https://jobdone-backend-staging.vercel.app',
   );
   assert.equal(
-    defaultApiBaseUrl('jobdone-production.vercel.app'),
-    'https://jobdone-backend-production.vercel.app',
-  );
-  assert.equal(
     defaultApiBaseUrl('jobdone-frontend-production.vercel.app'),
     'https://jobdone-backend-production.vercel.app',
   );
   assert.equal(
-    defaultApiBaseUrl('frontend-six-sage-63.vercel.app'),
+    defaultApiBaseUrl('jobdone.continuumkit.org'),
+    'https://jobdone-backend-production.vercel.app',
+  );
+  assert.equal(
+    defaultApiBaseUrl('frontend-old-preview.vercel.app'),
     'https://jobdone-gamma.vercel.app',
   );
 });

@@ -5,16 +5,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 STAGING_FILE="${STAGING_FILE:-.deploy/last-staging.env}"
-FRONTEND_PRODUCTION_PRIMARY_ALIAS="${FRONTEND_PRODUCTION_ALIAS:-jobdone-production.vercel.app}"
+FRONTEND_PRODUCTION_PRIMARY_ALIAS="${FRONTEND_PRODUCTION_ALIAS:-jobdone-frontend-production.vercel.app}"
 BACKEND_PRODUCTION_PRIMARY_ALIAS="${BACKEND_PRODUCTION_ALIAS:-jobdone-backend-production.vercel.app}"
 FRONTEND_PRODUCTION_ALIASES=(
   "$FRONTEND_PRODUCTION_PRIMARY_ALIAS"
-  "jobdone-frontend-production.vercel.app"
+)
+FRONTEND_REMOVED_ALIASES=(
+  "jobdone-production.vercel.app"
   "frontend-six-sage-63.vercel.app"
   "frontend-peter-wilkins-jobdone1.vercel.app"
   "frontend-jobdone1.vercel.app"
 )
-FRONTEND_REMOVED_ALIASES=()
 BACKEND_PRODUCTION_ALIASES=(
   "$BACKEND_PRODUCTION_PRIMARY_ALIAS"
   "jobdone-gamma.vercel.app"

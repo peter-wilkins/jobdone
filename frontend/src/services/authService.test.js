@@ -20,37 +20,48 @@ test('auth redirect uses current browser origin when no app URL is configured', 
 test('auth redirect trims configured app URL trailing slash', () => {
   assert.equal(
     authRedirectUrl({
-      configuredAppUrl: 'https://jobdone-production.vercel.app/',
+      configuredAppUrl: 'https://jobdone-frontend-production.vercel.app/',
       location: { origin: 'https://wrong.example' },
     }),
-    'https://jobdone-production.vercel.app',
+    'https://jobdone-frontend-production.vercel.app',
   );
 });
 
 test('auth redirect prefers current installed app origin over canonical build URL', () => {
   assert.equal(
     authRedirectUrl({
-      configuredAppUrl: 'https://jobdone-production.vercel.app/',
-      location: { origin: 'https://frontend-jobdone1.vercel.app' },
+      configuredAppUrl: 'https://jobdone-frontend-production.vercel.app/',
+      location: { origin: 'https://jobdone-staging.vercel.app' },
     }),
-    'https://frontend-jobdone1.vercel.app',
+    'https://jobdone-staging.vercel.app',
   );
 });
 
 test('auth redirect does not trust unrelated current origins', () => {
   assert.equal(
     authRedirectUrl({
-      configuredAppUrl: 'https://jobdone-production.vercel.app/',
+      configuredAppUrl: 'https://jobdone-frontend-production.vercel.app/',
       location: { origin: 'https://wrong.example' },
     }),
-    'https://jobdone-production.vercel.app',
+    'https://jobdone-frontend-production.vercel.app',
+  );
+});
+
+test('auth redirect does not preserve retired frontend aliases', () => {
+  assert.equal(
+    authRedirectUrl({
+      configuredAppUrl: 'https://jobdone-frontend-production.vercel.app/',
+      location: { origin: 'https://frontend-jobdone1.vercel.app' },
+    }),
+    'https://jobdone-frontend-production.vercel.app',
   );
 });
 
 test('known JobDone app origins are valid auth redirect origins', () => {
-  assert.equal(isJobDoneAuthOrigin('https://jobdone-production.vercel.app'), true);
   assert.equal(isJobDoneAuthOrigin('https://jobdone-staging.vercel.app'), true);
-  assert.equal(isJobDoneAuthOrigin('https://frontend-six-sage-63.vercel.app'), true);
+  assert.equal(isJobDoneAuthOrigin('https://jobdone-frontend-production.vercel.app'), true);
+  assert.equal(isJobDoneAuthOrigin('https://jobdone.continuumkit.org'), true);
+  assert.equal(isJobDoneAuthOrigin('https://frontend-six-sage-63.vercel.app'), false);
   assert.equal(isJobDoneAuthOrigin('http://localhost:5173'), true);
   assert.equal(isJobDoneAuthOrigin('https://wrong.example'), false);
 });

@@ -18,8 +18,12 @@ export function isJobDoneAuthOrigin(origin) {
     const hostname = url.hostname.toLowerCase();
     if (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname)) return true;
     if (url.protocol !== 'https:') return false;
-    if (hostname.endsWith('.vercel.app') && (hostname.startsWith('jobdone-') || hostname.startsWith('frontend-'))) return true;
-    return false;
+    return [
+      'jobdone-staging.vercel.app',
+      'jobdone-frontend-staging.vercel.app',
+      'jobdone-frontend-production.vercel.app',
+      'jobdone.continuumkit.org',
+    ].includes(hostname);
   } catch {
     return false;
   }

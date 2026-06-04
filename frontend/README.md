@@ -41,4 +41,4 @@ vercel --cwd frontend build --prod
 vercel --cwd frontend deploy --prod --prebuilt --yes
 ```
 
-Then verify the live build id at `https://jobdone-production.vercel.app/`.
+Then verify the live build id at `https://jobdone-frontend-production.vercel.app/`.

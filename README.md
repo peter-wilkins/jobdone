@@ -100,4 +100,4 @@ npm run deploy:check:production
 ```
 
 Staging frontend: <https://jobdone-staging.vercel.app>
-Production frontend: <https://jobdone-production.vercel.app>
+Production frontend: <https://jobdone-frontend-production.vercel.app>
