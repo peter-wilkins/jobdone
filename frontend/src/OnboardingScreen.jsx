@@ -11,12 +11,11 @@ export function OnboardingScreen({ onBack }) {
     savedContext?.templateId || CAPTURE_CONTEXT_TEMPLATES[0].id
   );
   const [contextNotes, setContextNotes] = useState(savedContext?.notes || '');
-  const [saved, setSaved] = useState(false);
 
   const saveCaptureContext = () => {
     const next = buildCaptureContext(contextTemplateId, contextNotes);
     captureContextService.save(next);
-    setSaved(true);
+    onBack();
   };
 
   return (
@@ -42,10 +41,7 @@ export function OnboardingScreen({ onBack }) {
             <button
               key={template.id}
               type="button"
-              onClick={() => {
-                setContextTemplateId(template.id);
-                setSaved(false);
-              }}
+              onClick={() => setContextTemplateId(template.id)}
               className={`rounded border px-3 py-3 text-left ${
                 contextTemplateId === template.id
                   ? 'border-gray-900 bg-gray-50 text-gray-900'
@@ -62,10 +58,7 @@ export function OnboardingScreen({ onBack }) {
           <span className="text-xs font-medium text-gray-600">Extra context, optional</span>
           <textarea
             value={contextNotes}
-            onChange={(event) => {
-              setContextNotes(event.target.value);
-              setSaved(false);
-            }}
+            onChange={(event) => setContextNotes(event.target.value)}
             rows={4}
             maxLength={240}
             placeholder="Examples: mostly garden maintenance for my own home; classic cars; rental property repairs."
@@ -75,7 +68,7 @@ export function OnboardingScreen({ onBack }) {
 
         <div className="mt-5 flex items-center justify-between gap-4">
           <p className="text-sm text-gray-500">
-            {saved ? 'Saved.' : savedContext ? 'Current default can be changed here.' : 'No default saved yet.'}
+            {savedContext ? 'Current default can be changed here.' : 'No default saved yet.'}
           </p>
           <button
             type="button"

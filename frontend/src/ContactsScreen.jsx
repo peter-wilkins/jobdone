@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
+import { syncService } from './services/syncService';
 import { buildContactSummary } from './services/contactParser';
+import {
+  isContactPickerSupported,
+  pickContact,
+  validateContactDraftForCreation,
+} from './services/contactPickerService';
 import { FloatingRecordButton } from './FloatingRecordButton';
 
 function contactIdFromLocation() {
@@ -21,6 +27,7 @@ export function ContactsScreen({ onBack, onRecord }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
+  const [importMessage, setImportMessage] = useState(null);
   const [error, setError] = useState(null);
 
   async function loadContacts() {
@@ -130,6 +137,51 @@ export function ContactsScreen({ onBack, onRecord }) {
     }
   }
 
+  async function handleImportContact() {
+    setImportMessage(null);
+    setError(null);
+
+    if (!isContactPickerSupported()) {
+      setImportMessage('Phone contact import works in Chrome on Android. Open this page there, tap Import from phone, then choose one contact to add.');
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      const picked = await pickContact();
+      if (!picked.ok) {
+        setImportMessage(picked.reason === 'empty'
+          ? 'No contact selected.'
+          : 'Could not open phone contacts here.');
+        return;
+      }
+
+      const validation = validateContactDraftForCreation(picked.contact);
+      if (!validation.valid) {
+        setImportMessage(validation.error);
+        return;
+      }
+
+      const created = await dbService.createContact(picked.contact);
+      try {
+        const result = await syncService.syncContacts([created]);
+        const cloudContact = result?.contacts?.[0];
+        if (cloudContact?.id) {
+          await dbService.markContactSynced(created.id, cloudContact.id);
+        }
+      } catch (syncErr) {
+        console.warn('[Contacts] Contact saved locally but did not sync:', syncErr);
+      }
+      await loadContacts();
+      selectContact(created.id);
+    } catch (err) {
+      console.error('Failed to import contact:', err);
+      setImportMessage(err.message || 'Could not import that Contact.');
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   function selectContact(contactId) {
     window.history.pushState({ screen: 'contacts', contactId }, '', `#contacts?contact=${encodeURIComponent(contactId)}`);
     setSelectedContactId(contactId);
@@ -170,7 +222,17 @@ export function ContactsScreen({ onBack, onRecord }) {
         >
           ←
         </button>
-        <h1 className="text-2xl font-light text-gray-900">Contacts</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-light text-gray-900">Contacts</h1>
+        </div>
+        <button
+          type="button"
+          onClick={handleImportContact}
+          disabled={isMutating}
+          className="shrink-0 rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          Import
+        </button>
       </div>
 
       {error && (
@@ -178,6 +240,17 @@ export function ContactsScreen({ onBack, onRecord }) {
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
+
+      <div className="px-6 pt-4">
+        <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2">
+          <p className="text-xs text-gray-600">
+            Import from phone opens your device contacts and saves one selected Contact into JobDone.
+          </p>
+          {importMessage && (
+            <p className="mt-2 text-xs text-gray-800">{importMessage}</p>
+          )}
+        </div>
+      </div>
 
       <div className="px-6 pt-4">
         <input
