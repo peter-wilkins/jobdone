@@ -25,6 +25,8 @@ describe('CORS policy', () => {
   test('allows explicit staging and production frontend aliases by default', () => {
     const origins = parseAllowedOrigins('');
 
+    assert.equal(isAllowedCorsOrigin('https://jobdone-staging.vercel.app', origins), true);
+    assert.equal(isAllowedCorsOrigin('https://jobdone-production.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-staging.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-production.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://frontend-six-sage-63.vercel.app', origins), true);

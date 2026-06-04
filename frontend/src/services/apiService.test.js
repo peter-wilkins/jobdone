@@ -40,8 +40,16 @@ test('allows only one build mismatch reload per frontend/backend build pair', ()
 
 test('routes explicit staging and production hostnames to matching backend aliases', () => {
   assert.equal(
+    defaultApiBaseUrl('jobdone-staging.vercel.app'),
+    'https://jobdone-backend-staging.vercel.app',
+  );
+  assert.equal(
     defaultApiBaseUrl('jobdone-frontend-staging.vercel.app'),
     'https://jobdone-backend-staging.vercel.app',
+  );
+  assert.equal(
+    defaultApiBaseUrl('jobdone-production.vercel.app'),
+    'https://jobdone-backend-production.vercel.app',
   );
   assert.equal(
     defaultApiBaseUrl('jobdone-frontend-production.vercel.app'),

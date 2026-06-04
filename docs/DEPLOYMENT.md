@@ -6,13 +6,17 @@ JobDone uses a staging-first Vercel flow for beta-era changes.
 
 Staging:
 
-- Frontend: <https://jobdone-frontend-staging.vercel.app>
+- Frontend: <https://jobdone-staging.vercel.app>
 - Backend: <https://jobdone-backend-staging.vercel.app>
 
 Production:
 
-- Frontend: <https://jobdone-frontend-production.vercel.app>
+- Frontend: <https://jobdone-production.vercel.app>
 - Backend: <https://jobdone-backend-production.vercel.app>
+
+`jobdone-production.vercel.app` is the temporary explicit production install
+route. Replace it with the owned JobDone domain when the production domain is
+ready.
 
 The backend Vercel project must not have SSO deployment protection enabled for
 these `.vercel.app` aliases, otherwise browser QA and phone testing receive
@@ -25,9 +29,9 @@ prefer the explicit staging/production URLs above.
 
 Use the explicit frontend URLs when installing on Android:
 
-- Install staging from <https://jobdone-frontend-staging.vercel.app>. It uses
+- Install staging from <https://jobdone-staging.vercel.app>. It uses
   the PWA name **JobDone Staging** and shows a yellow staging banner.
-- Install production from <https://jobdone-frontend-production.vercel.app>. It
+- Install production from <https://jobdone-production.vercel.app>. It
   uses the PWA name **JobDone Production** and currently shows a green
   production banner while dogfooding.
 
@@ -54,7 +58,7 @@ Before promotion, run the smallest useful checks for the change:
 
 ```bash
 npm run deploy:check:staging
-QA_BASE_URL=https://jobdone-frontend-staging.vercel.app npm --prefix frontend run qa:smoke
+QA_BASE_URL=https://jobdone-staging.vercel.app npm --prefix frontend run qa:smoke
 ```
 
 For frontend-visible changes, also do a focused manual check on staging. Keep it
@@ -84,7 +88,7 @@ npx vercel ls --cwd backend
 Then repoint aliases:
 
 ```bash
-npx vercel alias set <frontend-deployment-url> jobdone-frontend-production.vercel.app --cwd frontend
+npx vercel alias set <frontend-deployment-url> jobdone-production.vercel.app --cwd frontend
 npx vercel alias set <backend-deployment-url> jobdone-backend-production.vercel.app --cwd backend
 npm run deploy:check:production
 ```

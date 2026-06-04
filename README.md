@@ -99,5 +99,5 @@ npm run deploy:promote
 npm run deploy:check:production
 ```
 
-Staging frontend: <https://jobdone-frontend-staging.vercel.app>
-Production frontend: <https://jobdone-frontend-production.vercel.app>
+Staging frontend: <https://jobdone-staging.vercel.app>
+Production frontend: <https://jobdone-production.vercel.app>

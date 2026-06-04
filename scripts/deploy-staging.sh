@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-FRONTEND_STAGING_ALIAS="${FRONTEND_STAGING_ALIAS:-jobdone-frontend-staging.vercel.app}"
+FRONTEND_STAGING_ALIAS="${FRONTEND_STAGING_ALIAS:-jobdone-staging.vercel.app}"
+FRONTEND_STAGING_LEGACY_ALIAS="${FRONTEND_STAGING_LEGACY_ALIAS:-jobdone-frontend-staging.vercel.app}"
 BACKEND_STAGING_ALIAS="${BACKEND_STAGING_ALIAS:-jobdone-backend-staging.vercel.app}"
 OUT_FILE="${OUT_FILE:-.deploy/last-staging.env}"
 
@@ -30,12 +31,14 @@ npx vercel alias set "$backend_url" "$BACKEND_STAGING_ALIAS" --cwd backend
 echo "Deploying frontend to staging..."
 frontend_url="$(deploy_prebuilt frontend)"
 npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_ALIAS" --cwd frontend
+npx vercel alias set "$frontend_url" "$FRONTEND_STAGING_LEGACY_ALIAS" --cwd frontend
 
 cat > "$OUT_FILE" <<EOF
 GIT_SHA=$(git rev-parse --short HEAD)
 FRONTEND_DEPLOYMENT_URL=$frontend_url
 BACKEND_DEPLOYMENT_URL=$backend_url
 FRONTEND_STAGING_URL=https://$FRONTEND_STAGING_ALIAS
+FRONTEND_STAGING_LEGACY_URL=https://$FRONTEND_STAGING_LEGACY_ALIAS
 BACKEND_STAGING_URL=https://$BACKEND_STAGING_ALIAS
 CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF

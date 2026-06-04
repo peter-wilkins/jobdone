@@ -1,4 +1,6 @@
 const DEFAULT_ALLOWED_ORIGINS = [
+  'https://jobdone-staging.vercel.app',
+  'https://jobdone-production.vercel.app',
   'https://jobdone-frontend-staging.vercel.app',
   'https://jobdone-frontend-production.vercel.app',
   'https://frontend-jobdone1.vercel.app',
