@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  defaultApiBaseUrl,
   shouldApplyAppUpdateForBackendBuild,
   shouldStartBuildMismatchReload,
 } from './apiService.js';
@@ -35,4 +36,19 @@ test('allows only one build mismatch reload per frontend/backend build pair', ()
     currentBuild: 'front1',
     storage: sessionStorage,
   }), false);
+});
+
+test('routes explicit staging and production hostnames to matching backend aliases', () => {
+  assert.equal(
+    defaultApiBaseUrl('jobdone-frontend-staging.vercel.app'),
+    'https://jobdone-backend-staging.vercel.app',
+  );
+  assert.equal(
+    defaultApiBaseUrl('jobdone-frontend-production.vercel.app'),
+    'https://jobdone-backend-production.vercel.app',
+  );
+  assert.equal(
+    defaultApiBaseUrl('frontend-six-sage-63.vercel.app'),
+    'https://jobdone-gamma.vercel.app',
+  );
 });

@@ -12,6 +12,7 @@ when it is needed.
 - [docs/schema.sql](./docs/schema.sql) — clean Supabase schema for the current cloud sync model.
 - [docs/MVP_RULES.md](./docs/MVP_RULES.md) — MVP engineering defaults and prototype constraints.
 - [docs/PLAYWRIGHT_QA.md](./docs/PLAYWRIGHT_QA.md) — small disposable Playwright smoke/spike rules.
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — staging-first deploy, QA, promote, and rollback flow.
 - [AGENTS.md](./AGENTS.md) — repo-specific agent workflow rules.
 - [docs/agents](./docs/agents) — issue tracker, triage labels, and domain-doc conventions for agents.
 
@@ -88,33 +89,15 @@ npm run logs:backend -- --level error --since 2h
 
 ## Deployment
 
-Production deploy scripts live at the repo root:
+Staging and production deploy scripts live at the repo root. See
+[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the current staging-first flow.
 
 ```bash
-npm run deploy:backend
-npm run deploy:frontend
-npm run deploy:prod
+npm run deploy:staging
+npm run deploy:check:staging
+npm run deploy:promote
+npm run deploy:check:production
 ```
 
-These scripts run `vercel build --prod` before
-`vercel deploy --prebuilt --prod --yes`. Do not run a prebuilt deploy from stale
-`.vercel/output`.
-
-Frontend changes should be deployed with:
-
-```bash
-vercel --cwd frontend build --prod
-vercel --cwd frontend deploy --prod --prebuilt --yes
-```
-
-Then verify the live build id at:
-
-```bash
-curl -L https://frontend-jobdone1.vercel.app/
-```
-
-Backend health:
-
-```bash
-curl -L https://jobdone-gamma.vercel.app/health
-```
+Staging frontend: <https://jobdone-frontend-staging.vercel.app>
+Production frontend: <https://jobdone-frontend-production.vercel.app>
