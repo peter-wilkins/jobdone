@@ -7,6 +7,8 @@ yarn.lock
 # Frontend build
 frontend/dist/
 frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
 
 # IDE
 .vscode/

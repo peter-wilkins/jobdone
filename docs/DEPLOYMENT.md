@@ -14,6 +14,10 @@ Production:
 - Frontend: <https://jobdone-frontend-production.vercel.app>
 - Backend: <https://jobdone-backend-production.vercel.app>
 
+The backend Vercel project must not have SSO deployment protection enabled for
+these `.vercel.app` aliases, otherwise browser QA and phone testing receive
+Vercel 401 pages before the API is reached.
+
 Legacy production aliases may still exist while dogfooding, but agents should
 prefer the explicit staging/production URLs above.
 

@@ -22,6 +22,14 @@ describe('CORS policy', () => {
     assert.equal(isAllowedCorsOrigin('http://127.0.0.1:5173', origins), true);
   });
 
+  test('allows explicit staging and production frontend aliases by default', () => {
+    const origins = parseAllowedOrigins('');
+
+    assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-staging.vercel.app', origins), true);
+    assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-production.vercel.app', origins), true);
+    assert.equal(isAllowedCorsOrigin('https://frontend-six-sage-63.vercel.app', origins), true);
+  });
+
   test('rejects unknown browser origins', () => {
     const origins = new Set(['https://frontend-jobdone1.vercel.app']);
 

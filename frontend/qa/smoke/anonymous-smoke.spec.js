@@ -19,7 +19,7 @@ test('anonymous app shell loads without known blocking errors', async ({ page })
   const debugLogs = await enableDebugLogs(page);
 
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /record/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /start entry/i })).toBeVisible();
   await expectNoKnownBlockingErrors(page);
   await expectDebugLog(debugLogs, /diagnostic_event screen_open/);
 });
@@ -41,10 +41,10 @@ test('anonymous feedback report can be sent', async ({ page }) => {
   }
 
   await page.goto('/#feedback');
-  await expect(page.getByRole('heading', { name: /report issue/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /share idea/i })).toBeVisible();
 
-  await page.getByPlaceholder(/what went wrong/i).fill(`Playwright smoke feedback ${Date.now()}`);
-  await page.getByRole('button', { name: /^send report$/i }).click();
+  await page.getByPlaceholder(/what would make jobdone better/i).fill(`Playwright smoke feedback ${Date.now()}`);
+  await page.getByRole('button', { name: /^send idea$/i }).click();
 
   await expect(page.getByText('Report sent.')).toBeVisible({ timeout: 15000 });
   await expectNoKnownBlockingErrors(page);
