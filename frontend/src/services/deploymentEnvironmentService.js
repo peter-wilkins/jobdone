@@ -12,7 +12,8 @@ export function deploymentEnvironmentForHostname(hostname = globalThis.window?.l
   if (
     normalized.includes('production') ||
     normalized === 'frontend-six-sage-63.vercel.app' ||
-    normalized === 'frontend-peter-wilkins-jobdone1.vercel.app'
+    normalized === 'frontend-peter-wilkins-jobdone1.vercel.app' ||
+    normalized === 'frontend-jobdone1.vercel.app'
   ) {
     return {
       kind: 'production',

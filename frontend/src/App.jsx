@@ -12,7 +12,7 @@ import { MyWorkScreen } from './MyWorkScreen';
 import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
 import { OnboardingScreen } from './OnboardingScreen';
-import { authService } from './services/authService';
+import { authService, consumeAuthErrorFromLocation } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncService } from './services/syncService';
 import { apiService } from './services/apiService';
@@ -43,6 +43,7 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [recordRequestId, setRecordRequestId] = useState(0);
   const [crashNotice, setCrashNotice] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
 
   /**
    * Push unsynced local confirmed data to cloud, then pull cloud data not yet on this device.
@@ -129,6 +130,14 @@ function App() {
       onStatus: setCrashNotice,
     });
 
+    const authError = consumeAuthErrorFromLocation();
+    if (authError) {
+      const message = authError.code === 'otp_expired'
+        ? 'That sign-in link has expired. Send yourself a fresh magic link.'
+        : authError.message;
+      queueMicrotask(() => setAuthNotice({ message }));
+    }
+
     // Restore existing session on load
     authService.init().then(session => {
       setUser(session?.user || null);
@@ -213,6 +222,20 @@ function App() {
       </div>
     </div>
   ) : null;
+  const authStatusBar = authNotice ? (
+    <div className={`fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>
+      <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
+        <span className="text-sm font-medium flex-1">{authNotice.message}</span>
+        <button
+          type="button"
+          className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
+          onClick={() => setAuthNotice(null)}
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  ) : null;
   const environmentBanner = deploymentEnvironment ? (
     <div className={`fixed top-0 inset-x-0 z-[60] h-7 px-3 text-center text-[11px] font-semibold tracking-wide leading-7 shadow-sm ${deploymentEnvironment.bannerClassName}`}>
       {deploymentEnvironment.label} - {deploymentEnvironment.appName}
@@ -223,53 +246,54 @@ function App() {
     : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} />;
 
   if (screen === 'feedback') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'inbox') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'contacts') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'locations') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'share-target') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'login') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'onboarding') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<OnboardingScreen onBack={() => navigateTo('home')} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<OnboardingScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'team-setup') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'team-review') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'my-work' || screen === 'team-work') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'invite') {
-    return <>{environmentBanner}{crashStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   return (
     <>
       {environmentBanner}
       {crashStatusBar}
+      {authStatusBar}
       <HomeScreen
         onNavigate={navigateTo}
         user={user}

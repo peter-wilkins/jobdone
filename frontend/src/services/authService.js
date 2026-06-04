@@ -6,6 +6,25 @@ const ENV = import.meta.env || {};
 
 const supabaseUrl = ENV.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const supabaseAnonKey = ENV.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+
+function trimTrailingSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+export function isJobDoneAuthOrigin(origin) {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(hostname)) return true;
+    if (url.protocol !== 'https:') return false;
+    if (hostname.endsWith('.vercel.app') && (hostname.startsWith('jobdone-') || hostname.startsWith('frontend-'))) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export const authClientOptions = {
   auth: {
     persistSession: true,
@@ -18,7 +37,33 @@ export function authRedirectUrl({
   configuredAppUrl = ENV.VITE_APP_URL,
   location = globalThis.window?.location,
 } = {}) {
-  return String(configuredAppUrl || location?.origin || '').replace(/\/+$/, '');
+  const currentOrigin = trimTrailingSlash(location?.origin);
+  if (isJobDoneAuthOrigin(currentOrigin)) return currentOrigin;
+  return trimTrailingSlash(configuredAppUrl || currentOrigin);
+}
+
+export function consumeAuthErrorFromLocation({
+  location = globalThis.window?.location,
+  history = globalThis.window?.history,
+} = {}) {
+  const hash = String(location?.hash || '');
+  if (!hash.startsWith('#error=')) return null;
+
+  const params = new URLSearchParams(hash.slice(1));
+  const errorCode = params.get('error_code') || params.get('error') || 'auth_error';
+  const errorDescription = params.get('error_description') || 'Sign-in link failed. Request a fresh magic link.';
+  const cleanUrl = `${location?.pathname || '/'}${location?.search || ''}`;
+
+  try {
+    history?.replaceState?.({}, '', cleanUrl);
+  } catch {
+    // Best effort: stale auth fragments should not keep re-warning on reload.
+  }
+
+  return {
+    code: errorCode,
+    message: errorDescription,
+  };
 }
 
 // Supabase client — null if env vars not set (auth disabled)

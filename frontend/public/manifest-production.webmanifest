@@ -10,6 +10,10 @@
   "background_color": "#ffffff",
   "theme_color": "#059669",
   "categories": ["productivity", "business"],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "handle_links": "preferred",
   "share_target": {
     "action": "/share-target",
     "method": "POST",

@@ -27,6 +27,10 @@ test('keeps legacy explicit frontend hostnames classified', () => {
     deploymentEnvironmentForHostname('jobdone-frontend-production.vercel.app').kind,
     'production',
   );
+  assert.equal(
+    deploymentEnvironmentForHostname('frontend-jobdone1.vercel.app').kind,
+    'production',
+  );
 });
 
 test('leaves local development unlabelled', () => {

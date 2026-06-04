@@ -12,10 +12,9 @@ FRONTEND_PRODUCTION_ALIASES=(
   "jobdone-frontend-production.vercel.app"
   "frontend-six-sage-63.vercel.app"
   "frontend-peter-wilkins-jobdone1.vercel.app"
-)
-FRONTEND_REMOVED_ALIASES=(
   "frontend-jobdone1.vercel.app"
 )
+FRONTEND_REMOVED_ALIASES=()
 BACKEND_PRODUCTION_ALIASES=(
   "$BACKEND_PRODUCTION_PRIMARY_ALIAS"
   "jobdone-gamma.vercel.app"
