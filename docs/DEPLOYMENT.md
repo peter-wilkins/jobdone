@@ -21,6 +21,19 @@ Vercel 401 pages before the API is reached.
 Legacy production aliases may still exist while dogfooding, but agents should
 prefer the explicit staging/production URLs above.
 
+## Phone Installs
+
+Use the explicit frontend URLs when installing on Android:
+
+- Install staging from <https://jobdone-frontend-staging.vercel.app>. It uses
+  the PWA name **JobDone Staging** and shows a yellow staging banner.
+- Install production from <https://jobdone-frontend-production.vercel.app>. It
+  uses the PWA name **JobDone Production** and currently shows a green
+  production banner while dogfooding.
+
+These are separate install routes. The manifests use different app identities,
+so Android can keep both installed side by side.
+
 ## Staging
 
 Deploy the current commit to staging:

@@ -11,6 +11,8 @@ const MAX_SHARE_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_SHARE_TOTAL_BYTES = 50 * 1024 * 1024;
 const APP_SHELL = [
   '/manifest.webmanifest',
+  '/manifest-staging.webmanifest',
+  '/manifest-production.webmanifest',
   '/favicon.svg',
   '/pwa-icon-192.png',
   '/pwa-icon-512.png'

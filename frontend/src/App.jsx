@@ -18,6 +18,7 @@ import { apiService } from './services/apiService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { diagnosticService } from './services/diagnosticService';
 import { crashReportService } from './services/crashReportService';
+import { currentDeploymentEnvironment } from './services/deploymentEnvironmentService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -33,6 +34,7 @@ function isPlainHomeOpen() {
 }
 
 function App() {
+  const deploymentEnvironment = currentDeploymentEnvironment;
   const [screen, setScreen] = useState(screenFromLocation);
   const [canAutoStartHome] = useState(isPlainHomeOpen);
   const [user, setUser] = useState(null);
@@ -117,6 +119,17 @@ function App() {
       setRefreshKey(k => k + 1);
     }
   }
+
+  useEffect(() => {
+    const previousPaddingTop = document.body.style.paddingTop;
+    if (deploymentEnvironment) {
+      document.body.style.paddingTop = '28px';
+      document.title = deploymentEnvironment.appName;
+    }
+    return () => {
+      document.body.style.paddingTop = previousPaddingTop;
+    };
+  }, [deploymentEnvironment]);
 
   useEffect(() => {
     diagnosticService.record('screen_open', { screen: screenFromLocation(), source: 'initial_load' });
@@ -210,52 +223,58 @@ function App() {
       </div>
     </div>
   ) : null;
+  const environmentBanner = deploymentEnvironment ? (
+    <div className={`fixed top-0 inset-x-0 z-[60] h-7 px-3 text-center text-[11px] font-semibold tracking-wide leading-7 shadow-sm ${deploymentEnvironment.bannerClassName}`}>
+      {deploymentEnvironment.label} - {deploymentEnvironment.appName}
+    </div>
+  ) : null;
   const globalMenu = screen === 'home'
     ? null
     : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} />;
 
   if (screen === 'feedback') {
-    return <>{crashStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'inbox') {
-    return <>{crashStatusBar}{globalMenu}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<InboxScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'contacts') {
-    return <>{crashStatusBar}{globalMenu}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<ContactsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'locations') {
-    return <>{crashStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
   }
 
   if (screen === 'share-target') {
-    return <>{crashStatusBar}{globalMenu}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<ShareTargetScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'login') {
-    return <>{crashStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<LoginScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'team-setup') {
-    return <>{crashStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'team-review') {
-    return <>{crashStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'my-work' || screen === 'team-work') {
-    return <>{crashStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'invite') {
-    return <>{crashStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{globalMenu}<InviteScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   return (
     <>
+      {environmentBanner}
       {crashStatusBar}
       <HomeScreen
         onNavigate={navigateTo}
