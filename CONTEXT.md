@@ -203,8 +203,8 @@ A Team Member's temporary responsibility for a Backlog Item they have chosen to 
 _Avoid_: Ownership, Assignment, Reservation
 
 **Team**:
-The shared operating group where users, Backlogs, Entries, Approval Requests, Approvers, and outcomes live. A Team can be a one-person tradesperson setup, a business crew, a household, or another collaboration group; it does not imply a legal organisation or billing account.
-_Avoid_: Organisation, Account, Tenant, Household-only
+The operating group where Backlogs, Entries, Approval Requests, Approvers, and outcomes live. A Team can be a one-person planning or work container, a solo tradesperson setup, a business crew, a household, or another collaboration group; it does not imply multiple people, a legal organisation, or a billing account. Solo Teams are useful because they can later grow into shared Teams without changing the user's structure.
+_Avoid_: Organisation, Account, Tenant, Household-only, Workspace
 
 **Team Member**:
 A person's membership in a Team. Team Member is separate from User identity and Device identity: the same person can use multiple devices, and a User can belong to multiple Teams with different capabilities.
@@ -496,6 +496,7 @@ _Avoid_: Search bar, Input field, Record button
 - **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.
 - Owner self-review is a separate Team setting: by default, when a Team Owner submits their own claimed work, JobDone creates the Approval Request and auto-closes it as approved so the evidence trail exists without self-approval friction. Teams that want stricter process can require Team Owners to manually approve their own work.
 - Team creation should offer simple **Team Templates**. The default should be **High Trust Team** so friction does not accidentally creep into ordinary collaboration.
+- Team onboarding copy should make clear that a Team does not need multiple people to be useful. Examples can include solo planning Teams such as car hunting, house move, garden project, or tax return, because those use the same Backlog, Entry, Location, and map primitives as multi-person Teams.
 - Example Team Templates: High Trust Team can use Auto-Approval and no Points; Low Trust Team can use manual Approval; Family Team can use manual Approval and Points.
 - Team Templates are setup shortcuts, not durable Team types. After creation, Teams morph by changing real settings; for example a Family Team can become a High Trust Team over time by turning off manual review or Points.
 - Evidence helper copy should explain value rather than compliance, such as "Capture what happened now so your future self can find it later."
