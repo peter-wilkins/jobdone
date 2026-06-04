@@ -13,12 +13,12 @@ storage and sync.
 
 ## 2. Create the JobDone schema
 
-Apply the checked-in migration with the shared Supabase pooler URL from
+Apply the checked-in disposable schema with the shared Supabase pooler URL from
 `~/.profile`:
 
 ```bash
 . ~/.profile
-psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260520123000_create_jobdone_schema.sql
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f docs/schema.sql
 ```
 
 This is the same schema-per-prototype workflow used by Continuum.
@@ -27,7 +27,7 @@ Manual dashboard fallback:
 
 1. Go to **SQL Editor** (left sidebar)
 2. Click **New Query**
-3. Paste the migration from [../supabase/migrations/20260520123000_create_jobdone_schema.sql](../supabase/migrations/20260520123000_create_jobdone_schema.sql)
+3. Paste the schema from [schema.sql](./schema.sql)
 4. Click **Run**
 5. Should see "Success" message
 

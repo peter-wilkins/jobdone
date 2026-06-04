@@ -22,6 +22,8 @@ Prefer small, testable changes over broad platform work.
   Supabase REST/Data API schema exposure.
 - Supabase Auth is separate from app data access and may continue using the
   Supabase client.
+- Use `docs/schema.sql` as the current disposable schema snapshot; do not keep
+  migration history yet.
 - Prototype data is disposable while explicitly in MVP mode.
 - Destructive schema rewrites are acceptable when they keep the code and schema
   cleaner.

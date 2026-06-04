@@ -288,7 +288,7 @@ async function verifySchema(pool) {
   const result = await pool.query('select to_regclass($1) as entries', [`${SCHEMA}.entries`]);
   if (!result.rows[0]?.entries) {
     throw new Error(
-      `Local JobDone schema not found in ${SCHEMA}. Apply supabase/migrations/20260520123000_create_jobdone_schema.sql first.`
+      `Local JobDone schema not found in ${SCHEMA}. Apply docs/schema.sql first.`
     );
   }
 }
