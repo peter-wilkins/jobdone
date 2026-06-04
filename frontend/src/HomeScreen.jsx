@@ -19,6 +19,7 @@ import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serv
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
 import { classify } from './services/classifyService';
+import { setAppUpdateGuard } from './services/appUpdateGuardService';
 import {
   canAddMorePhotos,
   createPendingPhotoAttachmentsFromFiles,
@@ -456,6 +457,14 @@ export function HomeScreen({
     }
   };
 
+  const persistReviewDraft = (entryId, updates) => {
+    dbService.updateEntry(entryId, updates).then(updated => {
+      setEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updated } : entry));
+    }).catch(err => {
+      console.warn('[Capture] Review draft save failed:', err);
+    });
+  };
+
   useEffect(() => {
     for (const entry of entries) {
       if (entry.status !== 'ready_for_review') continue;
@@ -477,7 +486,9 @@ export function HomeScreen({
       const selected = new Set(prev[entryId] || []);
       if (selected.has(tagId)) selected.delete(tagId);
       else selected.add(tagId);
-      return { ...prev, [entryId]: Array.from(selected) };
+      const nextIds = Array.from(selected);
+      persistReviewDraft(entryId, { draftReviewTagIds: nextIds });
+      return { ...prev, [entryId]: nextIds };
     });
   };
 
@@ -490,7 +501,9 @@ export function HomeScreen({
       const selected = new Set(prev[entryId] || []);
       if (selected.has(itemId)) selected.delete(itemId);
       else selected.add(itemId);
-      return { ...prev, [entryId]: Array.from(selected) };
+      const nextIds = Array.from(selected);
+      persistReviewDraft(entryId, { draftReviewWorkContextIds: nextIds });
+      return { ...prev, [entryId]: nextIds };
     });
   };
 
@@ -515,7 +528,9 @@ export function HomeScreen({
     setReviewSelectedWorkContexts(prev => {
       const selected = new Set(prev[entryId] || []);
       selected.add(item.id);
-      return { ...prev, [entryId]: Array.from(selected) };
+      const nextIds = Array.from(selected);
+      persistReviewDraft(entryId, { draftReviewWorkContextIds: nextIds });
+      return { ...prev, [entryId]: nextIds };
     });
     setReviewWorkContextErrors(prev => ({ ...prev, [entryId]: null }));
   };
@@ -1554,6 +1569,11 @@ export function HomeScreen({
     return isAvailable;
   };
 
+  useEffect(() => {
+    setAppUpdateGuard(() => entries.some(entry => entry.status !== 'confirmed'));
+    return () => setAppUpdateGuard(null);
+  }, [entries]);
+
   const addLocationCandidateForEntry = (entryId, candidate) => {
     setReviewStructure(prev => {
       const current = prev[entryId] || {};
@@ -1793,7 +1813,53 @@ export function HomeScreen({
         // Merge all entries: in-progress first, then confirmed (newest first)
         const allInProgress = [...inProgressEntries, ...readyForReviewEntries, ...failedEntries];
         const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setEntries([...allInProgress, ...sortedConfirmed]);
+        const loadedEntries = [...allInProgress, ...sortedConfirmed];
+        setEntries(loadedEntries);
+        setReviewLocations(prev => {
+          const next = { ...prev };
+          for (const entry of loadedEntries) {
+            if (entry.status !== 'confirmed' && entry.draftReviewLocationText) {
+              next[entry.id] = entry.draftReviewLocationText;
+            }
+          }
+          return next;
+        });
+        setReviewLocationDrafts(prev => {
+          const next = { ...prev };
+          for (const entry of loadedEntries) {
+            if (entry.status !== 'confirmed' && entry.draftReviewLocationDraft) {
+              next[entry.id] = entry.draftReviewLocationDraft;
+            }
+          }
+          return next;
+        });
+        setReviewContacts(prev => {
+          const next = { ...prev };
+          for (const entry of loadedEntries) {
+            if (entry.status !== 'confirmed' && entry.draftReviewContactId) {
+              next[entry.id] = entry.draftReviewContactId;
+            }
+          }
+          return next;
+        });
+        setReviewSelectedTags(prev => {
+          const next = { ...prev };
+          for (const entry of loadedEntries) {
+            if (entry.status !== 'confirmed' && Array.isArray(entry.draftReviewTagIds)) {
+              next[entry.id] = entry.draftReviewTagIds;
+            }
+          }
+          return next;
+        });
+        setReviewSelectedWorkContexts(prev => {
+          const next = { ...prev };
+          for (const entry of loadedEntries) {
+            if (entry.status !== 'confirmed' && Array.isArray(entry.draftReviewWorkContextIds)) {
+              next[entry.id] = entry.draftReviewWorkContextIds;
+            }
+          }
+          return next;
+        });
 
         // Check backend availability
         const isAvailable = await refreshBackendStatus();
@@ -2541,6 +2607,10 @@ export function HomeScreen({
                           delete next[entry.id];
                           return next;
                         });
+                        persistReviewDraft(entry.id, {
+                          draftReviewLocationText: '',
+                          draftReviewLocationDraft: null,
+                        });
                       }}
                       className="px-2 py-1 text-emerald-500"
                       aria-label="Remove Location"
@@ -2598,11 +2668,16 @@ export function HomeScreen({
                       type="text"
                       value={reviewLocations[entry.id] || ''}
                       onChange={(event) => {
-                        setReviewLocations(prev => ({ ...prev, [entry.id]: event.target.value }));
+                        const nextText = event.target.value;
+                        setReviewLocations(prev => ({ ...prev, [entry.id]: nextText }));
                         setReviewLocationDrafts(prev => {
                           const next = { ...prev };
                           delete next[entry.id];
                           return next;
+                        });
+                        persistReviewDraft(entry.id, {
+                          draftReviewLocationText: nextText,
+                          draftReviewLocationDraft: null,
                         });
                       }}
                       placeholder="+ Location"
@@ -2619,9 +2694,14 @@ export function HomeScreen({
                           <button
                             type="button"
                             onClick={() => {
+                              const draft = locationDraftFromCandidate(candidate);
                               setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
-                              setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: locationDraftFromCandidate(candidate) }));
+                              setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: draft }));
                               setReviewLocationPanels(prev => ({ ...prev, [entry.id]: false }));
+                              persistReviewDraft(entry.id, {
+                                draftReviewLocationText: candidate.label,
+                                draftReviewLocationDraft: draft,
+                              });
                             }}
                             className="block max-w-56 text-left text-sm font-medium"
                           >
@@ -2677,7 +2757,10 @@ export function HomeScreen({
                   {selectedContact && (
                     <button
                       type="button"
-                      onClick={() => setReviewContacts(prev => ({ ...prev, [entry.id]: null }))}
+                      onClick={() => {
+                        setReviewContacts(prev => ({ ...prev, [entry.id]: null }));
+                        persistReviewDraft(entry.id, { draftReviewContactId: null });
+                      }}
                       className="mt-2 text-sm text-violet-700 underline"
                     >
                       Remove Contact
@@ -2699,6 +2782,7 @@ export function HomeScreen({
                             onClick={() => {
                               setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }));
                               resetContactCorrection(entry.id);
+                              persistReviewDraft(entry.id, { draftReviewContactId: candidate.id });
                             }}
                             className="block max-w-56 text-left text-sm font-medium"
                           >

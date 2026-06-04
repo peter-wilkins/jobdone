@@ -7,6 +7,7 @@ import { normalizeRecallEntry } from './entryMapper.js';
 import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
+import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
 
 const ENV = import.meta.env || {};
 
@@ -51,7 +52,12 @@ export function shouldStartBuildMismatchReload(backendBuild, {
 async function apiFetch(...args) {
   const response = await fetchWithRequestDiagnostics(...args);
   const backendBuild = response.headers.get('x-jobdone-build');
-  if (response.ok && !updateReloadStarted && shouldStartBuildMismatchReload(backendBuild)) {
+  if (
+    response.ok &&
+    !updateReloadStarted &&
+    shouldStartBuildMismatchReload(backendBuild) &&
+    !shouldDeferAppUpdateNow()
+  ) {
     updateReloadStarted = true;
     applyAvailableAppUpdate();
   }
