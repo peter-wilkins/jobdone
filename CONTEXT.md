@@ -87,12 +87,12 @@ A prediction clue derived from confirmed Entries where a Contact and Location ap
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
 
 **Local Replica**:
-The local-first sync boundary between the device's IndexedDB data and the backend copy used for cross-device continuity. Local Replica sync should be lightweight, idempotent, and based on collection manifests and set diffs rather than whole-payload replacement. The core sync loop should not change behaviour based on why it was triggered; trigger reason is diagnostic context only. Collection-specific adapters may add merge rules where the real-world object requires it, such as Contacts. JobDone uses **Client ID** as the stable app identity for locally-created rows, following the Fulcro TempID pattern: the backend may return a server ID, but that server ID is replica metadata rather than the identity the app passes around.
+The local-first sync boundary between the device's IndexedDB data and the backend copy used for cross-device continuity. Local Replica sync should be lightweight, idempotent, and based on collection manifests and set diffs rather than whole-payload replacement. The core sync loop should not change behaviour based on why it was triggered; trigger reason is diagnostic context only. Collection-specific adapters may add merge rules where the real-world object requires it, such as Contacts. JobDone uses **Client ID** as the stable app/API identity for locally-created rows, following the Fulcro TempID pattern. Backend server IDs are backend-private implementation details and should not cross the app-facing API.
 _Avoid_: Generic Table Copier, Server Source of Truth, Reason-specific Sync Flow
 
 **Client ID**:
-The stable app identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI and local references. The backend server ID is stored as Local Replica metadata for addressing backend rows, not as a replacement for the Client ID.
-_Avoid_: Disposable Temp ID, Remote ID as App Identity, Rewriting Local References on Sync
+The stable app/API identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI, local references, and app-facing backend payloads. Backend server IDs may exist inside the backend database, but they must not replace or leak alongside Client IDs in app-facing Local Replica payloads.
+_Avoid_: Disposable Temp ID, Remote ID as App Identity, Server ID in App Payloads, Rewriting Local References on Sync
 
 **Client ID Alias**:
 A Local Replica mapping from an old or duplicate Client ID to the canonical Client ID for the same real-world object. Aliases allow Contacts and Locations to collapse exact duplicates without rewriting every existing local reference immediately. Reads, searches, sync manifests, and Entry structure resolution should resolve aliases at boundaries so historical references keep working.
