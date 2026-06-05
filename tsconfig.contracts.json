@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noImplicitAny": false,
+  },
+  "include": [
+    "shared/contracts/entrySync.js",
+    "frontend/src/contracts/entrySync.js",
+    "backend/src/contracts/entrySync.js",
+    "frontend/src/contracts/entrySync.typecheck.ts"
+  ]
+}

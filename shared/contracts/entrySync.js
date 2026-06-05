@@ -8,6 +8,9 @@ export const legacyEntrySyncFieldReplacements = {
   attachmentSnapshots: 'attachments',
 };
 
+/**
+ * @param {typeof import('zod').z} z
+ */
 export function buildEntrySyncPayloadSchema(z) {
   const looseObjectSchema = z.record(z.string(), z.unknown());
 
