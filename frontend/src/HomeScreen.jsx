@@ -1252,12 +1252,17 @@ export function HomeScreen({
         setReviewAttachmentErrors(prev => ({ ...prev, [id]: 'Remove failed Photos before confirming.' }));
         return;
       }
-      const draftText = (reviewTextDrafts[id] ?? '').trim();
-      const nextIntent = reviewIntentOverrides[id] || classify(draftText || entry.summary || entry.transcript || '');
-      if (draftText && draftText !== (entry.summary || entry.transcript || '').trim()) {
+      const hasReviewDraft = Object.prototype.hasOwnProperty.call(reviewTextDrafts, id);
+      const reviewText = String(hasReviewDraft ? reviewTextDrafts[id] : (entry.summary || entry.transcript || '')).trim();
+      const nextIntent = reviewIntentOverrides[id] || classify(reviewText);
+      if (nextIntent === 'QUERY' && !reviewText) {
+        setError('Type a search query first.');
+        return;
+      }
+      if (reviewText && reviewText !== (entry.summary || entry.transcript || '').trim()) {
         entry = await dbService.updateEntry(id, {
-          transcript: entry.transcript || draftText,
-          summary: draftText,
+          transcript: entry.transcript || reviewText,
+          summary: reviewText,
           intent: nextIntent,
         });
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
@@ -1267,7 +1272,7 @@ export function HomeScreen({
       }
 
       // Handle QUERY intent
-      if (entry.intent === 'QUERY') {
+      if (nextIntent === 'QUERY') {
         // Offline: show message, keep entry for later retry
         if (isOffline()) {
           setError('Recall isn\'t available right now. Your recording has been saved locally.');
@@ -1275,7 +1280,7 @@ export function HomeScreen({
         }
         await dbService.rejectEntry(id);
         setEntries(prev => prev.filter(e => e.id !== id));
-        await executeQuery(entry.transcript);
+        await executeQuery(reviewText);
         return;
       }
 
@@ -1760,6 +1765,11 @@ export function HomeScreen({
    */
   const executeQuery = async (text) => {
     setQueryDropdownOpen(false);
+    const trimmedText = String(text || '').trim();
+    if (!trimmedText) {
+      setError('Type a search query first.');
+      return;
+    }
     // Offline: show message, no network call
     if (isOffline()) {
       setError(OFFLINE_MSG);
@@ -1767,7 +1777,7 @@ export function HomeScreen({
     }
     setIsRecalling(true);
     try {
-      const results = await apiService.recall(text);
+      const results = await apiService.recall(trimmedText);
       const localEntriesByRemoteId = new Map(
         entries
           .filter(entry => entry.remoteId)
@@ -1785,10 +1795,10 @@ export function HomeScreen({
           syncStatus: result.syncStatus || localEntry.syncStatus,
         };
       });
-      setActiveQuery(text);
+      setActiveQuery(trimmedText);
       setQueryResults(enrichedResults);
       // Save to local + server history
-      await queryHistoryService.add(text);
+      await queryHistoryService.add(trimmedText);
       setRecentQueries(await queryHistoryService.getRecent());
     } catch (err) {
       if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
@@ -2257,6 +2267,7 @@ export function HomeScreen({
       const photosPending = hasPendingPhotoAttachments(attachments);
       const photosFailed = hasFailedPhotoAttachments(attachments);
       const canAddPhotos = canAddMorePhotos(attachments);
+      const queryTextEmpty = isQuery && editableReviewText.trim().length === 0;
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -2949,7 +2960,8 @@ export function HomeScreen({
           <div className="flex gap-3">
             <button
               onClick={() => handleConfirm(entry.id)}
-              disabled={isConfirming || photosPending || photosFailed}
+              disabled={isConfirming || photosPending || photosFailed || queryTextEmpty}
+              title={queryTextEmpty ? 'Type a search query first' : undefined}
               className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               {isConfirming ? (

@@ -159,3 +159,22 @@ test('entry sync pushes reject noncanonical request bodies before fetch', async 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('recall rejects empty queries before fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    await assert.rejects(
+      () => new APIService().recall('   '),
+      /query must be a non-empty string/,
+    );
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

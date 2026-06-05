@@ -467,12 +467,17 @@ export class APIService {
    */
   async recall(query) {
     try {
-      console.log('[API] Recalling entries for query:', query);
+      const trimmedQuery = String(query || '').trim();
+      if (!trimmedQuery) {
+        throw new Error('query must be a non-empty string');
+      }
+
+      console.log('[API] Recalling entries for query:', trimmedQuery);
 
       const response = await apiFetch(`${API_BASE_URL}/api/recall`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query: trimmedQuery }),
       });
 
       if (!response.ok) {
