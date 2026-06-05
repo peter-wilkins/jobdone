@@ -1,5 +1,6 @@
 import { findReusableLocation } from './locationIdentityService.js';
 import { entryMatchesLocation } from './locationPresentationService.js';
+import { createUuidV7 } from '../../../shared/contracts/clientId.js';
 import {
   normalizeLegacyLocalCaptureRecord,
   parseEntryFromCaptureInput,
@@ -14,7 +15,7 @@ import {
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 15;
+const DB_VERSION = 16;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -27,7 +28,7 @@ const TAGS_STORE = 'tags';
 const TAG_VOCABULARY_STORE = 'tagVocabulary';
 const ENTRY_TAGS_STORE = 'entryTags';
 const CONTACTS_STORE = 'contacts';
-const CONTACT_ALIASES_STORE = 'contactClientAliases';
+const CLIENT_ID_ALIASES_STORE = 'clientIdAliases';
 const DEFAULT_TAG_CATEGORY = {
   id: 'tag-category-general',
   name: 'General',
@@ -41,6 +42,15 @@ function normalizeSearchText(value) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function normalizeLocationStatus(status) {
+  if (status === 'archived') return 'archived';
+  return 'active';
+}
+
+function isActiveLocationStatus(status) {
+  return status === 'active' || status === 'confirmed';
 }
 
 function containsExactPhrase(haystack, phrase) {
@@ -323,9 +333,9 @@ export class DBService {
           contactStore.createIndex('primaryPhone', 'primaryPhone', { unique: false });
         }
 
-        // v13: one-way immutable Client ID aliases for Contact merge/collapse.
-        if (!db.objectStoreNames.contains(CONTACT_ALIASES_STORE)) {
-          const aliasStore = db.createObjectStore(CONTACT_ALIASES_STORE, { keyPath: 'fromClientId' });
+        // v16: one-way immutable Client ID aliases for Local Replica merge/collapse.
+        if (!db.objectStoreNames.contains(CLIENT_ID_ALIASES_STORE)) {
+          const aliasStore = db.createObjectStore(CLIENT_ID_ALIASES_STORE, { keyPath: 'fromClientId' });
           aliasStore.createIndex('toClientId', 'toClientId', { unique: false });
           aliasStore.createIndex('collection', 'collection', { unique: false });
           aliasStore.createIndex('created_at', 'created_at', { unique: false });
@@ -657,9 +667,8 @@ export class DBService {
           const locationRecord = {
             ...(reusableLocation || {}),
             ...snapshot,
-            status: 'confirmed',
+            status: 'active',
             normalizedDisplayName: normalizeLocationKey(snapshot.displayName),
-            remoteId: location.remoteId || reusableLocation?.remoteId || null,
             created_at: reusableLocation?.created_at || location.created_at || now,
             updated_at: now,
           };
@@ -814,7 +823,7 @@ export class DBService {
           addressText: reusableLocation?.addressText || location.addressText,
           latitude: reusableLocation?.latitude ?? location.latitude,
           longitude: reusableLocation?.longitude ?? location.longitude,
-          remoteId: location.remoteId || reusableLocation?.remoteId || null,
+          providerPlaceId: location.providerPlaceId || reusableLocation?.providerPlaceId || null,
           created_at: reusableLocation?.created_at || location.created_at || now,
         };
       });
@@ -876,9 +885,8 @@ export class DBService {
       for (const location of locationSnapshots) {
         locationsStore.put({
           ...location,
-          status: 'confirmed',
+          status: 'active',
           normalizedDisplayName: normalizeLocationKey(location.displayName),
-          remoteId: location.remoteId || null,
           created_at: location.created_at || now,
           updated_at: now,
         });
@@ -1159,13 +1167,13 @@ export class DBService {
       syncedAt: cloudJob.syncedAt || cloudJob.synced_at || new Date().toISOString(),
       captureId: cloudJob.captureId || cloudJob.capture_id || null,
       locationIds: cloudLocations.map(location =>
-        location.local_id || location.localId || location.id
+        location.id
       ).filter(Boolean),
       locations: cloudLocations.map(location => ({
-        id: location.local_id || location.localId || location.id,
-        displayName: location.display_name || location.displayName || '',
-        placeText: location.place_text || location.placeText || location.display_name || '',
-        addressText: location.address_text || location.addressText || '',
+        id: location.id,
+        displayName: location.displayName || location.display_name || '',
+        placeText: location.placeText || location.place_text || location.displayName || location.display_name || '',
+        addressText: location.addressText || location.address_text || '',
         latitude: location.latitude ?? null,
         longitude: location.longitude ?? null,
       })),
@@ -1221,19 +1229,20 @@ export class DBService {
       tx.onerror = () => reject(new Error('Failed to save cloud entry locations'));
 
       for (const cloudLocation of locations) {
-        const localId = cloudLocation.local_id || cloudLocation.localId || `location-cloud-${cloudLocation.id}`;
+        const localId = cloudLocation.id;
+        if (!localId) continue;
         const row = {
           id: localId,
-          displayName: cloudLocation.display_name || cloudLocation.displayName || '',
-          placeText: cloudLocation.place_text || cloudLocation.placeText || cloudLocation.display_name || '',
-          addressText: cloudLocation.address_text || cloudLocation.addressText || '',
+          displayName: cloudLocation.displayName || cloudLocation.display_name || '',
+          placeText: cloudLocation.placeText || cloudLocation.place_text || cloudLocation.displayName || cloudLocation.display_name || '',
+          addressText: cloudLocation.addressText || cloudLocation.address_text || '',
           latitude: cloudLocation.latitude ?? null,
           longitude: cloudLocation.longitude ?? null,
-          status: cloudLocation.status || 'confirmed',
-          normalizedDisplayName: normalizeLocationKey(cloudLocation.display_name || cloudLocation.displayName || ''),
-          remoteId: cloudLocation.id || cloudLocation.location_id || null,
-          created_at: cloudLocation.created_at || new Date().toISOString(),
-          updated_at: cloudLocation.updated_at || cloudLocation.created_at || new Date().toISOString(),
+          status: normalizeLocationStatus(cloudLocation.status),
+          normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.display_name || ''),
+          providerPlaceId: cloudLocation.providerPlaceId || cloudLocation.provider_place_id || null,
+          created_at: cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
+          updated_at: cloudLocation.updatedAt || cloudLocation.updated_at || cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
         };
         locationStore.put(row);
         linkStore.put({
@@ -1362,7 +1371,7 @@ export class DBService {
   }
 
   generateLocationId() {
-    return `location-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return createUuidV7();
   }
 
   generateTagId(label, categoryId = DEFAULT_TAG_CATEGORY.id) {
@@ -1759,29 +1768,49 @@ export class DBService {
   }
 
   async getContactAliases() {
+    const aliases = await this.getClientIdAliases('contacts');
+    return aliases;
+  }
+
+  async getLocationAliases() {
+    return this.getClientIdAliases('locations');
+  }
+
+  async getClientIdAliases(collection = null) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
-      if (!db.objectStoreNames.contains(CONTACT_ALIASES_STORE)) {
+      if (!db.objectStoreNames.contains(CLIENT_ID_ALIASES_STORE)) {
         resolve([]);
         return;
       }
-      const request = db.transaction([CONTACT_ALIASES_STORE], 'readonly').objectStore(CONTACT_ALIASES_STORE).getAll();
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(new Error('Failed to fetch contact aliases'));
+      const request = db.transaction([CLIENT_ID_ALIASES_STORE], 'readonly').objectStore(CLIENT_ID_ALIASES_STORE).getAll();
+      request.onsuccess = () => {
+        const aliases = request.result || [];
+        resolve(collection ? aliases.filter(alias => alias.collection === collection) : aliases);
+      };
+      request.onerror = () => reject(new Error('Failed to fetch Client ID aliases'));
     });
   }
 
   async saveContactAlias(alias = {}) {
+    return this.saveClientIdAlias({ collection: 'contacts', ...alias });
+  }
+
+  async saveLocationAlias(alias = {}) {
+    return this.saveClientIdAlias({ collection: 'locations', ...alias });
+  }
+
+  async saveClientIdAlias(alias = {}) {
     if (!alias.fromClientId || !alias.toClientId || alias.fromClientId === alias.toClientId) return null;
     const db = await this.ensureDb();
     const row = {
-      collection: 'contacts',
+      collection: alias.collection || 'unknown',
       reason: 'unknown',
       created_at: new Date().toISOString(),
       ...alias,
     };
     return new Promise((resolve, reject) => {
-      const store = db.transaction([CONTACT_ALIASES_STORE], 'readwrite').objectStore(CONTACT_ALIASES_STORE);
+      const store = db.transaction([CLIENT_ID_ALIASES_STORE], 'readwrite').objectStore(CLIENT_ID_ALIASES_STORE);
       const getRequest = store.get(row.fromClientId);
       getRequest.onsuccess = () => {
         const existing = getRequest.result;
@@ -1791,9 +1820,9 @@ export class DBService {
         }
         const putRequest = store.put(row);
         putRequest.onsuccess = () => resolve(row);
-        putRequest.onerror = () => reject(new Error('Failed to save contact alias'));
+        putRequest.onerror = () => reject(new Error('Failed to save Client ID alias'));
       };
-      getRequest.onerror = () => reject(new Error('Failed to read contact alias'));
+      getRequest.onerror = () => reject(new Error('Failed to read Client ID alias'));
     });
   }
 
@@ -2012,18 +2041,24 @@ export class DBService {
       addressText: normalizeLocationText(location.addressText || location.address_text || ''),
       latitude: location.latitude ?? null,
       longitude: location.longitude ?? null,
-      remoteId: location.remoteId || location.remote_id || null,
+      providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
       created_at: location.created_at || null,
     };
   }
 
   async getLocations(status = 'confirmed') {
     const db = await this.ensureDb();
+    const aliases = await this.getLocationAliases();
     return new Promise((resolve, reject) => {
       const store = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE);
-      const req = status ? store.index('status').getAll(status) : store.getAll();
+      const normalizedStatus = status === 'confirmed' ? 'active' : status;
+      const req = normalizedStatus === 'active' ? store.getAll() : (normalizedStatus ? store.index('status').getAll(normalizedStatus) : store.getAll());
       req.onsuccess = () => {
-        const rows = req.result || [];
+        const aliasMap = new Map(aliases.map(alias => [alias.fromClientId, alias.toClientId]));
+        const byId = new Map((req.result || []).map(location => [location.id, location]));
+        const rows = (req.result || [])
+          .filter(location => normalizedStatus !== 'active' || isActiveLocationStatus(location.status))
+          .filter(location => !(aliasMap.has(location.id) && byId.has(aliasMap.get(location.id))));
         rows.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
         resolve(rows);
       };
@@ -2033,10 +2068,32 @@ export class DBService {
 
   async getLocation(locationId) {
     const db = await this.ensureDb();
+    const aliasMap = new Map((await this.getLocationAliases()).map(alias => [alias.fromClientId, alias.toClientId]));
     return new Promise((resolve, reject) => {
-      const request = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE).get(locationId);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(new Error('Failed to fetch location'));
+      const store = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE);
+      const load = (id, seen = new Set()) => {
+        const aliasTarget = aliasMap.get(id);
+        if (aliasTarget && !seen.has(id)) {
+          seen.add(id);
+          load(aliasTarget, seen);
+          return;
+        }
+        const request = store.get(id);
+        request.onsuccess = () => {
+          if (request.result) {
+            resolve(request.result);
+            return;
+          }
+          if (!aliasTarget || seen.has(id)) {
+            resolve(null);
+            return;
+          }
+          seen.add(id);
+          load(aliasTarget, seen);
+        };
+        request.onerror = () => reject(new Error('Failed to fetch location'));
+      };
+      load(locationId);
     });
   }
 
@@ -2055,7 +2112,7 @@ export class DBService {
     const location = {
       ...normalized,
       id: this.generateLocationId(),
-      status: 'confirmed',
+      status: 'active',
       normalizedDisplayName: normalizeLocationKey(normalized.displayName),
       syncStatus: 'pending',
       synced_at: null,
@@ -2115,12 +2172,31 @@ export class DBService {
   }
 
   async getLocationsUnsynced() {
-    const locations = await this.getLocations('confirmed');
-    return locations.filter(location => location.syncStatus !== 'synced' || !location.remoteId);
+    const locations = await this.getLocationsForReplica();
+    return locations.filter(location => location.syncStatus !== 'synced');
+  }
+
+  async getLocationsForReplica() {
+    const db = await this.ensureDb();
+    const aliases = await this.getLocationAliases();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([LOCATIONS_STORE], 'readonly').objectStore(LOCATIONS_STORE);
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const aliasMap = new Map(aliases.map(alias => [alias.fromClientId, alias.toClientId]));
+        const byId = new Map((request.result || []).map(location => [location.id, location]));
+        const locations = (request.result || [])
+          .filter(location => ['active', 'archived', 'confirmed'].includes(location.status || 'active'))
+          .filter(location => !(aliasMap.has(location.id) && byId.has(aliasMap.get(location.id))));
+        resolve(locations);
+      };
+      request.onerror = () => reject(new Error('Failed to fetch locations for replica'));
+    });
   }
 
   async getLocationsForEntry(entryId) {
     const db = await this.ensureDb();
+    const aliasMap = new Map((await this.getLocationAliases()).map(alias => [alias.fromClientId, alias.toClientId]));
     return new Promise((resolve, reject) => {
       const tx = db.transaction([ENTRY_LOCATIONS_STORE, LOCATIONS_STORE], 'readonly');
       const linksReq = tx.objectStore(ENTRY_LOCATIONS_STORE).index('entryId').getAll(entryId);
@@ -2132,21 +2208,37 @@ export class DBService {
         }
         const locations = [];
         let remaining = links.length;
-        for (const link of links) {
-          const locationReq = tx.objectStore(LOCATIONS_STORE).get(link.locationId);
+        const aliasesSeen = [];
+        const finishWithAlias = (link, location) => {
+          if (location) locations.push(location);
+          remaining -= 1;
+          if (remaining === 0) resolve(locations);
+        };
+        const loadLocation = (link, locationId) => {
+          const resolvedLocationId = aliasMap.get(locationId) || locationId;
+          const locationReq = tx.objectStore(LOCATIONS_STORE).get(resolvedLocationId);
           locationReq.onsuccess = () => {
-            if (locationReq.result) locations.push(locationReq.result);
-            remaining -= 1;
-            if (remaining === 0) resolve(locations);
+            if (locationReq.result) {
+              finishWithAlias(link, locationReq.result);
+              return;
+            }
+            const toClientId = aliasMap.get(locationId);
+            if (!toClientId || aliasesSeen.includes(locationId)) {
+              finishWithAlias(link, null);
+              return;
+            }
+            aliasesSeen.push(locationId);
+            loadLocation(link, toClientId);
           };
           locationReq.onerror = () => reject(new Error('Failed to fetch entry location'));
-        }
+        };
+        for (const link of links) loadLocation(link, link.locationId);
       };
       linksReq.onerror = () => reject(new Error('Failed to fetch entry location links'));
     });
   }
 
-  async markLocationSynced(locationId, remoteId = null) {
+  async markLocationSynced(locationId) {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
       const store = db.transaction([LOCATIONS_STORE], 'readwrite').objectStore(LOCATIONS_STORE);
@@ -2154,7 +2246,6 @@ export class DBService {
       req.onsuccess = () => {
         const location = req.result;
         if (!location) { reject(new Error('Location not found')); return; }
-        location.remoteId = remoteId || location.remoteId;
         location.syncStatus = 'synced';
         location.synced_at = new Date().toISOString();
         const put = store.put(location);
@@ -2167,9 +2258,8 @@ export class DBService {
 
   async upsertCloudLocation(cloudLocation) {
     const db = await this.ensureDb();
-    const remoteId = cloudLocation.remoteId || cloudLocation.location_id || cloudLocation.id || null;
-    const localId = cloudLocation.localId || cloudLocation.local_id || (cloudLocation.remoteId ? cloudLocation.id : null);
-    const existing = localId ? await this.getLocation(localId) : null;
+    const locationId = cloudLocation.id;
+    const existing = locationId ? await this.getLocation(locationId) : null;
     const incomingUpdatedAt = cloudLocation.updatedAt || cloudLocation.updated_at || cloudLocation.createdAt || cloudLocation.created_at || null;
     if (
       existing?.syncStatus === 'pending' &&
@@ -2179,20 +2269,19 @@ export class DBService {
     }
 
     const locationData = {
-      id: localId || existing?.id || `location-cloud-${cloudLocation.id}`,
-      displayName: cloudLocation.displayName || cloudLocation.display_name || '',
-      placeText: cloudLocation.placeText || cloudLocation.place_text || cloudLocation.displayName || cloudLocation.display_name || '',
-      addressText: cloudLocation.addressText || cloudLocation.address_text || '',
+      id: locationId || existing?.id || this.generateLocationId(),
+      displayName: cloudLocation.displayName || '',
+      placeText: cloudLocation.placeText || cloudLocation.displayName || '',
+      addressText: cloudLocation.addressText || '',
       latitude: cloudLocation.latitude ?? null,
       longitude: cloudLocation.longitude ?? null,
-      status: cloudLocation.status || 'confirmed',
-      normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.display_name || cloudLocation.placeText || cloudLocation.place_text || ''),
-      remoteId,
+      status: normalizeLocationStatus(cloudLocation.status),
+      normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.placeText || ''),
       syncStatus: 'synced',
       synced_at: new Date().toISOString(),
-      providerPlaceId: cloudLocation.providerPlaceId || cloudLocation.provider_place_id || existing?.providerPlaceId || null,
-      created_at: cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
-      updated_at: cloudLocation.updatedAt || cloudLocation.updated_at || cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
+      providerPlaceId: cloudLocation.providerPlaceId || existing?.providerPlaceId || null,
+      created_at: cloudLocation.createdAt || new Date().toISOString(),
+      updated_at: cloudLocation.updatedAt || cloudLocation.createdAt || new Date().toISOString(),
     };
 
     return new Promise((resolve, reject) => {

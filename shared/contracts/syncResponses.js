@@ -38,7 +38,6 @@ export function buildSyncResponseSchemas(z) {
 
   const locationSchema = z.object({
     id: optionalString,
-    remoteId: optionalString,
     status: z.string().default('confirmed'),
     displayName: z.string(),
     placeText: z.string(),

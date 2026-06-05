@@ -4,8 +4,10 @@ import {
   parseContactsResponse,
   parseEntriesResponse,
   parseEntrySaveResponse,
-  parseLocationsResponse,
 } from '../contracts/syncResponses.js';
+import { parseLocationReplicaRecordsResponse } from '../contracts/locationReplica.js';
+
+const LOCATION_ID = '01973e36-4c80-7abc-8a72-111111111111';
 
 describe('Sync response contracts', () => {
   test('accepts canonical Entry, Contact, and Location sync responses', () => {
@@ -20,8 +22,7 @@ describe('Sync response contracts', () => {
         syncedAt: null,
         contextClues: [],
         locations: [{
-          id: 'location-local-1',
-          remoteId: 'location-cloud-1',
+          id: LOCATION_ID,
           status: 'confirmed',
           displayName: '14 Bell Street',
           placeText: '14 Bell Street',
@@ -67,31 +68,34 @@ describe('Sync response contracts', () => {
       aliases: [],
     }).success, true);
 
-    assert.equal(parseLocationsResponse({
+    assert.equal(parseLocationReplicaRecordsResponse({
       success: true,
       locations: [{
-        id: 'location-local-1',
-        remoteId: 'location-cloud-1',
-        status: 'confirmed',
+        id: LOCATION_ID,
+        status: 'active',
         displayName: '14 Bell Street',
         placeText: '14 Bell Street',
         addressText: '',
         latitude: 53.3498,
         longitude: -6.2603,
         providerPlaceId: null,
+        contentHash: 'hash-a',
         createdAt: null,
         updatedAt: null,
       }],
+      aliases: [],
     }).success, true);
   });
 
   test('rejects old snake-case sync response fields', () => {
-    assert.equal(parseLocationsResponse({
+    assert.equal(parseLocationReplicaRecordsResponse({
       success: true,
       locations: [{
-        id: 'location-cloud-1',
+        id: LOCATION_ID,
+        status: 'active',
         display_name: '14 Bell Street',
       }],
+      aliases: [],
     }).success, false);
 
     assert.equal(parseContactsResponse({
@@ -118,8 +122,7 @@ describe('Sync response contracts', () => {
         syncedAt,
         contextClues: [],
         locations: [{
-          id: 'location-local-1',
-          remoteId: 'location-cloud-1',
+          id: LOCATION_ID,
           status: 'confirmed',
           displayName: '14 Bell Street',
           placeText: '14 Bell Street',
@@ -140,26 +143,5 @@ describe('Sync response contracts', () => {
     assert.equal(entryResult.data.entry.syncedAt, '2026-06-05T15:05:00.000Z');
     assert.equal(entryResult.data.entry.locations[0].createdAt, '2026-06-05T15:04:52.000Z');
     assert.equal(entryResult.data.entry.locations[0].updatedAt, '2026-06-05T15:05:00.000Z');
-
-    const locationResult = parseLocationsResponse({
-      success: true,
-      locations: [{
-        id: 'location-local-1',
-        remoteId: 'location-cloud-1',
-        status: 'confirmed',
-        displayName: '14 Bell Street',
-        placeText: '14 Bell Street',
-        addressText: '',
-        latitude: null,
-        longitude: null,
-        providerPlaceId: null,
-        createdAt,
-        updatedAt: syncedAt,
-      }],
-    });
-
-    assert.equal(locationResult.success, true);
-    assert.equal(locationResult.data.locations[0].createdAt, '2026-06-05T15:04:52.000Z');
-    assert.equal(locationResult.data.locations[0].updatedAt, '2026-06-05T15:05:00.000Z');
   });
 });

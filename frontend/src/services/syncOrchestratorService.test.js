@@ -19,18 +19,15 @@ function deps(overrides = {}) {
       getEntryByCaptureId: async () => null,
       getEntryByCreatedAt: async () => null,
       addCloudEntry: async () => {},
-      getLocationsUnsynced: async () => [],
-      upsertCloudLocation: async () => {},
     },
     api: {
       getCloudEntries: async () => [],
-      getCloudLocations: async () => [],
     },
     sync: {
       syncEntry: async () => ({ entry: { id: 'remote-entry-1', locations: [], tags: [] } }),
-      syncLocations: async () => ({ locations: [] }),
     },
     contactReplicaSync: async () => ({ pushed: 0, pulled: 0, aliases: 0 }),
+    locationReplicaSync: async () => ({ pushed: 0, pulled: 0, aliases: 0 }),
     ...overrides,
   };
 }
@@ -48,17 +45,17 @@ test('sync reports entry pull failures instead of treating cloud as empty', asyn
         getCloudEntries: async () => {
           throw entryPullError;
         },
-        getCloudLocations: async () => {
-          calls.push('locations-pulled');
-          return [];
-        },
+      },
+      locationReplicaSync: async () => {
+        calls.push('locations-replica');
+        return { pushed: 0, pulled: 0, aliases: 0 };
       },
     }));
 
     assert.equal(result.ok, false);
     assert.deepEqual(result.issues.map(issue => issue.step), ['entries_pull']);
     assert.equal(result.issues[0].status, 503);
-    assert.deepEqual(calls, ['locations-pulled']);
+    assert.deepEqual(calls, ['locations-replica']);
   } finally {
     console.warn = originalWarn;
   }
@@ -79,7 +76,6 @@ test('sync orchestrator keeps one confirmed-data sync in flight', async () => {
         await waitingForEntries;
         return [];
       },
-      getCloudLocations: async () => [],
     },
   });
 

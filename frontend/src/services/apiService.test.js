@@ -79,7 +79,9 @@ test('cloud entry pulls reject failed responses instead of returning empty data'
   }
 });
 
-test('cloud location pulls reject failed responses instead of returning empty data', async () => {
+const LOCATION_ID = '01973e36-4c80-7abc-8a72-111111111111';
+
+test('Location Replica manifest rejects failed responses instead of returning empty data', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ error: 'auth expired' }), {
     status: 401,
@@ -88,7 +90,7 @@ test('cloud location pulls reject failed responses instead of returning empty da
 
   try {
     await assert.rejects(
-      () => new APIService().getCloudLocations(),
+      () => new APIService().getLocationReplicaManifest({ locations: [] }),
       /auth expired/,
     );
   } finally {
@@ -96,11 +98,11 @@ test('cloud location pulls reject failed responses instead of returning empty da
   }
 });
 
-test('cloud location pulls reject noncanonical response bodies', async () => {
+test('Location Replica pulls reject noncanonical response bodies', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({
     success: true,
-    locations: [{ id: 'location-cloud-1', display_name: '14 Bell Street' }],
+    locations: [{ id: LOCATION_ID, display_name: '14 Bell Street' }],
   }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
@@ -108,7 +110,7 @@ test('cloud location pulls reject noncanonical response bodies', async () => {
 
   try {
     await assert.rejects(
-      () => new APIService().getCloudLocations(),
+      () => new APIService().pullLocationsForReplica([LOCATION_ID]),
       /Invalid input|displayName/,
     );
   } finally {
@@ -116,7 +118,7 @@ test('cloud location pulls reject noncanonical response bodies', async () => {
   }
 });
 
-test('cloud location pushes reject noncanonical request bodies before fetch', async () => {
+test('Location Replica pushes reject noncanonical request bodies before fetch', async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
   globalThis.fetch = async () => {
@@ -126,7 +128,11 @@ test('cloud location pushes reject noncanonical request bodies before fetch', as
 
   try {
     await assert.rejects(
-      () => new APIService().syncLocations([{ displayName: '14 Bell Street', created_at: '2026-05-17T01:00:00.000Z' }]),
+      () => new APIService().pushLocationsForReplica([{
+        id: LOCATION_ID,
+        displayName: '14 Bell Street',
+        created_at: '2026-05-17T01:00:00.000Z',
+      }]),
       /Use locations\.0\.createdAt/,
     );
     assert.equal(fetchCalled, false);

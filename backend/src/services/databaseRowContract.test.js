@@ -23,17 +23,19 @@ describe('Database row contracts', () => {
     }).success, true);
 
     assert.equal(parseLocationRow({
-      id: 'location-cloud-1',
-      user_id: 'user-1',
-      local_id: 'location-local-1',
-      display_name: '14 Bell Street',
-      place_text: 'Workshop',
-      address_text: '14 Bell Street, Testville',
+      id: '01973e36-4c80-7abc-8a72-111111111111',
+      userId: 'user-1',
+      status: 'active',
+      displayName: '14 Bell Street',
+      placeText: 'Workshop',
+      addressText: '14 Bell Street, Testville',
       latitude: 51.5,
       longitude: -0.1,
-      provider_place_id: 'google-place-1',
-      created_at: '2026-06-05T12:00:00.000Z',
-      updated_at: new Date('2026-06-05T12:01:00.000Z'),
+      providerPlaceId: 'google-place-1',
+      contentHash: 'hash-a',
+      identityKeys: ['label-address:14 bell street:14 bell street testville'],
+      createdAt: '2026-06-05T12:00:00.000Z',
+      updatedAt: new Date('2026-06-05T12:01:00.000Z'),
     }).success, true);
 
     assert.equal(parseContactRow({
@@ -48,7 +50,7 @@ describe('Database row contracts', () => {
     }).success, true);
   });
 
-  test('rejects app-shape fields at database row seams', () => {
+  test('rejects wrong field casing at database row seams', () => {
     assert.equal(parseEntryRow({
       id: 'entry-cloud-1',
       summary: 'Fixed tap summary',
@@ -57,7 +59,7 @@ describe('Database row contracts', () => {
 
     assert.equal(parseLocationRow({
       id: 'location-cloud-1',
-      displayName: '14 Bell Street',
+      display_name: '14 Bell Street',
     }).success, false);
 
     assert.equal(parseContactRow({

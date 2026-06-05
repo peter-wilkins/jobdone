@@ -165,11 +165,11 @@ export function buildSqlFirstRecallQuery({
         coalesce((
           select array_agg(distinct label order by label)
           from ${entryLocations} el
-          join ${locations} l on l.id = el.location_id and l.user_id = el.user_id
-          cross join lateral (values (l.display_name), (l.place_text), (l.address_text)) as labels(label)
+          join ${locations} l on l.id = el.location_id and l."userId" = el.user_id
+          cross join lateral (values (l."displayName"), (l."placeText"), (l."addressText")) as labels(label)
           where el.user_id = e.user_id
             and el.entry_id = e.id
-            and l.status = 'confirmed'
+            and l.status in ('active', 'confirmed')
             and label <> ''
         ), array[]::text[]) as location_labels,
         coalesce((
@@ -525,10 +525,13 @@ class QueryBuilder {
     const joinedColumns = includeCategory
       ? `to_jsonb(j.*) || jsonb_build_object('tag_categories', to_jsonb(tc.*))`
       : 'to_jsonb(j.*)';
+    const userJoin = joinedTable === 'locations' || joinedTable === 'contacts'
+      ? `and j."userId" = l.user_id`
+      : `and j.user_id = l.user_id`;
     let sql = `
       select l.entry_id, l.created_at, ${joinedColumns} as ${quoteIdent(alias)}
       from ${tableRef(this.schema, this.table)} l
-      join ${tableRef(this.schema, joinedTable)} j on j.id = l.${quoteIdent(foreignKey)}
+      join ${tableRef(this.schema, joinedTable)} j on j.id = l.${quoteIdent(foreignKey)} ${userJoin}
       ${includeCategory ? `left join ${tableRef(this.schema, 'tag_categories')} tc on tc.id = j.category_id` : ''}
     `;
     sql += buildWhere(this.filters.map(filter => ({ ...filter, column: `l.${filter.column}` })), values);

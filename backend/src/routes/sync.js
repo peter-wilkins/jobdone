@@ -1,13 +1,29 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData, toCanonicalContactRecord, toCanonicalEntry, toCanonicalLocationRecord } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, getLocationManifest, pullLocationsByClientIds, pushReplicaLocations, saveLocationAlias, getLocationAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, deleteUserData, toCanonicalContactRecord, toCanonicalEntry, toCanonicalLocationRecord } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
-import { parseContactPullPayload, parseContactsPayload, parseLocationsPayload } from '../contracts/syncRequests.js';
-import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
+import { parseContactPullPayload, parseContactsPayload } from '../contracts/syncRequests.js';
+import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse } from '../contracts/syncResponses.js';
+import {
+  parseLocationReplicaManifestRequest,
+  parseLocationReplicaManifestResponse,
+  parseLocationReplicaPushRequest,
+  parseLocationReplicaPullRequest,
+  parseLocationReplicaRecordsResponse,
+} from '../contracts/locationReplica.js';
 
 function assertSyncResponse(parsed) {
   if (parsed.success) return parsed.data;
   throw new Error(parsed.error || 'Invalid sync response');
+}
+
+function toCanonicalLocationAlias(alias = {}) {
+  return {
+    collection: 'locations',
+    fromClientId: alias.fromClientId,
+    toClientId: alias.toClientId,
+    reason: alias.reason || 'unknown',
+  };
 }
 
 function validateTagLabel(value) {
@@ -52,13 +68,16 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     pushReplicaContacts: deps.pushReplicaContacts ?? pushReplicaContacts,
     saveContactAlias: deps.saveContactAlias ?? saveContactAlias,
     getContactAliases: deps.getContactAliases ?? getContactAliases,
+    getLocationManifest: deps.getLocationManifest ?? getLocationManifest,
+    pullLocationsByClientIds: deps.pullLocationsByClientIds ?? pullLocationsByClientIds,
+    pushReplicaLocations: deps.pushReplicaLocations ?? pushReplicaLocations,
+    saveLocationAlias: deps.saveLocationAlias ?? saveLocationAlias,
+    getLocationAliases: deps.getLocationAliases ?? getLocationAliases,
     saveContextClues: deps.saveContextClues ?? saveContextClues,
     saveEntryLocations: deps.saveEntryLocations ?? saveEntryLocations,
     saveEntryContacts: deps.saveEntryContacts ?? saveEntryContacts,
     saveEntryTags: deps.saveEntryTags ?? saveEntryTags,
     saveEntryAttachments: deps.saveEntryAttachments ?? saveEntryAttachments,
-    saveLocation: deps.saveLocation ?? saveLocation,
-    getLocations: deps.getLocations ?? getLocations,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
@@ -240,40 +259,89 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     }
   });
 
-  fastify.post('/api/sync/locations', async (request, reply) => {
+  fastify.post('/api/local-replica/locations/manifest', async (request, reply) => {
     const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      const parsed = parseLocationsPayload(request.body);
+      const parsed = parseLocationReplicaManifestRequest(request.body);
       if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
-      const { locations } = parsed.data;
-      const saved = [];
-      for (const location of locations) {
-        saved.push(await db.saveLocation(user.id, location));
-      }
-      return assertSyncResponse(parseLocationsResponse({
+      const manifest = await db.getLocationManifest(user.id, parsed.data.locations);
+      return assertSyncResponse(parseLocationReplicaManifestResponse({
         success: true,
-        locations: saved.filter(Boolean).map(toCanonicalLocationRecord),
+        locations: manifest.locations || [],
+        aliases: (manifest.aliases || []).map(toCanonicalLocationAlias),
       }));
     } catch (error) {
-      console.error('Locations sync save error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to save locations' });
+      console.error('Location Replica manifest error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to fetch Location Replica manifest' });
     }
   });
 
-  fastify.get('/api/sync/locations', async (request, reply) => {
+  fastify.post('/api/local-replica/locations/pull', async (request, reply) => {
     const user = await auth(request, reply);
     if (!user) return;
 
     try {
-      const locations = await db.getLocations(user.id);
-      return assertSyncResponse(parseLocationsResponse({ success: true, locations: locations.map(toCanonicalLocationRecord) }));
+      const parsed = parseLocationReplicaPullRequest(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const locations = await db.pullLocationsByClientIds(user.id, parsed.data.ids);
+      const aliases = await db.getLocationAliases(user.id);
+      return assertSyncResponse(parseLocationReplicaRecordsResponse({
+        success: true,
+        locations: locations.map(toCanonicalLocationRecord),
+        aliases: aliases.map(toCanonicalLocationAlias),
+      }));
     } catch (error) {
-      console.error('Locations sync fetch error:', error);
-      return reply.status(500).send({ error: error.message || 'Failed to fetch locations' });
+      console.error('Location Replica pull error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to pull Location Replica records' });
     }
   });
+
+  fastify.post('/api/local-replica/locations/push', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const parsed = parseLocationReplicaPushRequest(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const result = await db.pushReplicaLocations(user.id, parsed.data.locations);
+      return assertSyncResponse(parseLocationReplicaRecordsResponse({
+        success: true,
+        locations: (result.locations || []).map(toCanonicalLocationRecord),
+        aliases: (result.aliases || []).map(toCanonicalLocationAlias),
+      }));
+    } catch (error) {
+      console.error('Location Replica push error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to push Location Replica records' });
+    }
+  });
+
+  fastify.post('/api/local-replica/locations/aliases', async (request, reply) => {
+    const user = await auth(request, reply);
+    if (!user) return;
+
+    try {
+      const aliases = Array.isArray(request.body?.aliases) ? request.body.aliases : [];
+      const saved = [];
+      for (const alias of aliases) {
+        const row = await db.saveLocationAlias(user.id, alias);
+        if (row) saved.push(row);
+      }
+      return { success: true, aliases: saved.map(toCanonicalLocationAlias) };
+    } catch (error) {
+      console.error('Location Replica alias push error:', error);
+      return reply.status(500).send({ error: error.message || 'Failed to push Location Replica aliases' });
+    }
+  });
+
+  fastify.post('/api/sync/locations', async (_request, reply) =>
+    reply.status(410).send({ error: 'Use /api/local-replica/locations/*' })
+  );
+
+  fastify.get('/api/sync/locations', async (_request, reply) =>
+    reply.status(410).send({ error: 'Use /api/local-replica/locations/*' })
+  );
 
   /**
    * DELETE /api/user/data

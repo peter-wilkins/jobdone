@@ -1,11 +1,12 @@
 import type { z } from 'zod';
 import { syncRequestSchemas } from './syncRequests.js';
 import { syncResponseSchemas } from './syncResponses.js';
+import { locationReplicaSchemas } from './locationReplica.js';
 
 type ContactsPayloadInput = z.input<typeof syncRequestSchemas.contactsPayloadSchema>;
-type LocationsPayloadInput = z.input<typeof syncRequestSchemas.locationsPayloadSchema>;
 type ContactsResponse = z.infer<typeof syncResponseSchemas.contactsResponseSchema>;
-type LocationsResponse = z.infer<typeof syncResponseSchemas.locationsResponseSchema>;
+type LocationReplicaPushInput = z.input<typeof locationReplicaSchemas.locationReplicaPushRequestSchema>;
+type LocationReplicaRecordsResponse = z.infer<typeof locationReplicaSchemas.locationReplicaRecordsResponseSchema>;
 
 const contactsPayload: ContactsPayloadInput = {
   contacts: [{
@@ -37,25 +38,25 @@ const contactsPayloadWithLegacyField: ContactsPayloadInput = {
   }],
 };
 
-const locationsPayload: LocationsPayloadInput = {
+const locationsPayload: LocationReplicaPushInput = {
   locations: [{
-    id: 'location-local-1',
-    localId: 'location-local-1',
-    remoteId: null,
-    status: 'confirmed',
+    id: '01973e36-4c80-7abc-8a72-111111111111',
+    status: 'active',
     displayName: '14 Bell Street',
     placeText: 'Workshop',
     addressText: '14 Bell Street, Testville',
     latitude: 51.5,
     longitude: -0.1,
     providerPlaceId: 'google-place-1',
+    contentHash: 'hash-a',
     createdAt: '2026-06-05T12:00:00.000Z',
     updatedAt: '2026-06-05T12:00:00.000Z',
   }],
 };
 
-const locationsPayloadWithLegacyField: LocationsPayloadInput = {
+const locationsPayloadWithLegacyField: LocationReplicaPushInput = {
   locations: [{
+    id: '01973e36-4c80-7abc-8a72-111111111111',
     displayName: '14 Bell Street',
     // @ts-expect-error providerPlaceId is the canonical field at the API boundary.
     provider_place_id: 'google-place-1',
@@ -101,35 +102,37 @@ const contactsResponseWithLegacyField: ContactsResponse = {
   }],
 };
 
-const locationsResponse: LocationsResponse = {
+const locationsResponse: LocationReplicaRecordsResponse = {
   success: true,
   locations: [{
-    id: 'location-local-1',
-    remoteId: 'location-cloud-1',
-    status: 'confirmed',
+    id: '01973e36-4c80-7abc-8a72-111111111111',
+    status: 'active',
     displayName: '14 Bell Street',
     placeText: 'Workshop',
     addressText: '14 Bell Street, Testville',
     latitude: 51.5,
     longitude: -0.1,
     providerPlaceId: 'google-place-1',
+    contentHash: 'hash-a',
     createdAt: '2026-06-05T12:00:00.000Z',
     updatedAt: '2026-06-05T12:00:00.000Z',
   }],
+  aliases: [],
 };
 
-const locationsResponseWithLegacyField: LocationsResponse = {
+const locationsResponseWithLegacyField: LocationReplicaRecordsResponse = {
   success: true,
   locations: [{
-    id: 'location-local-1',
-    remoteId: 'location-cloud-1',
-    status: 'confirmed',
+    id: '01973e36-4c80-7abc-8a72-111111111111',
+    status: 'active',
     displayName: '14 Bell Street',
     placeText: '',
     addressText: '',
-    // @ts-expect-error localId is request-only; response identity stays canonical.
+    contentHash: 'hash-a',
+    // @ts-expect-error localId is not part of Location Replica records.
     local_id: 'location-local-1',
   }],
+  aliases: [],
 };
 
 void contactsPayload;

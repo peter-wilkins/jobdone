@@ -6,6 +6,7 @@ import {
   parseEntryRow,
   parseLocationRow,
 } from '../contracts/databaseRows.js';
+import { createUuidV7 } from '../../../shared/contracts/clientId.js';
 
 const LAB_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
 const LAB_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q';
@@ -180,28 +181,23 @@ export function extractPostcode(value) {
   return match ? match[1].replace(/\s+/g, '') : '';
 }
 
-function firstAddressLine(value) {
-  const [line] = String(value || '').split(/[\n,]/);
-  return line || '';
-}
-
 export function locationIdentityKeys(location = {}) {
   const providerPlaceId = String(
-    location.providerPlaceId || location.provider_place_id || location.placeId || location.place_id || ''
+    location.providerPlaceId || location.provider_place_id || location.placeId || ''
   ).trim();
-  const displayName = location.displayName || location.display_name || '';
-  const placeText = location.placeText || location.place_text || '';
-  const addressText = location.addressText || location.address_text || '';
-  const combined = [addressText, placeText, displayName].filter(Boolean).join(' ');
-  const postcode = extractPostcode(combined);
-  const addressLine = normalizeLocationIdentityText(firstAddressLine(addressText || placeText || displayName)
-    .replace(new RegExp(postcode, 'i'), ''));
-  const display = normalizeLocationIdentityText(displayName || placeText || addressText);
+  const displayName = normalizeLocationIdentityText(
+    location.displayName || location.display_name || location.placeText || location.place_text || location.addressText || location.address_text
+  );
+  const addressText = normalizeLocationIdentityText(location.addressText || location.address_text);
+  const latitude = roundedCoordinate(location.latitude);
+  const longitude = roundedCoordinate(location.longitude);
 
   return {
     provider: providerPlaceId ? `provider:${providerPlaceId}` : '',
-    address: postcode && addressLine ? `address:${postcode}:${addressLine}` : '',
-    display: display ? `display:${display}` : '',
+    address: displayName && addressText ? `label-address:${displayName}:${addressText}` : '',
+    coordinates: displayName && latitude !== null && longitude !== null
+      ? `label-coordinates:${displayName}:${latitude}:${longitude}`
+      : '',
   };
 }
 
@@ -211,7 +207,7 @@ export function locationsHaveStrongIdentityMatch(left = {}, right = {}) {
   return Boolean(
     (leftKeys.provider && leftKeys.provider === rightKeys.provider) ||
     (leftKeys.address && leftKeys.address === rightKeys.address) ||
-    (leftKeys.display && leftKeys.display === rightKeys.display)
+    (leftKeys.coordinates && leftKeys.coordinates === rightKeys.coordinates)
   );
 }
 
@@ -219,21 +215,76 @@ export function findReusableLocation(existingLocations = [], draft = {}) {
   return (existingLocations || []).find(location => locationsHaveStrongIdentityMatch(location, draft)) || null;
 }
 
+function locationIdentityKeyList(location = {}) {
+  return unique(Object.values(locationIdentityKeys(location)));
+}
+
+function normalizeLocationStatus(status) {
+  if (status === 'archived') return 'archived';
+  return 'active';
+}
+
+function isActiveLocationStatus(status) {
+  return status === 'active' || status === 'confirmed' || !status;
+}
+
+function roundedCoordinate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? Number(number.toFixed(6)) : null;
+}
+
+function locationContentHash(location = {}) {
+  return stableHash({
+    status: normalizeLocationStatus(location.status),
+    displayName: String(location.displayName || location.display_name || '').trim(),
+    placeText: String(location.placeText || location.place_text || '').trim(),
+    addressText: String(location.addressText || location.address_text || '').trim(),
+    latitude: roundedCoordinate(location.latitude),
+    longitude: roundedCoordinate(location.longitude),
+    providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
+  });
+}
+
+function isoTimestamp(value, fallback = Date.now()) {
+  const date = new Date(value || fallback);
+  if (!Number.isFinite(date.getTime())) return new Date(fallback).toISOString();
+  return date.toISOString();
+}
+
+function timestampMs(value) {
+  const ms = new Date(value || 0).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function locationClientId(location = {}) {
+  return location.id || location.localId || location.local_id || createUuidV7();
+}
+
 function normalizeLocation(location = {}) {
   const displayName = String(
     location.displayName || location.display_name || location.placeText || location.place_text || location.addressText || location.address_text || ''
   ).trim();
   if (!displayName) return null;
-
-  return {
-    local_id: location.localId || location.local_id || location.id || null,
-    status: location.status || 'confirmed',
-    display_name: displayName,
-    place_text: String(location.placeText || location.place_text || displayName).trim(),
-    address_text: String(location.addressText || location.address_text || '').trim(),
+  const createdAt = isoTimestamp(location.createdAt || location.created_at);
+  const updatedAt = isoTimestamp(location.updatedAt || location.updated_at || createdAt, createdAt);
+  const row = {
+    id: locationClientId(location),
+    status: normalizeLocationStatus(location.status),
+    displayName,
+    placeText: String(location.placeText || location.place_text || displayName).trim(),
+    addressText: String(location.addressText || location.address_text || '').trim(),
     latitude: location.latitude ?? null,
     longitude: location.longitude ?? null,
-    updated_at: new Date().toISOString(),
+    providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
+    createdAt,
+    updatedAt,
+  };
+
+  return {
+    ...row,
+    contentHash: location.contentHash || location.content_hash || locationContentHash(row),
+    identityKeys: location.identityKeys || location.identity_keys || locationIdentityKeyList(row),
   };
 }
 
@@ -334,16 +385,15 @@ function toCanonicalContextClue(clue = {}) {
 
 function toCanonicalLocation(location = {}) {
   return {
-    id: cloudLocalId(location),
-    remoteId: location.remoteId || location.location_id || location.id || null,
+    id: location.id || cloudLocalId(location),
     displayName: location.displayName || location.display_name || '',
-    placeText: location.placeText || location.place_text || location.display_name || '',
+    placeText: location.placeText || location.place_text || location.displayName || location.display_name || '',
     addressText: location.addressText || location.address_text || '',
     latitude: location.latitude ?? null,
     longitude: location.longitude ?? null,
-    status: location.status || 'confirmed',
+    status: normalizeLocationStatus(location.status),
     createdAt: location.createdAt || location.created_at || null,
-    updatedAt: location.updatedAt || location.updated_at || location.created_at || null,
+    updatedAt: location.updatedAt || location.updated_at || location.createdAt || location.created_at || null,
   };
 }
 
@@ -384,18 +434,19 @@ export function toCanonicalContactRecord(contact = {}) {
 }
 
 export function toCanonicalLocationRecord(location = {}) {
+  const normalized = normalizeLocation(location);
   return {
-    id: location.localId || location.local_id || location.id || null,
-    remoteId: location.remoteId || location.location_id || location.id || null,
-    status: location.status || 'confirmed',
-    displayName: location.displayName || location.display_name || '',
-    placeText: location.placeText || location.place_text || location.display_name || '',
-    addressText: location.addressText || location.address_text || '',
-    latitude: location.latitude ?? null,
-    longitude: location.longitude ?? null,
-    providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
-    createdAt: location.createdAt || location.created_at || null,
-    updatedAt: location.updatedAt || location.updated_at || location.created_at || null,
+    id: normalized?.id || location.id || null,
+    status: normalizeLocationStatus(normalized?.status || location.status),
+    displayName: normalized?.displayName || location.displayName || location.display_name || '',
+    placeText: normalized?.placeText || location.placeText || location.place_text || location.displayName || location.display_name || '',
+    addressText: normalized?.addressText || location.addressText || location.address_text || '',
+    latitude: normalized?.latitude ?? location.latitude ?? null,
+    longitude: normalized?.longitude ?? location.longitude ?? null,
+    providerPlaceId: normalized?.providerPlaceId || location.providerPlaceId || location.provider_place_id || null,
+    contentHash: normalized?.contentHash || location.contentHash || location.content_hash || locationContentHash(location),
+    createdAt: normalized?.createdAt || location.createdAt || location.created_at || null,
+    updatedAt: normalized?.updatedAt || location.updatedAt || location.updated_at || location.createdAt || location.created_at || null,
   };
 }
 
@@ -707,7 +758,7 @@ export async function deleteUserData(userId) {
     const { error: locationsErr } = await jobdoneDb
       .from('locations')
       .delete()
-      .eq('user_id', userId);
+      .eq('userId', userId);
     if (locationsErr) throw locationsErr;
 
     const { error: tagCategoriesErr } = await jobdoneDb
@@ -842,8 +893,10 @@ export async function getEntries(userId) {
     const locationsByEntry = new Map();
     for (const link of locationLinks || []) {
       if (!link.locations) continue;
+      const location = assertLocationRow(link.locations);
+      if (!isActiveLocationStatus(location.status)) continue;
       const list = locationsByEntry.get(link.entry_id) || [];
-      list.push(assertLocationRow(link.locations));
+      list.push(location);
       locationsByEntry.set(link.entry_id, list);
     }
 
@@ -929,54 +982,10 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
   if (!entryId || !Array.isArray(locations) || locations.length === 0) return [];
 
   const saved = [];
-  const existingLocations = await getLocations(userId);
   for (const input of locations) {
-    const location = normalizeLocation(input);
-    if (!location) continue;
-
-    let row = null;
-    if (location.local_id) {
-      const { data: existing, error: existingError } = await jobdoneDb
-      .from('locations')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('local_id', location.local_id)
-        .limit(1);
-      if (existingError) throw existingError;
-      row = existing?.[0] ? assertLocationRow(existing[0]) : null;
-    }
-
-    if (!row) {
-      row = findReusableLocation(existingLocations, location);
-    }
-
-    if (!row) {
-      const { data, error } = await jobdoneDb
-      .from('locations')
-        .insert([{ user_id: userId, ...location, created_at: new Date(input.createdAt || input.created_at || Date.now()).toISOString() }])
-        .select()
-        .single();
-      if (error) throw error;
-      row = assertLocationRow(data);
-      existingLocations.push(row);
-    } else {
-      const { data, error } = await jobdoneDb
-      .from('locations')
-        .update({
-          status: location.status,
-          display_name: location.display_name || row.display_name,
-          place_text: location.place_text || row.place_text,
-          address_text: location.address_text || row.address_text,
-          latitude: location.latitude ?? row.latitude,
-          longitude: location.longitude ?? row.longitude,
-          updated_at: location.updated_at,
-        })
-        .eq('id', row.id)
-        .select()
-        .single();
-      if (error) throw error;
-      row = assertLocationRow(data);
-    }
+    const result = await saveLocationForReplica(userId, input);
+    const row = result.location;
+    if (!row?.id) continue;
 
     const { error: linkError } = await jobdoneDb
       .from('entry_locations')
@@ -995,58 +1004,68 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
 }
 
 export async function saveLocation(userId, input = {}) {
+  const result = await saveLocationForReplica(userId, input);
+  return result.location;
+}
+
+export async function saveLocationForReplica(userId, input = {}) {
   if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured, skipping location save');
-    return null;
+    return { location: null, aliases: [] };
   }
 
   const location = normalizeLocation(input);
-  if (!location) return null;
+  if (!location) return { location: null, aliases: [] };
 
-  const existingLocations = await getLocations(userId);
-  let row = null;
-  if (location.local_id) {
-    const { data: existing, error: existingError } = await jobdoneDb
-      .from('locations')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('local_id', location.local_id)
-      .limit(1);
-    if (existingError) throw existingError;
-    row = existing?.[0] ? assertLocationRow(existing[0]) : null;
-  }
+  const existingLocations = await getLocationRows(userId, { includeArchived: true });
+  const aliases = [];
+  const sameId = existingLocations.find(existing => existing.id === location.id);
+  if (sameId) {
+    if (location.contentHash === sameId.contentHash || timestampMs(location.updatedAt) <= timestampMs(sameId.updatedAt)) {
+      return { location: sameId, aliases };
+    }
 
-  if (!row) {
-    row = findReusableLocation(existingLocations, location);
-  }
-
-  if (!row) {
     const { data, error } = await jobdoneDb
       .from('locations')
-      .insert([{ user_id: userId, ...location, created_at: new Date(input.createdAt || input.created_at || Date.now()).toISOString() }])
+      .update({
+        status: location.status,
+        displayName: location.displayName || sameId.displayName,
+        placeText: location.placeText || sameId.placeText,
+        addressText: location.addressText || sameId.addressText,
+        latitude: location.latitude ?? sameId.latitude,
+        longitude: location.longitude ?? sameId.longitude,
+        providerPlaceId: location.providerPlaceId || sameId.providerPlaceId || null,
+        contentHash: location.contentHash,
+        identityKeys: location.identityKeys,
+        updatedAt: location.updatedAt,
+      })
+      .eq('userId', userId)
+      .eq('id', sameId.id)
       .select()
       .single();
     if (error) throw error;
-    return assertLocationRow(data);
+    return { location: assertLocationRow(data), aliases };
+  }
+
+  const duplicate = findReusableLocation(existingLocations, location);
+  if (duplicate?.id) {
+    const alias = await saveLocationAlias(userId, {
+      collection: 'locations',
+      fromClientId: location.id,
+      toClientId: duplicate.id,
+      reason: duplicate.contentHash === location.contentHash ? 'content_hash_match' : 'identity_key_match',
+    });
+    if (alias) aliases.push(alias);
+    return { location: duplicate, aliases };
   }
 
   const { data, error } = await jobdoneDb
-      .from('locations')
-    .update({
-      status: location.status,
-      local_id: row.local_id || location.local_id,
-      display_name: location.display_name || row.display_name,
-      place_text: location.place_text || row.place_text,
-      address_text: location.address_text || row.address_text,
-      latitude: location.latitude ?? row.latitude,
-      longitude: location.longitude ?? row.longitude,
-      updated_at: location.updated_at,
-    })
-    .eq('id', row.id)
+    .from('locations')
+    .insert([{ userId, ...location }])
     .select()
     .single();
   if (error) throw error;
-  return assertLocationRow(data);
+  return { location: assertLocationRow(data), aliases };
 }
 
 export async function saveEntryContacts(userId, entryId, contacts = []) {
@@ -1221,7 +1240,7 @@ export async function saveContact(userId, contactData) {
   return result.contact;
 }
 
-export async function saveContactAlias(userId, alias = {}) {
+export async function saveClientIdAlias(userId, alias = {}) {
   if (!jobdoneDb || !alias.fromClientId || !alias.toClientId || alias.fromClientId === alias.toClientId) return null;
 
   const row = {
@@ -1235,25 +1254,43 @@ export async function saveContactAlias(userId, alias = {}) {
 
   const { data, error } = await jobdoneDb
     .from('contactClientAliases')
-    .upsert([row], { onConflict: 'userId,fromClientId' })
+    .upsert([row], { onConflict: 'userId,collection,fromClientId' })
     .select()
     .single();
   if (error) throw error;
   return data;
 }
 
-export async function getContactAliases(userId) {
+export async function getClientIdAliases(userId, collection = null) {
   if (!jobdoneDb) return [];
-  const { data, error } = await jobdoneDb
+  let query = jobdoneDb
     .from('contactClientAliases')
     .select('*')
     .eq('userId', userId)
     .order('createdAt', { ascending: true });
+  if (collection) query = query.eq('collection', collection);
+  const { data, error } = await query;
   if (error) {
     if (error.code === '42P01' || /contactClientAliases/i.test(error.message || '')) return [];
     throw error;
   }
   return data || [];
+}
+
+export async function saveContactAlias(userId, alias = {}) {
+  return saveClientIdAlias(userId, { ...alias, collection: 'contacts' });
+}
+
+export async function getContactAliases(userId) {
+  return getClientIdAliases(userId, 'contacts');
+}
+
+export async function saveLocationAlias(userId, alias = {}) {
+  return saveClientIdAlias(userId, { ...alias, collection: 'locations' });
+}
+
+export async function getLocationAliases(userId) {
+  return getClientIdAliases(userId, 'locations');
 }
 
 export async function saveContactForReplica(userId, contactData) {
@@ -1393,20 +1430,62 @@ export async function pushReplicaContacts(userId, contacts = []) {
   return { contacts: saved, aliases };
 }
 
-export async function getLocations(userId) {
+export async function getLocationRows(userId, { includeArchived = false } = {}) {
   if (!jobdoneDb) {
     console.warn('[DB] Supabase not configured');
     return [];
   }
 
-  const { data, error } = await jobdoneDb
-      .from('locations')
+  let query = jobdoneDb
+    .from('locations')
     .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'confirmed')
-    .order('updated_at', { ascending: false });
+    .eq('userId', userId)
+    .order('updatedAt', { ascending: false });
+  if (!includeArchived) query = query.in('status', ['active', 'confirmed']);
+  const { data, error } = await query;
   if (error) throw error;
   return assertRows(data || [], assertLocationRow);
+}
+
+export async function getLocations(userId) {
+  return getLocationRows(userId, { includeArchived: false });
+}
+
+export async function getLocationManifest(userId) {
+  const locations = await getLocationRows(userId, { includeArchived: true });
+  const aliases = await getLocationAliases(userId);
+  return {
+    locations: locations.map(location => ({
+      id: location.id,
+      status: normalizeLocationStatus(location.status),
+      contentHash: location.contentHash || locationContentHash(location),
+      identityKeys: location.identityKeys || locationIdentityKeyList(location),
+      updatedAt: location.updatedAt || location.createdAt || null,
+    })),
+    aliases,
+  };
+}
+
+export async function pullLocationsByClientIds(userId, ids = []) {
+  if (!jobdoneDb || !ids.length) return [];
+  const { data, error } = await jobdoneDb
+    .from('locations')
+    .select('*')
+    .eq('userId', userId)
+    .in('id', ids);
+  if (error) throw error;
+  return assertRows(data || [], assertLocationRow);
+}
+
+export async function pushReplicaLocations(userId, locations = []) {
+  const saved = [];
+  const aliases = [];
+  for (const location of locations) {
+    const result = await saveLocationForReplica(userId, location);
+    if (result.location) saved.push(result.location);
+    aliases.push(...(result.aliases || []));
+  }
+  return { locations: saved, aliases };
 }
 
 export function buildContactLocationCooccurrences(contactLinks = [], locationLinks = []) {
@@ -1434,8 +1513,8 @@ export function buildContactLocationCooccurrences(contactLinks = [], locationLin
         contactId: contact.id,
         contactLabel: contact.label,
         locationId: link.locations.id,
-        locationLabel: link.locations.display_name || link.locations.place_text,
-        locationPlaceText: link.locations.place_text || link.locations.display_name,
+        locationLabel: link.locations.displayName || link.locations.display_name || link.locations.placeText || link.locations.place_text,
+        locationPlaceText: link.locations.placeText || link.locations.place_text || link.locations.displayName || link.locations.display_name,
         locationLatitude: link.locations.latitude,
         locationLongitude: link.locations.longitude,
         count: 0,
@@ -1469,7 +1548,7 @@ export async function getContactLocationCooccurrences(userId) {
       .eq('user_id', userId),
     jobdoneDb
       .from('entry_locations')
-      .select('entry_id, created_at, locations(id, display_name, place_text, latitude, longitude)')
+      .select('entry_id, created_at, locations(*)')
       .eq('user_id', userId),
   ]);
 
@@ -1740,7 +1819,7 @@ async function attachEntryStructure(userId, entries = []) {
   const locationsByEntryId = new Map();
   for (const link of locationLinks) {
     const location = link.locations ? assertLocationRow(link.locations) : null;
-    if (!location || location.status !== 'confirmed') continue;
+    if (!location || !isActiveLocationStatus(location.status)) continue;
     if (!locationsByEntryId.has(link.entry_id)) locationsByEntryId.set(link.entry_id, []);
     locationsByEntryId.get(link.entry_id).push(location);
   }

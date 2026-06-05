@@ -1,7 +1,7 @@
 import { apiService } from './apiService.js';
 import { authService } from './authService.js';
 import { dbService } from './dbService.js';
-import { syncContactReplica } from './localReplicaService.js';
+import { syncContactReplica, syncLocationReplica } from './localReplicaService.js';
 import { syncService } from './syncService.js';
 
 function syncIssue(step, error) {
@@ -70,43 +70,13 @@ async function pullCloudEntries({ db, api }) {
   return pulled;
 }
 
-async function syncLocations({ db, api, sync }, issues) {
-  let pushed = 0;
-  let pulled = 0;
-
-  try {
-    const unsyncedLocations = await db.getLocationsUnsynced();
-    const locationSyncResult = await sync.syncLocations(unsyncedLocations);
-    const syncedLocations = locationSyncResult?.locations || [];
-    for (const cloudLocation of syncedLocations) {
-      await db.upsertCloudLocation(cloudLocation);
-      pushed += 1;
-    }
-  } catch (error) {
-    console.warn('[Sync] Failed to push locations:', error);
-    issues.push(syncIssue('locations_push', error));
-  }
-
-  try {
-    const cloudLocations = await api.getCloudLocations();
-    for (const cloudLocation of cloudLocations) {
-      await db.upsertCloudLocation(cloudLocation);
-      pulled += 1;
-    }
-  } catch (error) {
-    console.warn('[Sync] Failed to pull locations:', error);
-    issues.push(syncIssue('locations_pull', error));
-  }
-
-  return { pushed, pulled };
-}
-
 export async function syncConfirmedData({
   db = dbService,
   api = apiService,
   sync = syncService,
   auth = authService,
   contactReplicaSync = syncContactReplica,
+  locationReplicaSync = syncLocationReplica,
   reason = 'manual',
 } = {}) {
   if (!auth.isLoggedIn()) {
@@ -140,7 +110,13 @@ export async function syncConfirmedData({
     issues.push(syncIssue('contacts_replica', error));
   }
 
-  result.locations = await syncLocations({ db, api, sync }, issues);
+  try {
+    result.locations = await locationReplicaSync({ db, api, auth });
+  } catch (error) {
+    console.warn('[Sync] Failed to sync locations:', error);
+    issues.push(syncIssue('locations_replica', error));
+  }
+
   result.ok = issues.length === 0;
   return result;
 }

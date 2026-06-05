@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {
   parseContactPullPayload,
   parseContactsPayload,
-  parseLocationsPayload,
 } from '../contracts/syncRequests.js';
+import { parseLocationReplicaPushRequest } from '../contracts/locationReplica.js';
+
+const LOCATION_ID = '01973e36-4c80-7abc-8a72-111111111111';
 
 describe('Sync request contracts', () => {
-  test('accepts canonical Contact, Contact pull, and Location sync payloads', () => {
+  test('accepts canonical Contact, Contact pull, and Location Replica payloads', () => {
     assert.equal(parseContactsPayload({
       contacts: [{
         id: 'contact-local-1',
@@ -29,17 +31,16 @@ describe('Sync request contracts', () => {
 
     assert.equal(parseContactPullPayload({ clientIds: ['contact-local-1'] }).success, true);
 
-    assert.equal(parseLocationsPayload({
+    assert.equal(parseLocationReplicaPushRequest({
       locations: [{
-        id: 'location-local-1',
-        localId: 'location-local-1',
-        remoteId: null,
-        status: 'confirmed',
+        id: LOCATION_ID,
+        status: 'active',
         displayName: '14 Bell Street',
         placeText: '14 Bell Street',
         addressText: '',
         latitude: 53.3498,
         longitude: -6.2603,
+        contentHash: 'hash-a',
         createdAt: '2026-05-17T01:00:00.000Z',
         updatedAt: '2026-05-17T01:01:00.000Z',
       }],
@@ -51,8 +52,8 @@ describe('Sync request contracts', () => {
       contacts: [{ displayName: 'Ann Smith', created_at: '2026-05-17T01:00:00.000Z' }],
     }).error, 'Use contacts.0.createdAt, not contacts.0.created_at');
 
-    assert.equal(parseLocationsPayload({
-      locations: [{ displayName: '14 Bell Street', display_name: '14 Bell Street' }],
+    assert.equal(parseLocationReplicaPushRequest({
+      locations: [{ id: LOCATION_ID, displayName: '14 Bell Street', display_name: '14 Bell Street' }],
     }).error, 'Use locations.0.displayName, not locations.0.display_name');
   });
 });

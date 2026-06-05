@@ -59,14 +59,17 @@ describe('Postgres adapter value mapping', () => {
     assert.equal(valueForColumn('embedding', [0.1, 0.2]), '[0.1,0.2]');
   });
 
-  test('database row assertions reject app-shape fields at the adapter seam', () => {
+  test('database row assertions reject wrong casing at the adapter seam', () => {
     assert.throws(
       () => assertEntryRow({ id: 'entry-1', createdAt: '2026-06-05T12:00:00.000Z' }),
       /Entry database row contract failed/
     );
-    assert.throws(
+    assert.doesNotThrow(
       () => assertLocationRow({ id: 'location-1', displayName: '14 Bell Street' }),
-      /Location database row contract failed/
+    );
+    assert.throws(
+      () => assertLocationRow({ id: 'location-1', display_name: '14 Bell Street' }),
+      /Location database row contract failed/,
     );
     assert.throws(
       () => assertContactRow({ id: 'contact-1', display_name: 'Ann Smith' }),
@@ -97,13 +100,13 @@ describe('Cloud Entry response mapping', () => {
           created_at: '2026-05-17T00:55:00.000Z',
         }],
         locations: [{
-          id: 'location-cloud-1',
-          local_id: 'location-local-1',
-          display_name: '14 Bell Street',
-          place_text: '14 Bell Street',
-          address_text: '14 Bell Street, Dublin',
+          id: '01973e36-4c80-7abc-8a72-111111111111',
+          displayName: '14 Bell Street',
+          placeText: '14 Bell Street',
+          addressText: '14 Bell Street, Dublin',
           latitude: 53.3498,
           longitude: -6.2603,
+          status: 'active',
         }],
         contacts: [{
           id: 'contact-cloud-1',
@@ -148,14 +151,13 @@ describe('Cloud Entry response mapping', () => {
         createdAt: '2026-05-17T00:55:00.000Z',
       }],
       locations: [{
-        id: 'location-local-1',
-        remoteId: 'location-cloud-1',
+        id: '01973e36-4c80-7abc-8a72-111111111111',
         displayName: '14 Bell Street',
         placeText: '14 Bell Street',
         addressText: '14 Bell Street, Dublin',
         latitude: 53.3498,
         longitude: -6.2603,
-        status: 'confirmed',
+        status: 'active',
         createdAt: null,
         updatedAt: null,
       }],
@@ -204,15 +206,16 @@ describe('Cloud Entry response mapping', () => {
       updatedAt: '2026-05-17T01:01:00.000Z',
     });
     const location = toCanonicalLocationRecord({
-      id: 'location-cloud-1',
-      local_id: 'location-local-1',
-      display_name: '14 Bell Street',
-      place_text: '14 Bell Street',
-      address_text: '14 Bell Street, Dublin',
+      id: '01973e36-4c80-7abc-8a72-111111111111',
+      status: 'active',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '14 Bell Street, Dublin',
       latitude: 53.3498,
       longitude: -6.2603,
-      created_at: '2026-05-17T01:00:00.000Z',
-      updated_at: '2026-05-17T01:01:00.000Z',
+      contentHash: 'hash-a',
+      createdAt: '2026-05-17T01:00:00.000Z',
+      updatedAt: '2026-05-17T01:01:00.000Z',
     });
 
     assert.equal(contact.displayName, 'Ann Smith');
@@ -223,20 +226,20 @@ describe('Cloud Entry response mapping', () => {
     assert.equal(Object.prototype.hasOwnProperty.call(contact, 'primary_phone'), false);
 
     assert.deepEqual(location, {
-      id: 'location-local-1',
-      remoteId: 'location-cloud-1',
-      status: 'confirmed',
+      id: '01973e36-4c80-7abc-8a72-111111111111',
+      status: 'active',
       displayName: '14 Bell Street',
       placeText: '14 Bell Street',
       addressText: '14 Bell Street, Dublin',
       latitude: 53.3498,
       longitude: -6.2603,
       providerPlaceId: null,
+      contentHash: 'hash-a',
       createdAt: '2026-05-17T01:00:00.000Z',
       updatedAt: '2026-05-17T01:01:00.000Z',
     });
     assert.equal(Object.prototype.hasOwnProperty.call(location, 'display_name'), false);
-    assert.equal(Object.prototype.hasOwnProperty.call(location, 'local_id'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(location, 'remoteId'), false);
   });
 });
 
@@ -304,31 +307,41 @@ describe('Database co-occurrence derivation', () => {
 });
 
 describe('Location identity matching', () => {
-  test('matches exact normalized display labels', () => {
-    const existing = { id: 'loc-1', display_name: '14 Bell Street' };
+  test('does not match display-only labels', () => {
+    const existing = { id: 'loc-1', displayName: '14 Bell Street' };
     const incoming = { displayName: '  14   bell street  ' };
 
-    assert.equal(locationsHaveStrongIdentityMatch(existing, incoming), true);
-    assert.equal(findReusableLocation([existing], incoming), existing);
+    assert.equal(locationsHaveStrongIdentityMatch(existing, incoming), false);
+    assert.equal(findReusableLocation([existing], incoming), null);
   });
 
-  test('matches postcode plus first address line', () => {
+  test('matches display label plus address text', () => {
+    const existing = {
+      id: 'loc-1',
+      displayName: '14 Bell Street',
+      addressText: '14 Bell Street, London SW1A 1AA',
+    };
+    const incoming = {
+      displayName: '14 Bell Street',
+      addressText: '14 Bell Street, London SW1A 1AA',
+    };
     assert.equal(locationsHaveStrongIdentityMatch(
-      { display_name: '14 Bell Street', address_text: '14 Bell Street, London SW1A 1AA' },
-      { displayName: 'Bell Street job', addressText: '14 Bell Street, SW1A1AA' }
+      existing,
+      incoming
     ), true);
+    assert.equal(findReusableLocation([existing], incoming), existing);
   });
 
   test('matches provider place ids when present', () => {
     assert.equal(locationsHaveStrongIdentityMatch(
-      { display_name: 'Old provider label', provider_place_id: 'places/abc123' },
+      { displayName: 'Old provider label', providerPlaceId: 'places/abc123' },
       { displayName: 'New provider label', providerPlaceId: 'places/abc123' }
     ), true);
   });
 
   test('does not match nearby-looking but different labels without strong identity evidence', () => {
     assert.equal(locationsHaveStrongIdentityMatch(
-      { display_name: '14 Bell Street', latitude: 51.5, longitude: -0.1 },
+      { displayName: '14 Bell Street', latitude: 51.5, longitude: -0.1 },
       { displayName: '16 Bell Street', latitude: 51.50001, longitude: -0.10001 }
     ), false);
   });
@@ -364,7 +377,9 @@ describe('SQL-first Recall', () => {
     assert.match(sql, /c\."displayName"/);
     assert.match(sql, /c\."userId" = ec\.user_id/);
     assert.match(lowerSql, /c\.status = 'confirmed'/);
-    assert.match(lowerSql, /l\.status = 'confirmed'/);
+    assert.match(sql, /l\."displayName"/);
+    assert.match(sql, /l\."userId" = el\.user_id/);
+    assert.match(lowerSql, /l\.status in \('active', 'confirmed'\)/);
     assert.match(lowerSql, /t\.status = 'confirmed'/);
     assert.match(lowerSql, /base\.summary/);
     assert.match(lowerSql, /match_reasons/);

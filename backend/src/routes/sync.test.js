@@ -29,13 +29,16 @@ async function buildApp(deps = {}) {
     pushReplicaContacts: async () => ({ contacts: [], aliases: [] }),
     getContactAliases: async () => [],
     saveContactAlias: async (userId, alias) => ({ userId, ...alias }),
+    getLocationManifest: async () => ({ locations: [], aliases: [] }),
+    pullLocationsByClientIds: async () => [],
+    pushReplicaLocations: async () => ({ locations: [], aliases: [] }),
+    getLocationAliases: async () => [],
+    saveLocationAlias: async (userId, alias) => ({ userId, collection: 'locations', ...alias }),
     getEntryByCreatedAt: async () => null,
     saveContextClues: async () => [],
     saveEntryLocations: async () => [],
     saveEntryContacts: async () => [],
     saveEntryTags: async () => [],
-    getLocations: async () => [],
-    saveLocation: async () => null,
     deleteUserData: async () => ({ success: true }),
     ...deps,
   });
@@ -874,104 +877,116 @@ describe('SyncRoute Contacts sync', () => {
   });
 });
 
-describe('SyncRoute Locations sync', () => {
-  test('saves standalone location updates for authenticated user', async () => {
-    let saveArgs;
-    const savedLocation = {
-      id: 'cloud-location-1',
-      local_id: 'location-local-1',
-      display_name: '14 Bell Street',
-      latitude: 53.3498,
-      longitude: -6.2603,
-    };
+describe('SyncRoute Location Replica sync', () => {
+  const locationId = '01973e36-4c80-7abc-8a72-111111111111';
+
+  test('returns Location Replica manifest for authenticated user', async () => {
     const app = await buildApp({
-      saveLocation: async (userId, location) => {
-        saveArgs = { userId, location };
-        return savedLocation;
+      getLocationManifest: async (userId, localManifest) => {
+        assert.equal(userId, 'user-1');
+        assert.equal(localManifest[0].id, locationId);
+        return {
+          locations: [{
+            id: locationId,
+            status: 'active',
+            contentHash: 'hash-a',
+            identityKeys: ['label-address:bell:14 bell street'],
+            updatedAt: '2026-05-17T01:01:00.000Z',
+          }],
+          aliases: [],
+        };
       },
     });
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/sync/locations',
+      url: '/api/local-replica/locations/manifest',
       payload: {
         locations: [{
-          id: 'location-local-1',
-          displayName: '14 Bell Street',
-          latitude: 53.3498,
-          longitude: -6.2603,
+          id: locationId,
+          status: 'active',
+          contentHash: 'hash-a',
+          identityKeys: ['label-address:bell:14 bell street'],
+          updatedAt: '2026-05-17T01:01:00.000Z',
         }],
       },
     });
 
     assert.equal(res.statusCode, 200);
-    assert.equal(saveArgs.userId, 'user-1');
-    assert.equal(saveArgs.location.id, 'location-local-1');
-    assert.deepEqual(JSON.parse(res.body).locations[0], {
-      id: 'location-local-1',
-      remoteId: 'cloud-location-1',
-      status: 'confirmed',
-      displayName: '14 Bell Street',
-      placeText: '14 Bell Street',
-      addressText: '',
-      latitude: 53.3498,
-      longitude: -6.2603,
-      providerPlaceId: null,
-      createdAt: null,
-      updatedAt: null,
-    });
+    assert.equal(JSON.parse(res.body).locations[0].id, locationId);
   });
 
-  test('rejects legacy Location request fields before downstream processing', async () => {
-    let saveCalled = false;
+  test('pushes canonical Location Replica records without backend IDs', async () => {
+    let pushed;
     const app = await buildApp({
-      saveLocation: async () => {
-        saveCalled = true;
-        return null;
+      pushReplicaLocations: async (userId, locations) => {
+        pushed = { userId, locations };
+        return { locations, aliases: [] };
       },
     });
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/sync/locations',
+      url: '/api/local-replica/locations/push',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        locations: [{ displayName: '14 Bell Street', display_name: '14 Bell Street' }],
+        locations: [{
+          id: locationId,
+          status: 'active',
+          displayName: '14 Bell Street',
+          placeText: '14 Bell Street',
+          addressText: '',
+          latitude: 53.3498,
+          longitude: -6.2603,
+          providerPlaceId: null,
+          contentHash: 'hash-a',
+          createdAt: '2026-05-17T01:00:00.000Z',
+          updatedAt: '2026-05-17T01:01:00.000Z',
+        }],
+      }),
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(pushed.userId, 'user-1');
+    assert.equal(pushed.locations[0].id, locationId);
+    assert.equal(Object.prototype.hasOwnProperty.call(JSON.parse(res.body).locations[0], 'remoteId'), false);
+  });
+
+  test('rejects legacy Location Replica request fields before downstream processing', async () => {
+    let pushCalled = false;
+    const app = await buildApp({
+      pushReplicaLocations: async () => {
+        pushCalled = true;
+        return { locations: [], aliases: [] };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/local-replica/locations/push',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        locations: [{
+          id: locationId,
+          status: 'active',
+          displayName: '14 Bell Street',
+          display_name: '14 Bell Street',
+        }],
       }),
     });
 
     assert.equal(res.statusCode, 400);
     assert.equal(JSON.parse(res.body).error, 'Use locations.0.displayName, not locations.0.display_name');
-    assert.equal(saveCalled, false);
+    assert.equal(pushCalled, false);
   });
 
-  test('fetches cloud locations for authenticated user', async () => {
-    const cloudLocations = [{ id: 'location-cloud-1', display_name: '14 Bell Street' }];
-    const app = await buildApp({
-      getLocations: async (userId) => {
-        assert.equal(userId, 'user-1');
-        return cloudLocations;
-      },
-    });
+  test('fences old Location sync endpoints', async () => {
+    const app = await buildApp();
 
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/sync/locations',
-    });
+    const post = await app.inject({ method: 'POST', url: '/api/sync/locations', payload: { locations: [] } });
+    const get = await app.inject({ method: 'GET', url: '/api/sync/locations' });
 
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(JSON.parse(res.body).locations, [{
-      id: 'location-cloud-1',
-      remoteId: 'location-cloud-1',
-      status: 'confirmed',
-      displayName: '14 Bell Street',
-      placeText: '14 Bell Street',
-      addressText: '',
-      latitude: null,
-      longitude: null,
-      providerPlaceId: null,
-      createdAt: null,
-      updatedAt: null,
-    }]);
+    assert.equal(post.statusCode, 410);
+    assert.equal(get.statusCode, 410);
   });
 });

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/services/*.test.js",
+    "test": "node --test src/services/*.test.js src/contracts/*.test.js",
     "qa:spikes": "playwright test --config qa/playwright.spikes.config.js",
     "qa:smoke": "playwright test --config qa/playwright.config.js",
     "preview": "vite preview"

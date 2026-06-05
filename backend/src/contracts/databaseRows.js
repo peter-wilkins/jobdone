@@ -22,18 +22,19 @@ export const databaseRowSchemas = {
   }).strict(),
 
   locationRowSchema: z.object({
-    id: optionalString,
-    user_id: z.string().optional(),
-    local_id: optionalString,
+    id: z.string(),
+    userId: z.string().optional(),
     status: z.string().optional(),
-    display_name: z.string().optional(),
-    place_text: z.string().optional(),
-    address_text: z.string().optional(),
+    displayName: z.string().optional(),
+    placeText: z.string().optional(),
+    addressText: z.string().optional(),
     latitude: optionalNumber,
     longitude: optionalNumber,
-    provider_place_id: optionalString,
-    created_at: optionalTimestamp,
-    updated_at: optionalTimestamp,
+    providerPlaceId: optionalString,
+    contentHash: optionalString,
+    identityKeys: optionalStringArray,
+    createdAt: optionalTimestamp,
+    updatedAt: optionalTimestamp,
   }).strict(),
 
   contactRowSchema: z.object({

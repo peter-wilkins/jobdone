@@ -104,8 +104,6 @@ export function buildSyncRequestSchemas(z) {
 
   const locationRequestSchema = z.object({
     id: optionalString,
-    localId: optionalString,
-    remoteId: optionalString,
     status: z.string().optional().default('confirmed'),
     displayName: z.string(),
     placeText: z.string().optional().default(''),

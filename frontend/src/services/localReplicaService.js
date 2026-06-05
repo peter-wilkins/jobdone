@@ -69,6 +69,130 @@ export function contactManifestRow(contact = {}) {
   };
 }
 
+function normalizeLocationStatus(status) {
+  if (status === 'archived') return 'archived';
+  return 'active';
+}
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function roundedCoordinate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? Number(number.toFixed(6)) : null;
+}
+
+export function canonicalLocationForHash(location = {}) {
+  return {
+    status: normalizeLocationStatus(location.status),
+    displayName: String(location.displayName || '').trim(),
+    placeText: String(location.placeText || '').trim(),
+    addressText: String(location.addressText || '').trim(),
+    latitude: roundedCoordinate(location.latitude),
+    longitude: roundedCoordinate(location.longitude),
+    providerPlaceId: location.providerPlaceId || null,
+  };
+}
+
+export function locationContentHash(location = {}) {
+  return stableHash(canonicalLocationForHash(location));
+}
+
+export function locationIdentityKeys(location = {}) {
+  const providerPlaceId = String(location.providerPlaceId || '').trim();
+  const displayName = normalizeLocationText(location.displayName || location.placeText || location.addressText);
+  const addressText = normalizeLocationText(location.addressText);
+  const latitude = roundedCoordinate(location.latitude);
+  const longitude = roundedCoordinate(location.longitude);
+  return unique([
+    providerPlaceId ? `provider:${providerPlaceId}` : '',
+    displayName && addressText ? `label-address:${displayName}:${addressText}` : '',
+    displayName && latitude !== null && longitude !== null ? `label-coordinates:${displayName}:${latitude}:${longitude}` : '',
+  ]);
+}
+
+export function locationManifestRow(location = {}) {
+  return {
+    id: location.id,
+    status: normalizeLocationStatus(location.status),
+    contentHash: location.contentHash || locationContentHash(location),
+    identityKeys: location.identityKeys || locationIdentityKeys(location),
+    updatedAt: location.updatedAt || location.updated_at || location.createdAt || location.created_at || null,
+  };
+}
+
+function isNewer(leftUpdatedAt, rightUpdatedAt) {
+  const left = new Date(leftUpdatedAt || 0).getTime();
+  const right = new Date(rightUpdatedAt || 0).getTime();
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
+  return left > right;
+}
+
+export function diffLocationManifest({ localLocations = [], remoteManifest = [], aliases = [] } = {}) {
+  const aliasFrom = new Set(aliases.map(alias => alias.fromClientId).filter(Boolean));
+  const localById = new Map(localLocations.map(location => [location.id, location]));
+  const remoteById = new Map(remoteManifest.map(row => [row.id, row]));
+  const remoteByIdentityKey = new Map();
+  for (const row of remoteManifest) {
+    for (const key of row.identityKeys || []) {
+      if (!remoteByIdentityKey.has(key)) remoteByIdentityKey.set(key, row);
+    }
+  }
+
+  const toPush = [];
+  const toPullIds = [];
+  const localAliases = [];
+
+  for (const location of localLocations) {
+    const row = locationManifestRow(location);
+    if (!row.id || aliasFrom.has(row.id)) continue;
+    const remote = remoteById.get(row.id);
+    if (remote) {
+      if (remote.contentHash !== row.contentHash && isNewer(row.updatedAt, remote.updatedAt)) {
+        toPush.push(location);
+      }
+      continue;
+    }
+
+    const duplicate = row.identityKeys
+      .map(key => remoteByIdentityKey.get(key))
+      .find(candidate => candidate?.id && candidate.id !== row.id);
+    if (duplicate) {
+      localAliases.push({
+        collection: 'locations',
+        fromClientId: row.id,
+        toClientId: duplicate.id,
+        reason: 'identity_key_match',
+      });
+      continue;
+    }
+
+    toPush.push(location);
+  }
+
+  for (const row of remoteManifest) {
+    if (!row.id || aliasFrom.has(row.id)) continue;
+    const local = localById.get(row.id);
+    if (!local) {
+      toPullIds.push(row.id);
+      continue;
+    }
+    const localRow = locationManifestRow(local);
+    if (row.contentHash !== localRow.contentHash && !isNewer(localRow.updatedAt, row.updatedAt)) {
+      toPullIds.push(row.id);
+    }
+  }
+
+  return { toPush, toPullIds, localAliases };
+}
+
 export function diffContactManifest({ localContacts = [], remoteManifest = [], aliases = [] } = {}) {
   const aliasFrom = new Set(aliases.map(alias => alias.fromClientId).filter(Boolean));
   const localByClientId = new Map(localContacts.map(contact => [contactClientId(contact), contact]));
@@ -100,6 +224,57 @@ export function diffContactManifest({ localContacts = [], remoteManifest = [], a
   }
 
   return { toPush, toPullClientIds, localAliases };
+}
+
+export async function syncLocationReplica({ db = dbService, api = apiService, auth = authService } = {}) {
+  if (!auth.isLoggedIn()) return { pushed: 0, pulled: 0, aliases: 0, skipped: true };
+
+  const localLocations = await db.getLocationsForReplica();
+  const localManifest = localLocations.map(locationManifestRow);
+  const remote = await api.getLocationReplicaManifest({ locations: localManifest });
+  const remoteManifest = remote.locations || [];
+  const remoteAliases = remote.aliases || [];
+  for (const alias of remoteAliases) await db.saveLocationAlias(alias);
+
+  const { toPush, toPullIds, localAliases } = diffLocationManifest({
+    localLocations,
+    remoteManifest,
+    aliases: remoteAliases,
+  });
+
+  for (const alias of localAliases) await db.saveLocationAlias(alias);
+  const savedLocalAliases = localAliases.length
+    ? await api.pushLocationAliases(localAliases)
+    : { aliases: [] };
+
+  const pushed = toPush.length ? await api.pushLocationsForReplica(toPush.map(location => ({
+    id: location.id,
+    status: normalizeLocationStatus(location.status),
+    displayName: location.displayName || '',
+    placeText: location.placeText || '',
+    addressText: location.addressText || '',
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    providerPlaceId: location.providerPlaceId || null,
+    contentHash: locationContentHash(location),
+    createdAt: location.created_at || location.createdAt || null,
+    updatedAt: location.updated_at || location.updatedAt || location.created_at || location.createdAt || null,
+  }))) : { locations: [], aliases: [] };
+
+  const pulled = toPullIds.length ? await api.pullLocationsForReplica(toPullIds) : { locations: [], aliases: [] };
+  const aliases = [...(savedLocalAliases.aliases || []), ...(pushed.aliases || []), ...(pulled.aliases || [])];
+  for (const alias of aliases) await db.saveLocationAlias(alias);
+
+  for (const location of [...(pushed.locations || []), ...(pulled.locations || [])]) {
+    await db.upsertCloudLocation(location);
+  }
+
+  return {
+    pushed: pushed.locations?.length || 0,
+    pulled: pulled.locations?.length || 0,
+    aliases: remoteAliases.length + localAliases.length + aliases.length,
+    skipped: false,
+  };
 }
 
 export async function syncContactReplica({ db = dbService, api = apiService, auth = authService } = {}) {

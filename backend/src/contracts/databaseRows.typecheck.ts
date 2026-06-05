@@ -23,22 +23,24 @@ const entryRowWithAppShape: EntryRow = {
 
 const locationRow: LocationRow = {
   id: 'location-cloud-1',
-  local_id: 'location-local-1',
-  status: 'confirmed',
-  display_name: '14 Bell Street',
-  place_text: 'Workshop',
-  address_text: '14 Bell Street, Testville',
+  userId: 'user-1',
+  status: 'active',
+  displayName: '14 Bell Street',
+  placeText: 'Workshop',
+  addressText: '14 Bell Street, Testville',
   latitude: 51.5,
   longitude: -0.1,
-  provider_place_id: 'google-place-1',
-  created_at: '2026-06-05T12:00:00.000Z',
-  updated_at: '2026-06-05T12:01:00.000Z',
+  providerPlaceId: 'google-place-1',
+  contentHash: 'hash-1',
+  identityKeys: ['provider:google-place-1'],
+  createdAt: '2026-06-05T12:00:00.000Z',
+  updatedAt: '2026-06-05T12:01:00.000Z',
 };
 
 const locationRowWithAppShape: LocationRow = {
   id: 'location-cloud-1',
-  // @ts-expect-error Location DB rows use display_name until the locations table is converted.
-  displayName: '14 Bell Street',
+  // @ts-expect-error Location DB rows use providerPlaceId, not provider_place_id.
+  provider_place_id: 'google-place-1',
 };
 
 const contactRow: ContactRow = {

@@ -29,11 +29,16 @@ export function locationIdentityKeys(location = {}) {
   const addressLine = normalizeLocationIdentityText(firstAddressLine(addressText || placeText || displayName)
     .replace(new RegExp(postcode, 'i'), ''));
   const display = normalizeLocationIdentityText(displayName || placeText || addressText);
+  const latitude = location.latitude === null || location.latitude === undefined ? null : Number(location.latitude);
+  const longitude = location.longitude === null || location.longitude === undefined ? null : Number(location.longitude);
+  const coordinates = Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? `${latitude.toFixed(6)}:${longitude.toFixed(6)}`
+    : '';
 
   return {
     provider: providerPlaceId ? `provider:${providerPlaceId}` : '',
-    address: postcode && addressLine ? `address:${postcode}:${addressLine}` : '',
-    display: display ? `display:${display}` : '',
+    address: display && postcode && addressLine ? `address:${display}:${postcode}:${addressLine}` : '',
+    coordinates: display && coordinates ? `coordinates:${display}:${coordinates}` : '',
   };
 }
 
@@ -43,7 +48,7 @@ export function locationsHaveStrongIdentityMatch(left = {}, right = {}) {
   return Boolean(
     (leftKeys.provider && leftKeys.provider === rightKeys.provider) ||
     (leftKeys.address && leftKeys.address === rightKeys.address) ||
-    (leftKeys.display && leftKeys.display === rightKeys.display)
+    (leftKeys.coordinates && leftKeys.coordinates === rightKeys.coordinates)
   );
 }
 

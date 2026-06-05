@@ -5,18 +5,18 @@ import {
   locationsHaveStrongIdentityMatch,
 } from './locationIdentityService.js';
 
-test('reuses a Location with an exact normalized display label', () => {
+test('does not reuse a Location with only an exact normalized display label', () => {
   const existing = { id: 'location-1', displayName: '14 Bell Street' };
   const incoming = { displayName: '14   bell street' };
 
-  assert.equal(locationsHaveStrongIdentityMatch(existing, incoming), true);
-  assert.equal(findReusableLocation([existing], incoming), existing);
+  assert.equal(locationsHaveStrongIdentityMatch(existing, incoming), false);
+  assert.equal(findReusableLocation([existing], incoming), null);
 });
 
-test('reuses a Location with the same postcode and first address line', () => {
+test('reuses a Location with the same display label and address text', () => {
   assert.equal(locationsHaveStrongIdentityMatch(
     { displayName: '14 Bell Street', addressText: '14 Bell Street, London SW1A 1AA' },
-    { displayName: 'Bell Street job', addressText: '14 Bell Street, SW1A1AA' }
+    { displayName: '14 Bell Street', addressText: '14 Bell Street, London SW1A 1AA' }
   ), true);
 });
 
@@ -32,4 +32,11 @@ test('does not silently merge nearby but distinct labels', () => {
     { displayName: '14 Bell Street', latitude: 51.5, longitude: -0.1 },
     { displayName: '16 Bell Street', latitude: 51.50001, longitude: -0.10001 }
   ), false);
+});
+
+test('reuses a Location with the same display label and coordinates', () => {
+  assert.equal(locationsHaveStrongIdentityMatch(
+    { displayName: '14 Bell Street', latitude: 51.5, longitude: -0.1 },
+    { displayName: '14 bell street', latitude: 51.5000001, longitude: -0.1000001 }
+  ), true);
 });

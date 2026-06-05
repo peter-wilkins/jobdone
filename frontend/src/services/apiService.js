@@ -9,8 +9,15 @@ import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
 import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
-import { parseContactPullPayload, parseContactsPayload, parseLocationsPayload } from '../contracts/syncRequests.js';
-import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
+import {
+  parseLocationReplicaManifestRequest,
+  parseLocationReplicaManifestResponse,
+  parseLocationReplicaPushRequest,
+  parseLocationReplicaPullRequest,
+  parseLocationReplicaRecordsResponse,
+} from '../contracts/locationReplica.js';
+import { parseContactPullPayload, parseContactsPayload } from '../contracts/syncRequests.js';
+import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse } from '../contracts/syncResponses.js';
 
 const ENV = import.meta.env || {};
 
@@ -195,7 +202,7 @@ export class APIService {
       const error = await response.json();
       throw new Error(error.error || 'Failed to save transcription evaluation');
     }
-    return typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
+      return await response.json();
   }
 
   /**
@@ -294,18 +301,47 @@ export class APIService {
     return response.json();
   }
 
-  async syncLocations(locations) {
-    const payload = typedSyncRequest(parseLocationsPayload({ locations }), 'Invalid locations sync payload');
-    const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
+  async getLocationReplicaManifest(payload = { locations: [] }) {
+    const body = typedSyncRequest(parseLocationReplicaManifestRequest(payload), 'Invalid Location Replica manifest request');
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/locations/manifest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Locations sync failed');
-    }
-    return typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
+    if (!response.ok) await throwApiError(response, 'Location Replica manifest failed');
+    return typedSyncResponse(parseLocationReplicaManifestResponse(await response.json()), 'Invalid Location Replica manifest response');
+  }
+
+  async pushLocationsForReplica(locations) {
+    const body = typedSyncRequest(parseLocationReplicaPushRequest({ locations }), 'Invalid Location Replica push request');
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/locations/push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) await throwApiError(response, 'Location Replica push failed');
+    return typedSyncResponse(parseLocationReplicaRecordsResponse(await response.json()), 'Invalid Location Replica push response');
+  }
+
+  async pullLocationsForReplica(ids) {
+    const body = typedSyncRequest(parseLocationReplicaPullRequest({ ids }), 'Invalid Location Replica pull request');
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/locations/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) await throwApiError(response, 'Location Replica pull failed');
+    return typedSyncResponse(parseLocationReplicaRecordsResponse(await response.json()), 'Invalid Location Replica pull response');
+  }
+
+  async pushLocationAliases(aliases) {
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/locations/aliases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ aliases }),
+    });
+    if (!response.ok) await throwApiError(response, 'Location Replica alias push failed');
+    return response.json();
   }
 
   async lookupLocations(query) {
@@ -331,17 +367,6 @@ export class APIService {
     } catch {
       return [];
     }
-  }
-
-  async getCloudLocations() {
-    const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
-      headers: authHeader(),
-    });
-    if (!response.ok) {
-      await throwApiError(response, 'Failed to fetch cloud locations');
-    }
-    const result = typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
-    return result.locations || [];
   }
 
   async predictStructure({ entryData, contextClues = [] }) {
