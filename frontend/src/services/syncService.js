@@ -2,7 +2,7 @@ import { apiService } from './apiService.js';
 import { authService } from './authService.js';
 import { dbService } from './dbService.js';
 import { readyPhotoAttachments } from './photoAttachmentService.js';
-import { parseEntrySyncPayload } from '../../../shared/contracts/entrySync.js';
+import { parseEntrySyncPayload } from '../contracts/entrySync.js';
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {

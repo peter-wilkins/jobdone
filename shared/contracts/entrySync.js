@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 export const legacyEntrySyncFieldReplacements = {
   created_at: 'createdAt',
   capture_id: 'captureId',
@@ -10,22 +8,24 @@ export const legacyEntrySyncFieldReplacements = {
   attachmentSnapshots: 'attachments',
 };
 
-const looseObjectSchema = z.record(z.string(), z.unknown());
+export function buildEntrySyncPayloadSchema(z) {
+  const looseObjectSchema = z.record(z.string(), z.unknown());
 
-export const entrySyncPayloadSchema = z.object({
-  entryData: z.object({
-    id: z.string().optional(),
-    captureId: z.string().nullable().optional(),
-    transcript: z.string().nullable().optional(),
-    summary: z.string().min(1, 'entryData.summary required'),
-    createdAt: z.string().min(1, 'entryData.createdAt required'),
-    contextClues: z.array(looseObjectSchema).default([]),
-    locations: z.array(looseObjectSchema).default([]),
-    contacts: z.array(looseObjectSchema).default([]),
-    tags: z.array(looseObjectSchema).default([]),
-    attachments: z.array(looseObjectSchema).default([]),
-  }).strict(),
-}).strict();
+  return z.object({
+    entryData: z.object({
+      id: z.string().optional(),
+      captureId: z.string().nullable().optional(),
+      transcript: z.string().nullable().optional(),
+      summary: z.string().min(1, 'entryData.summary required'),
+      createdAt: z.string().min(1, 'entryData.createdAt required'),
+      contextClues: z.array(looseObjectSchema).default([]),
+      locations: z.array(looseObjectSchema).default([]),
+      contacts: z.array(looseObjectSchema).default([]),
+      tags: z.array(looseObjectSchema).default([]),
+      attachments: z.array(looseObjectSchema).default([]),
+    }).strict(),
+  }).strict();
+}
 
 function formatPath(path = []) {
   return path.length ? path.join('.') : 'payload';
@@ -47,7 +47,7 @@ export function legacyEntrySyncFieldErrors(entryData = {}) {
     .map(([oldName, newName]) => `Use entryData.${newName}, not entryData.${oldName}`);
 }
 
-export function parseEntrySyncPayload(payload) {
+export function parseEntrySyncPayloadWithSchema(entrySyncPayloadSchema, payload) {
   const legacyErrors = legacyEntrySyncFieldErrors(payload?.entryData);
   if (legacyErrors.length) {
     return {
@@ -68,4 +68,9 @@ export function parseEntrySyncPayload(payload) {
     error: errors[0] || 'Invalid entry sync payload',
     errors,
   };
+}
+
+export function createEntrySyncParser(z) {
+  const entrySyncPayloadSchema = buildEntrySyncPayloadSchema(z);
+  return payload => parseEntrySyncPayloadWithSchema(entrySyncPayloadSchema, payload);
 }

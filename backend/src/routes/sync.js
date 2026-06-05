@@ -1,7 +1,7 @@
 import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
-import { parseEntrySyncPayload } from '../../../shared/contracts/entrySync.js';
+import { parseEntrySyncPayload } from '../contracts/entrySync.js';
 
 function validateTagLabel(value) {
   if (/[\p{C}]/u.test(String(value || ''))) {

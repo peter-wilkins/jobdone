@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseEntrySyncPayload } from '../../../shared/contracts/entrySync.js';
+import { parseEntrySyncPayload } from '../contracts/entrySync.js';
 
 describe('Entry sync contract', () => {
   test('accepts canonical entryData payloads', () => {
