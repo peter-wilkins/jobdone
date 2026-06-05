@@ -29,12 +29,11 @@ test('syncEntry sends canonical entryData fields to the API', async () => {
       id: 'entry-local-1',
       transcript: 'Fixed a dripping kitchen tap.',
       summary: 'Fixed dripping kitchen tap.',
-      created_at: '2026-05-17T01:00:00.000Z',
-      capture_id: 'legacy-capture-id',
-      locationSnapshots: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
-      contactSnapshots: [{ id: 'contact-local-1', displayName: 'Ann Smith' }],
-      tagSnapshots: [{ id: 'tag-local-1', label: 'Boiler Service' }],
-      attachmentSnapshots: [],
+      createdAt: '2026-05-17T01:00:00.000Z',
+      locations: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
+      contacts: [{ id: 'contact-local-1', displayName: 'Ann Smith' }],
+      tags: [{ id: 'tag-local-1', label: 'Boiler Service' }],
+      attachments: [],
     });
 
     assert.equal(payload.entryData.id, 'entry-local-1');

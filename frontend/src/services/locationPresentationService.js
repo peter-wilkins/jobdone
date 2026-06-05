@@ -50,7 +50,7 @@ export function entryMatchesLocation(entry = {}, location = {}) {
   if (!locationId) return false;
   if (Array.isArray(entry.locationIds) && entry.locationIds.includes(locationId)) return true;
 
-  return (entry.locationSnapshots || []).some(snapshot =>
+  return (entry.locations || []).some(snapshot =>
     [snapshot.id, snapshot.local_id, snapshot.localId, snapshot.remoteId, snapshot.remote_id]
       .filter(Boolean)
       .some(id => String(id) === String(locationId))

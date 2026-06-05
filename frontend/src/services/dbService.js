@@ -7,7 +7,7 @@ import { entryMatchesLocation } from './locationPresentationService.js';
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 13;
+const DB_VERSION = 14;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -128,13 +128,13 @@ export const entryMentionsPerson = entryMentionsContact;
 
 export function mergeEntryUpdates(entry = {}, updates = {}) {
   if (entry.status === 'confirmed') {
-    const safeUpdates = { ...(updates || {}) };
+    const safeUpdates = normalizeEntryUpdates(updates || {});
     delete safeUpdates.status;
     delete safeUpdates.transcript;
     delete safeUpdates.summary;
     delete safeUpdates.intent;
     delete safeUpdates.audioBlob;
-    delete safeUpdates.attachmentSnapshots;
+    delete safeUpdates.attachments;
     return {
       ...entry,
       ...safeUpdates,
@@ -144,7 +144,44 @@ export function mergeEntryUpdates(entry = {}, updates = {}) {
 
   return {
     ...entry,
-    ...(updates || {}),
+    ...normalizeEntryUpdates(updates || {}),
+  };
+}
+
+function normalizeEntryUpdates(updates = {}) {
+  const normalized = { ...(updates || {}) };
+  if ('created_at' in normalized && !('createdAt' in normalized)) normalized.createdAt = normalized.created_at;
+  if ('capture_id' in normalized && !('captureId' in normalized)) normalized.captureId = normalized.capture_id;
+  if ('synced_at' in normalized && !('syncedAt' in normalized)) normalized.syncedAt = normalized.synced_at;
+  if ('locationSnapshots' in normalized && !('locations' in normalized)) normalized.locations = normalized.locationSnapshots;
+  if ('contactSnapshots' in normalized && !('contacts' in normalized)) normalized.contacts = normalized.contactSnapshots;
+  if ('tagSnapshots' in normalized && !('tags' in normalized)) normalized.tags = normalized.tagSnapshots;
+  if ('attachmentSnapshots' in normalized && !('attachments' in normalized)) normalized.attachments = normalized.attachmentSnapshots;
+  if ('workContextSnapshots' in normalized && !('workContexts' in normalized)) normalized.workContexts = normalized.workContextSnapshots;
+
+  delete normalized.created_at;
+  delete normalized.capture_id;
+  delete normalized.synced_at;
+  delete normalized.locationSnapshots;
+  delete normalized.contactSnapshots;
+  delete normalized.tagSnapshots;
+  delete normalized.attachmentSnapshots;
+  delete normalized.workContextSnapshots;
+  return normalized;
+}
+
+export function normalizeEntryRecord(entry = {}) {
+  if (!entry) return entry;
+  const normalized = normalizeEntryUpdates(entry);
+  return {
+    ...normalized,
+    captureId: normalized.captureId || null,
+    syncedAt: normalized.syncedAt || null,
+    locations: Array.isArray(normalized.locations) ? normalized.locations : [],
+    contacts: Array.isArray(normalized.contacts) ? normalized.contacts : [],
+    tags: Array.isArray(normalized.tags) ? normalized.tags : [],
+    attachments: Array.isArray(normalized.attachments) ? normalized.attachments : [],
+    workContexts: Array.isArray(normalized.workContexts) ? normalized.workContexts : [],
   };
 }
 
@@ -193,15 +230,27 @@ export class DBService {
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('status', 'status', { unique: false });
-          store.createIndex('created_at', 'created_at', { unique: false });
+          store.createIndex('createdAt', 'createdAt', { unique: false });
           store.createIndex('sync_status', 'syncStatus', { unique: false });
           store.createIndex('remoteId', 'remoteId', { unique: false });
           store.createIndex('captureId', 'captureId', { unique: false });
         } else {
           const store = event.target.transaction.objectStore(STORE_NAME);
+          if (store.indexNames.contains('created_at')) {
+            store.deleteIndex('created_at');
+          }
+          if (!store.indexNames.contains('createdAt')) {
+            store.createIndex('createdAt', 'createdAt', { unique: false });
+          }
           if (!store.indexNames.contains('captureId')) {
             store.createIndex('captureId', 'captureId', { unique: false });
           }
+          store.openCursor().onsuccess = (cursorEvent) => {
+            const cursor = cursorEvent.target.result;
+            if (!cursor) return;
+            cursor.update(normalizeEntryRecord(cursor.value));
+            cursor.continue();
+          };
         }
 
         // v2: feedback store
@@ -337,17 +386,22 @@ export class DBService {
       status: 'recording',
       syncStatus: 'pending',
       remoteId: null,
-      created_at: new Date().toISOString(),
-      synced_at: null,
+      createdAt: new Date().toISOString(),
+      syncedAt: null,
       captureId: null,
       transcript: null,
       summary: null,
+      locations: [],
+      contacts: [],
+      tags: [],
+      attachments: [],
+      workContexts: [],
     };
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.add(entry);
+      const request = store.add(normalizeEntryRecord(entry));
 
       request.onsuccess = () => {
         resolve(entry.id);
@@ -376,19 +430,24 @@ export class DBService {
       status: 'ready_for_review',
       syncStatus: 'pending',
       remoteId: null,
-      created_at: now,
-      synced_at: null,
+      createdAt: now,
+      syncedAt: null,
       captureId: null,
       transcript: text,
       summary: text,
       intent: entryData.intent || 'NOTE',
       source: entryData.source || 'text',
+      locations: [],
+      contacts: [],
+      tags: [],
+      attachments: [],
+      workContexts: [],
     };
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.add(entry);
+      const request = store.add(normalizeEntryRecord(entry));
 
       request.onsuccess = () => {
         resolve(entry.id);
@@ -412,7 +471,7 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) {
           reject(new Error('Entry not found'));
           return;
@@ -433,7 +492,7 @@ export class DBService {
           status: 'ready_for_review',
         }));
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
 
         updateRequest.onsuccess = () => {
           this.promoteContextCluesFromCapture(entry.captureId, entry.id)
@@ -467,7 +526,7 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) {
           reject(new Error('Entry not found'));
           return;
@@ -475,7 +534,7 @@ export class DBService {
 
         Object.assign(entry, mergeEntryUpdates(entry, updates));
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
 
         updateRequest.onsuccess = () => {
           resolve(entry);
@@ -521,7 +580,7 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) {
           reject(new Error('Entry not found'));
           return;
@@ -532,13 +591,13 @@ export class DBService {
         entry.status = 'confirmed';
         entry.syncStatus = 'pending';
         entry.locationIds = [];
-        entry.locationSnapshots = [];
+        entry.locations = [];
         entry.contactIds = [];
-        entry.contactSnapshots = [];
+        entry.contacts = [];
         entry.tagIds = [];
-        entry.tagSnapshots = [];
+        entry.tags = [];
         entry.workContextIds = [];
-        entry.workContextSnapshots = [];
+        entry.workContexts = [];
 
         const now = new Date().toISOString();
         const normalizedLocations = locations
@@ -576,7 +635,7 @@ export class DBService {
             created_at: now,
           });
           entry.locationIds.push(locationId);
-          entry.locationSnapshots.push(snapshot);
+          entry.locations.push(snapshot);
         }
 
         const normalizedContacts = contacts
@@ -594,7 +653,7 @@ export class DBService {
 
         for (const contact of normalizedContacts) {
           entry.contactIds.push(contact.id);
-          entry.contactSnapshots.push(contact);
+          entry.contacts.push(contact);
         }
 
         const normalizedTags = tags
@@ -643,7 +702,7 @@ export class DBService {
             rejected_count: tag.rejectedCount || 0,
           });
           entry.tagIds.push(tagId);
-          entry.tagSnapshots.push(snapshot);
+          entry.tags.push(snapshot);
         }
 
         const normalizedWorkContexts = (workContexts || [])
@@ -660,10 +719,10 @@ export class DBService {
 
         for (const context of normalizedWorkContexts) {
           entry.workContextIds.push(context.id);
-          entry.workContextSnapshots.push(context);
+          entry.workContexts.push(context);
         }
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
 
         updateRequest.onsuccess = () => {
           resolve(entry);
@@ -687,10 +746,10 @@ export class DBService {
    * @param {string} params.captureId - Source capture ID (for reference)
    * @param {string} params.transcript - Entry transcript
    * @param {string} params.summary - Entry summary
-   * @param {string} [params.created_at] - Optional timestamp (defaults to now)
+   * @param {string} [params.createdAt] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */
-  async createEntryFromCapture({ captureId, transcript, summary, created_at, locations = [], tags = [] }) {
+  async createEntryFromCapture({ captureId, transcript, summary, createdAt, created_at, locations = [], contacts = [], tags = [], attachments = [] }) {
     const db = await this.ensureDb();
     const now = new Date().toISOString();
     const existingLocations = Array.isArray(locations) && locations.length
@@ -734,13 +793,18 @@ export class DBService {
       status: 'confirmed',
       syncStatus: 'pending',
       remoteId: null,
-      created_at: created_at || now,
-      synced_at: null,
+      createdAt: createdAt || created_at || now,
+      syncedAt: null,
       intent: 'NOTE',
       locationIds: locationSnapshots.map(location => location.id),
-      locationSnapshots,
+      locations: locationSnapshots,
+      contactIds: contacts.map(contact => contact.id || contact.localId || contact.local_id).filter(Boolean),
+      contacts,
       tagIds: tagSnapshots.map(tag => tag.id),
-      tagSnapshots,
+      tags: tagSnapshots,
+      attachments,
+      workContextIds: [],
+      workContexts: [],
     };
 
     return new Promise((resolve, reject) => {
@@ -760,7 +824,7 @@ export class DBService {
       const tagsStore = transaction.objectStore(TAGS_STORE);
       const tagVocabularyStore = transaction.objectStore(TAG_VOCABULARY_STORE);
       const entryTagsStore = transaction.objectStore(ENTRY_TAGS_STORE);
-      const request = store.add(entry);
+      const request = store.add(normalizeEntryRecord(entry));
 
       for (const location of locationSnapshots) {
         locationsStore.put({
@@ -866,11 +930,10 @@ export class DBService {
       request.onsuccess = () => {
         // Remove audioBlob from results (not needed in list view)
         const entries = request.result.map(entry => ({
-          ...entry,
+          ...normalizeEntryRecord(entry),
           audioBlob: undefined,
         }));
-        // Sort by created_at descending
-        entries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        entries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         resolve(entries);
       };
 
@@ -892,7 +955,7 @@ export class DBService {
       const request = store.get(entryId);
 
       request.onsuccess = () => {
-        resolve(request.result);
+        resolve(normalizeEntryRecord(request.result));
       };
 
       request.onerror = () => {
@@ -913,13 +976,13 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) { reject(new Error('Entry not found')); return; }
 
         entry.status = 'failed';
         entry.errorMessage = errorMessage || 'Failed to process recording';
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
         updateRequest.onsuccess = () => resolve(entry);
         updateRequest.onerror = () => reject(new Error('Failed to mark entry failed'));
       };
@@ -940,13 +1003,13 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) { reject(new Error('Entry not found')); return; }
 
         entry.status = 'recording';
         entry.errorMessage = null;
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
         updateRequest.onsuccess = () => resolve(entry);
         updateRequest.onerror = () => reject(new Error('Failed to reset entry'));
       };
@@ -969,14 +1032,14 @@ export class DBService {
       const getRequest = store.get(entryId);
 
       getRequest.onsuccess = () => {
-        const entry = getRequest.result;
+        const entry = normalizeEntryRecord(getRequest.result);
         if (!entry) { reject(new Error('Entry not found')); return; }
 
         entry.syncStatus = 'synced';
-        entry.synced_at = new Date().toISOString();
+        entry.syncedAt = new Date().toISOString();
         entry.remoteId = remoteId;
 
-        const updateRequest = store.put(entry);
+        const updateRequest = store.put(normalizeEntryRecord(entry));
         updateRequest.onsuccess = () => resolve(entry);
         updateRequest.onerror = () => reject(new Error('Failed to mark entry synced'));
       };
@@ -997,7 +1060,7 @@ export class DBService {
     return new Promise((resolve, reject) => {
       const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
       const req = store.index('remoteId').get(remoteId);
-      req.onsuccess = () => resolve(req.result || null);
+      req.onsuccess = () => resolve(req.result ? normalizeEntryRecord(req.result) : null);
       req.onerror = () => reject(new Error('Failed to query entry by remoteId'));
     });
   }
@@ -1007,9 +1070,9 @@ export class DBService {
     const db = await this.ensureDb();
     return new Promise((resolve, reject) => {
       const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
-      const req = store.index('created_at').get(createdAt);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(new Error('Failed to query entry by created_at'));
+      const req = store.index('createdAt').get(createdAt);
+      req.onsuccess = () => resolve(req.result ? normalizeEntryRecord(req.result) : null);
+      req.onerror = () => reject(new Error('Failed to query entry by createdAt'));
     });
   }
 
@@ -1019,7 +1082,7 @@ export class DBService {
     return new Promise((resolve, reject) => {
       const store = db.transaction([STORE_NAME], 'readonly').objectStore(STORE_NAME);
       const req = store.index('captureId').get(captureId);
-      req.onsuccess = () => resolve(req.result || null);
+      req.onsuccess = () => resolve(req.result ? normalizeEntryRecord(req.result) : null);
       req.onerror = () => reject(new Error('Failed to query entry by captureId'));
     });
   }
@@ -1038,13 +1101,13 @@ export class DBService {
       errorMessage: null,
       transcript: cloudJob.transcript,
       summary: cloudJob.summary,
-      created_at: cloudJob.created_at,
-      synced_at: cloudJob.synced_at,
+      createdAt: cloudJob.createdAt || cloudJob.created_at,
+      syncedAt: cloudJob.syncedAt || cloudJob.synced_at || new Date().toISOString(),
       captureId: cloudJob.capture_id || cloudJob.captureId || null,
       locationIds: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location =>
         location.local_id || location.localId || location.id
       ).filter(Boolean),
-      locationSnapshots: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location => ({
+      locations: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location => ({
         id: location.local_id || location.localId || location.id,
         displayName: location.display_name || location.displayName || '',
         placeText: location.place_text || location.placeText || location.display_name || '',
@@ -1055,17 +1118,29 @@ export class DBService {
       tagIds: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag =>
         tag.local_id || tag.localId || tag.id
       ).filter(Boolean),
-      tagSnapshots: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag => ({
+      contactIds: (cloudJob.contacts || cloudJob.contactSnapshots || []).map(contact =>
+        contact.local_id || contact.localId || contact.id
+      ).filter(Boolean),
+      contacts: (cloudJob.contacts || cloudJob.contactSnapshots || []).map(contact => ({
+        id: contact.local_id || contact.localId || contact.id,
+        displayName: contact.display_name || contact.displayName || '',
+        primaryPhone: contact.primary_phone || contact.primaryPhone || null,
+        primaryEmail: contact.primary_email || contact.primaryEmail || null,
+      })),
+      tags: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag => ({
         id: tag.local_id || tag.localId || tag.id,
         label: tag.label || '',
         normalizedLabel: tag.normalized_label || tag.normalizedLabel || normalizeTagKey(tag.label || ''),
         categoryId: tag.category_id || tag.categoryId || DEFAULT_TAG_CATEGORY.id,
         categoryName: tag.category_name || tag.categoryName || tag.tag_categories?.name || DEFAULT_TAG_CATEGORY.name,
       })),
+      attachments: cloudJob.attachments || cloudJob.attachmentSnapshots || [],
+      workContextIds: (cloudJob.workContexts || []).map(context => context.id).filter(Boolean),
+      workContexts: cloudJob.workContexts || [],
     };
     return new Promise((resolve, reject) => {
       const tx = db.transaction([STORE_NAME, LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
-      const req = tx.objectStore(STORE_NAME).add(entry);
+      const req = tx.objectStore(STORE_NAME).add(normalizeEntryRecord(entry));
       req.onsuccess = () => {
         Promise.all([
           this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || []),

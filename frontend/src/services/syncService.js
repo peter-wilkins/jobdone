@@ -17,7 +17,7 @@ function blobToBase64(blob) {
 }
 
 async function serializeReadyAttachments(entryData) {
-  const readyPhotos = readyPhotoAttachments(entryData.attachmentSnapshots || []);
+  const readyPhotos = readyPhotoAttachments(entryData.attachments || []);
   const serialized = [];
   for (const attachment of readyPhotos) {
     if (!attachment.blob) continue;
@@ -58,13 +58,13 @@ export class SyncService {
     try {
       console.log('[Sync] Syncing entry:', entryData.id);
       const contextClues = await dbService.getContextCluesForEntry(entryData.id);
-      const locations = Array.isArray(entryData.locationSnapshots) && entryData.locationSnapshots.length
-        ? entryData.locationSnapshots
+      const locations = Array.isArray(entryData.locations) && entryData.locations.length
+        ? entryData.locations
         : await dbService.getLocationsForEntry(entryData.id);
-      const tags = Array.isArray(entryData.tagSnapshots) && entryData.tagSnapshots.length
-        ? entryData.tagSnapshots
+      const tags = Array.isArray(entryData.tags) && entryData.tags.length
+        ? entryData.tags
         : await dbService.getTagsForEntry(entryData.id);
-      const contacts = Array.isArray(entryData.contactSnapshots) ? entryData.contactSnapshots : [];
+      const contacts = Array.isArray(entryData.contacts) ? entryData.contacts : [];
       const attachments = await serializeReadyAttachments(entryData);
 
       const payload = {
@@ -72,7 +72,7 @@ export class SyncService {
           id: entryData.id,
           transcript: entryData.transcript,
           summary: entryData.summary,
-          createdAt: entryData.createdAt || entryData.created_at,
+          createdAt: entryData.createdAt,
           captureId: entryData.captureId || null,
           contextClues,
           locations,

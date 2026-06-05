@@ -58,12 +58,12 @@ test('matches Entries by confirmed Location association only', () => {
   assert.equal(entryMatchesLocation({
     id: 'entry-2',
     status: 'confirmed',
-    locationSnapshots: [{ id: 'location-1' }],
+    locations: [{ id: 'location-1' }],
   }, location), true);
 
   assert.equal(entryMatchesLocation({
     id: 'entry-3',
     status: 'confirmed',
-    locationSnapshots: [{ id: 'location-2' }],
+    locations: [{ id: 'location-2' }],
   }, location), false);
 });

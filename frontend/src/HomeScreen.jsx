@@ -400,8 +400,8 @@ export function HomeScreen({
 
   const updateEntryAttachments = async (entryId, updater) => {
     const currentEntry = await dbService.getEntry(entryId);
-    const nextAttachments = updater(currentEntry?.attachmentSnapshots || []);
-    const updated = await dbService.updateEntry(entryId, { attachmentSnapshots: nextAttachments });
+    const nextAttachments = updater(currentEntry?.attachments || []);
+    const updated = await dbService.updateEntry(entryId, { attachments: nextAttachments });
     setEntries(prev => prev.map(entry => entry.id === entryId ? { ...entry, ...updated } : entry));
     return updated;
   };
@@ -434,10 +434,10 @@ export function HomeScreen({
     try {
       setReviewAttachmentErrors(prev => ({ ...prev, [entryId]: null }));
       const currentEntry = await dbService.getEntry(entryId);
-      const pending = await createPendingPhotoAttachmentsFromFiles(files, currentEntry?.attachmentSnapshots || []);
+      const pending = await createPendingPhotoAttachmentsFromFiles(files, currentEntry?.attachments || []);
       if (!pending.length) return;
       const updated = await updateEntryAttachments(entryId, attachments => [...attachments, ...pending]);
-      const added = (updated.attachmentSnapshots || [])
+      const added = (updated.attachments || [])
         .filter(attachment => attachment.status === 'pending_compression' && attachment.originalBlob);
       for (const attachment of added) {
         void compressAndPersistAttachment(entryId, attachment);
@@ -468,7 +468,7 @@ export function HomeScreen({
   useEffect(() => {
     for (const entry of entries) {
       if (entry.status !== 'ready_for_review') continue;
-      for (const attachment of entry.attachmentSnapshots || []) {
+      for (const attachment of entry.attachments || []) {
         if (attachment.status === 'pending_compression' && attachment.originalBlob) {
           void compressAndPersistAttachment(entry.id, attachment);
         }
@@ -1244,11 +1244,11 @@ export function HomeScreen({
     try {
       setError(null);
       let entry = entries.find(e => e.id === id);
-      if (hasPendingPhotoAttachments(entry?.attachmentSnapshots || [])) {
+      if (hasPendingPhotoAttachments(entry?.attachments || [])) {
         setReviewAttachmentErrors(prev => ({ ...prev, [id]: 'Photos are still preparing. Confirm when they are ready.' }));
         return;
       }
-      if (hasFailedPhotoAttachments(entry?.attachmentSnapshots || [])) {
+      if (hasFailedPhotoAttachments(entry?.attachments || [])) {
         setReviewAttachmentErrors(prev => ({ ...prev, [id]: 'Remove failed Photos before confirming.' }));
         return;
       }
@@ -1383,7 +1383,7 @@ export function HomeScreen({
       setEntries(prev => {
         const updated = prev.map(e => e.id === id ? { ...e, ...timelineEntry, status: 'confirmed' } : e);
         const inProgress = updated.filter(e => e.status !== 'confirmed');
-        const confirmed = updated.filter(e => e.status === 'confirmed').sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const confirmed = updated.filter(e => e.status === 'confirmed').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         return [...inProgress, ...confirmed];
       });
       setReviewLocations(prev => {
@@ -1779,9 +1779,9 @@ export function HomeScreen({
 
         return {
           ...result,
-          locationSnapshots: result.locationSnapshots || localEntry.locationSnapshots,
-          contactSnapshots: result.contactSnapshots || localEntry.contactSnapshots,
-          tagSnapshots: result.tagSnapshots || localEntry.tagSnapshots,
+          locations: result.locations || localEntry.locations,
+          contacts: result.contacts || localEntry.contacts,
+          tags: result.tags || localEntry.tags,
           syncStatus: result.syncStatus || localEntry.syncStatus,
         };
       });
@@ -1812,7 +1812,7 @@ export function HomeScreen({
 
         // Merge all entries: in-progress first, then confirmed (newest first)
         const allInProgress = [...inProgressEntries, ...readyForReviewEntries, ...failedEntries];
-        const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const loadedEntries = [...allInProgress, ...sortedConfirmed];
         setEntries(loadedEntries);
         setReviewLocations(prev => {
@@ -2086,17 +2086,17 @@ export function HomeScreen({
 
   const renderEntry = (entry) => {
     const isProcessing = processingIds.has(entry.id);
-    const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
-      ? entry.locationSnapshots[0]
+    const primaryLocation = Array.isArray(entry.locations) && entry.locations.length > 0
+      ? entry.locations[0]
       : null;
-    const primaryContact = Array.isArray(entry.contactSnapshots) && entry.contactSnapshots.length > 0
-      ? entry.contactSnapshots[0]
+    const primaryContact = Array.isArray(entry.contacts) && entry.contacts.length > 0
+      ? entry.contacts[0]
       : null;
-    const entryTags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
-      ? entry.tagSnapshots
+    const entryTags = Array.isArray(entry.tags) && entry.tags.length > 0
+      ? entry.tags
       : [];
-    const entryWorkContexts = Array.isArray(entry.workContextSnapshots) && entry.workContextSnapshots.length > 0
-      ? entry.workContextSnapshots
+    const entryWorkContexts = Array.isArray(entry.workContexts) && entry.workContexts.length > 0
+      ? entry.workContexts
       : [];
 
     if (entry.status === 'recording') {
@@ -2251,12 +2251,12 @@ export function HomeScreen({
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
       const transcriptionCandidates = entry.transcriptionCandidates || [];
       const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
-      const attachmentSnapshots = entry.attachmentSnapshots || [];
-      const photoAttachments = attachmentSnapshots.filter(attachment => attachment.kind === 'photo');
+      const attachments = entry.attachments || [];
+      const photoAttachments = attachments.filter(attachment => attachment.kind === 'photo');
       const attachmentError = reviewAttachmentErrors[entry.id];
-      const photosPending = hasPendingPhotoAttachments(attachmentSnapshots);
-      const photosFailed = hasFailedPhotoAttachments(attachmentSnapshots);
-      const canAddPhotos = canAddMorePhotos(attachmentSnapshots);
+      const photosPending = hasPendingPhotoAttachments(attachments);
+      const photosFailed = hasFailedPhotoAttachments(attachments);
+      const canAddPhotos = canAddMorePhotos(attachments);
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
@@ -2974,7 +2974,7 @@ export function HomeScreen({
     }
 
     // Confirmed entry
-    const confirmedPhotoAttachments = (entry.attachmentSnapshots || []).filter(attachment => attachment.kind === 'photo' && attachment.status === 'ready');
+    const confirmedPhotoAttachments = (entry.attachments || []).filter(attachment => attachment.kind === 'photo' && attachment.status === 'ready');
     return (
       <div key={entry.id} className="py-3 border-b border-gray-100 last:border-b-0">
         <div className="flex items-start justify-between gap-2">
@@ -2983,7 +2983,7 @@ export function HomeScreen({
             {entry.syncStatus === 'synced' ? '☁️' : '⏳'}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
+        <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.createdAt))}</p>
         {primaryLocation && (
           <div className="mt-2">
             <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
@@ -3028,14 +3028,9 @@ export function HomeScreen({
   };
 
   const renderLocationPill = (entry) => {
-    const primaryLocation = Array.isArray(entry.locationSnapshots) && entry.locationSnapshots.length > 0
-      ? entry.locationSnapshots[0]
-      : Array.isArray(entry.locations) && entry.locations.length > 0
-        ? {
-            displayName: entry.locations[0].display_name || entry.locations[0].displayName,
-            placeText: entry.locations[0].place_text || entry.locations[0].placeText,
-          }
-        : null;
+    const primaryLocation = Array.isArray(entry.locations) && entry.locations.length > 0
+      ? entry.locations[0]
+      : null;
 
     if (!primaryLocation) return null;
 
@@ -3049,13 +3044,9 @@ export function HomeScreen({
   };
 
   const renderContactPill = (entry) => {
-    const primaryContact = Array.isArray(entry.contactSnapshots) && entry.contactSnapshots.length > 0
-      ? entry.contactSnapshots[0]
-      : Array.isArray(entry.contacts) && entry.contacts.length > 0
-        ? {
-            displayName: entry.contacts[0].display_name || entry.contacts[0].displayName || entry.contacts[0].label,
-          }
-        : null;
+    const primaryContact = Array.isArray(entry.contacts) && entry.contacts.length > 0
+      ? entry.contacts[0]
+      : null;
 
     if (!primaryContact?.displayName) return null;
 
@@ -3069,15 +3060,9 @@ export function HomeScreen({
   };
 
   const renderTagPills = (entry) => {
-    const tags = Array.isArray(entry.tagSnapshots) && entry.tagSnapshots.length > 0
-      ? entry.tagSnapshots
-      : Array.isArray(entry.tags) && entry.tags.length > 0
-        ? entry.tags.map(tag => ({
-            id: tag.local_id || tag.localId || tag.id,
-            label: tag.label,
-            categoryName: tag.category_name || tag.categoryName || tag.tag_categories?.name || 'General',
-          }))
-        : [];
+    const tags = Array.isArray(entry.tags) && entry.tags.length > 0
+      ? entry.tags
+      : [];
 
     if (!tags.length) return null;
 
@@ -3222,7 +3207,7 @@ export function HomeScreen({
                         {entry.syncStatus === 'synced' ? '☁️' : '⏳'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.created_at))}</p>
+                    <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.createdAt))}</p>
                     {renderLocationPill(entry)}
                     {renderContactPill(entry)}
                     {renderTagPills(entry)}

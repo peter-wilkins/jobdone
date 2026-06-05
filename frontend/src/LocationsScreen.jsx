@@ -577,7 +577,7 @@ function LocationDetailScreen({
                   {linkedEntries.map(entry => (
                     <div key={entry.id} className="border border-gray-200 rounded p-3">
                       <p className="text-sm font-medium text-gray-900">{entry.summary || 'Untitled entry'}</p>
-                      <p className="text-xs text-gray-500 mt-1">{formatDate(entry.created_at)}</p>
+                      <p className="text-xs text-gray-500 mt-1">{formatDate(entry.createdAt)}</p>
                     </div>
                   ))}
                 </div>
