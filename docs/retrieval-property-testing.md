@@ -264,7 +264,7 @@ optional until local Supabase startup is boring.
 For SQL-first Recall V1, searchable truth is:
 
 - `entries.summary`
-- confirmed `contacts.display_name`
+- confirmed `contacts."displayName"`
 - confirmed `locations.display_name`, `locations.place_text`, and
   `locations.address_text`
 - confirmed `tags.label`

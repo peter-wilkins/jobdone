@@ -361,6 +361,8 @@ describe('SQL-first Recall', () => {
     assert.equal(values[4], true);
 
     assert.match(lowerSql, /from "jobdone"\."entries"/);
+    assert.match(sql, /c\."displayName"/);
+    assert.match(sql, /c\."userId" = ec\.user_id/);
     assert.match(lowerSql, /c\.status = 'confirmed'/);
     assert.match(lowerSql, /l\.status = 'confirmed'/);
     assert.match(lowerSql, /t\.status = 'confirmed'/);
@@ -368,6 +370,8 @@ describe('SQL-first Recall', () => {
     assert.match(lowerSql, /match_reasons/);
     assert.doesNotMatch(lowerSql, /match_entries/);
     assert.doesNotMatch(lowerSql, /embedding/);
+    assert.doesNotMatch(sql, /c\.display_name/);
+    assert.doesNotMatch(sql, /c\.user_id = ec\.user_id/);
     assert.doesNotMatch(lowerSql, /to_tsvector|websearch_to_tsquery/);
     assert.doesNotMatch(lowerSql, /coalesce\(.*transcript/);
   });

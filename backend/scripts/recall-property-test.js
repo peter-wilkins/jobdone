@@ -310,6 +310,9 @@ async function insertRows(client, tableName, columns, rows) {
 }
 
 async function cleanUsers(client, userIds) {
+  const userColumnByTable = {
+    contacts: 'userId',
+  };
   for (const tableName of [
     'entry_contacts',
     'entry_locations',
@@ -324,7 +327,8 @@ async function cleanUsers(client, userIds) {
     'tags',
     'tag_categories',
   ]) {
-    await client.query(`delete from ${table(tableName)} where user_id = any($1::text[])`, [userIds]);
+    const userColumn = userColumnByTable[tableName] || 'user_id';
+    await client.query(`delete from ${table(tableName)} where ${quoteIdent(userColumn)} = any($1::text[])`, [userIds]);
   }
 }
 
@@ -339,11 +343,12 @@ async function seedWorld(pool, world) {
       name: row.name,
       slug: row.slug,
     })));
-    await insertRows(client, 'contacts', ['id', 'user_id', 'status', 'display_name'], world.contacts.map(row => ({
+    await insertRows(client, 'contacts', ['id', 'userId', 'clientId', 'status', 'displayName'], world.contacts.map(row => ({
       id: row.id,
-      user_id: row.userId,
+      userId: row.userId,
+      clientId: row.id,
       status: row.status,
-      display_name: row.displayName,
+      displayName: row.displayName,
     })));
     await insertRows(client, 'locations', ['id', 'user_id', 'status', 'display_name', 'place_text', 'address_text'], world.locations.map(row => ({
       id: row.id,

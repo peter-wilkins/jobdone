@@ -154,13 +154,13 @@ export function buildSqlFirstRecallQuery({
         e.summary,
         e.created_at,
         coalesce((
-          select array_agg(distinct c.display_name order by c.display_name)
+          select array_agg(distinct c."displayName" order by c."displayName")
           from ${entryContacts} ec
-          join ${contacts} c on c.id = ec.contact_id and c.user_id = ec.user_id
+          join ${contacts} c on c.id = ec.contact_id and c."userId" = ec.user_id
           where ec.user_id = e.user_id
             and ec.entry_id = e.id
             and c.status = 'confirmed'
-            and c.display_name <> ''
+            and c."displayName" <> ''
         ), array[]::text[]) as contact_labels,
         coalesce((
           select array_agg(distinct label order by label)
