@@ -2,6 +2,12 @@ import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveCo
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
+import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
+
+function assertSyncResponse(parsed) {
+  if (parsed.success) return parsed.data;
+  throw new Error(parsed.error || 'Invalid sync response');
+}
 
 function validateTagLabel(value) {
   if (/[\p{C}]/u.test(String(value || ''))) {
@@ -89,7 +95,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         const incomingAttachments = entryData.attachments;
         const attachments = await db.saveEntryAttachments(user.id, existing.id, incomingAttachments);
         const entry = toCanonicalEntry(existing, { contextClues, locations, contacts, tags, attachments });
-        return { success: true, entry };
+        return assertSyncResponse(parseEntrySaveResponse({ success: true, entry }));
       }
 
       const embedding = await embeddingService.embedText(entryData.summary);
@@ -106,7 +112,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const attachments = await db.saveEntryAttachments(user.id, saved.id, incomingAttachments);
 
       const entry = toCanonicalEntry(saved, { contextClues, locations, contacts, tags, attachments });
-      return { success: true, entry };
+      return assertSyncResponse(parseEntrySaveResponse({ success: true, entry }));
     } catch (error) {
       console.error('Sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save entry' });
@@ -123,7 +129,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const entries = await db.getEntries(user.id);
-      return { success: true, entries };
+      return assertSyncResponse(parseEntriesResponse({ success: true, entries }));
     } catch (error) {
       console.error('Sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch entries' });
@@ -141,7 +147,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         saved.push(await db.saveContact(user.id, contact));
       }
       const rows = saved.filter(Boolean);
-      return { success: true, contacts: rows.map(toCanonicalContactRecord) };
+      return assertSyncResponse(parseContactsResponse({ success: true, contacts: rows.map(toCanonicalContactRecord) }));
     } catch (error) {
       console.error('Contacts sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save contacts' });
@@ -154,7 +160,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const contacts = await db.getContacts(user.id);
-      return { success: true, contacts: contacts.map(toCanonicalContactRecord) };
+      return assertSyncResponse(parseContactsResponse({ success: true, contacts: contacts.map(toCanonicalContactRecord) }));
     } catch (error) {
       console.error('Contacts sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch contacts' });
@@ -184,7 +190,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const clientIds = Array.isArray(request.body?.clientIds) ? request.body.clientIds : [];
       const contacts = await db.pullContactsByClientIds(user.id, clientIds);
       const aliases = await db.getContactAliases(user.id);
-      return { success: true, contacts: contacts.map(toCanonicalContactRecord), aliases };
+      return assertSyncResponse(parseContactsResponse({ success: true, contacts: contacts.map(toCanonicalContactRecord), aliases }));
     } catch (error) {
       console.error('Contacts pull error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to pull contacts' });
@@ -198,7 +204,11 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     try {
       const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
       const result = await db.pushReplicaContacts(user.id, contacts);
-      return { success: true, contacts: (result.contacts || []).map(toCanonicalContactRecord), aliases: result.aliases || [] };
+      return assertSyncResponse(parseContactsResponse({
+        success: true,
+        contacts: (result.contacts || []).map(toCanonicalContactRecord),
+        aliases: result.aliases || [],
+      }));
     } catch (error) {
       console.error('Contacts push error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to push contacts' });
@@ -233,7 +243,10 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       for (const location of locations) {
         saved.push(await db.saveLocation(user.id, location));
       }
-      return { success: true, locations: saved.filter(Boolean).map(toCanonicalLocationRecord) };
+      return assertSyncResponse(parseLocationsResponse({
+        success: true,
+        locations: saved.filter(Boolean).map(toCanonicalLocationRecord),
+      }));
     } catch (error) {
       console.error('Locations sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save locations' });
@@ -246,7 +259,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const locations = await db.getLocations(user.id);
-      return { success: true, locations: locations.map(toCanonicalLocationRecord) };
+      return assertSyncResponse(parseLocationsResponse({ success: true, locations: locations.map(toCanonicalLocationRecord) }));
     } catch (error) {
       console.error('Locations sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch locations' });

@@ -8,6 +8,7 @@ import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
 import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
+import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
 
 const ENV = import.meta.env || {};
 
@@ -76,6 +77,11 @@ async function throwApiError(response, fallbackMessage) {
   const apiError = new Error(message);
   apiError.status = response.status;
   throw apiError;
+}
+
+function typedSyncResponse(parsed, fallbackMessage) {
+  if (parsed.success) return parsed.data;
+  throw new Error(parsed.error || fallbackMessage);
 }
 
 export class APIService {
@@ -182,7 +188,7 @@ export class APIService {
       const error = await response.json();
       throw new Error(error.error || 'Failed to save transcription evaluation');
     }
-    return response.json();
+    return typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
   }
 
   /**
@@ -205,7 +211,7 @@ export class APIService {
         throw new Error(error.error || 'Sync failed');
       }
 
-      const result = await response.json();
+      const result = typedSyncResponse(parseEntrySaveResponse(await response.json()), 'Invalid entry sync response');
       console.log('[API] Sync successful');
       return result;
     } catch (error) {
@@ -222,7 +228,7 @@ export class APIService {
     if (!response.ok) {
       await throwApiError(response, 'Failed to fetch cloud entries');
     }
-    const result = await response.json();
+    const result = typedSyncResponse(parseEntriesResponse(await response.json()), 'Invalid entries sync response');
     return result.entries || [];
   }
 
@@ -249,7 +255,7 @@ export class APIService {
       const error = await response.json();
       throw new Error(error.error || 'Contact push failed');
     }
-    return response.json();
+    return typedSyncResponse(parseContactsResponse(await response.json()), 'Invalid contacts sync response');
   }
 
   async pullContacts(clientIds) {
@@ -262,7 +268,7 @@ export class APIService {
       const error = await response.json();
       throw new Error(error.error || 'Contact pull failed');
     }
-    return response.json();
+    return typedSyncResponse(parseContactsResponse(await response.json()), 'Invalid contacts sync response');
   }
 
   async pushContactAliases(aliases) {
@@ -288,7 +294,7 @@ export class APIService {
       const error = await response.json();
       throw new Error(error.error || 'Locations sync failed');
     }
-    return response.json();
+    return typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
   }
 
   async lookupLocations(query) {
@@ -309,7 +315,7 @@ export class APIService {
         headers: authHeader(),
       });
       if (!response.ok) return [];
-      const result = await response.json();
+      const result = typedSyncResponse(parseContactsResponse(await response.json()), 'Invalid contacts sync response');
       return result.contacts || [];
     } catch {
       return [];
@@ -323,7 +329,7 @@ export class APIService {
     if (!response.ok) {
       await throwApiError(response, 'Failed to fetch cloud locations');
     }
-    const result = await response.json();
+    const result = typedSyncResponse(parseLocationsResponse(await response.json()), 'Invalid locations sync response');
     return result.locations || [];
   }
 

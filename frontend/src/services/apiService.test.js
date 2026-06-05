@@ -95,3 +95,23 @@ test('cloud location pulls reject failed responses instead of returning empty da
     globalThis.fetch = originalFetch;
   }
 });
+
+test('cloud location pulls reject noncanonical response bodies', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: true,
+    locations: [{ id: 'location-cloud-1', display_name: '14 Bell Street' }],
+  }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  try {
+    await assert.rejects(
+      () => new APIService().getCloudLocations(),
+      /Invalid input|displayName/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
