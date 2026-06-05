@@ -6,6 +6,27 @@ The first reliability slice should add TypeScript checking around existing JavaS
 
 Because JobDone has no real users yet, these contracts should prefer clean canonical shapes over compatibility adapters. If old local drafts, stale IndexedDB data, or disposable prototype database rows block a cleaner contract, delete/reset them during MVP rather than preserving multiple payload variants.
 
+Entry sync will use one camelCase API/local payload shape:
+
+```js
+{
+  entryData: {
+    id,
+    captureId,
+    transcript,
+    summary,
+    createdAt,
+    contextClues,
+    locations,
+    contacts,
+    tags,
+    attachments
+  }
+}
+```
+
+Snake_case names such as `created_at`, `capture_id`, and `context_clues`, and UI-local aliases such as `locationSnapshots` or `attachmentSnapshots`, should not cross the API boundary. The backend may map to database column names only at the database adapter boundary.
+
 Kysely is the preferred candidate to replace the homegrown Supabase-like query builder because it is SQL-like and can use generated database types. PgTyped remains a good option for complex raw SQL paths such as Recall. Named prepared statements should not be added while JobDone uses Supabase transaction pooling; parameterized queries remain required.
 
 ## Consequences
