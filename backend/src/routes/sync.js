@@ -2,6 +2,7 @@ import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveCo
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
+import { parseContactPullPayload, parseContactsPayload, parseLocationsPayload } from '../contracts/syncRequests.js';
 import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
 
 function assertSyncResponse(parsed) {
@@ -141,7 +142,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
+      const parsed = parseContactsPayload(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const { contacts } = parsed.data;
       const saved = [];
       for (const contact of contacts) {
         saved.push(await db.saveContact(user.id, contact));
@@ -187,7 +190,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const clientIds = Array.isArray(request.body?.clientIds) ? request.body.clientIds : [];
+      const parsed = parseContactPullPayload(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const { clientIds } = parsed.data;
       const contacts = await db.pullContactsByClientIds(user.id, clientIds);
       const aliases = await db.getContactAliases(user.id);
       return assertSyncResponse(parseContactsResponse({ success: true, contacts: contacts.map(toCanonicalContactRecord), aliases }));
@@ -202,7 +207,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
+      const parsed = parseContactsPayload(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const { contacts } = parsed.data;
       const result = await db.pushReplicaContacts(user.id, contacts);
       return assertSyncResponse(parseContactsResponse({
         success: true,
@@ -238,7 +245,9 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const locations = Array.isArray(request.body?.locations) ? request.body.locations : [];
+      const parsed = parseLocationsPayload(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
+      const { locations } = parsed.data;
       const saved = [];
       for (const location of locations) {
         saved.push(await db.saveLocation(user.id, location));

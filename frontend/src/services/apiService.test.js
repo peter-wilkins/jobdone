@@ -115,3 +115,22 @@ test('cloud location pulls reject noncanonical response bodies', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('cloud location pushes reject noncanonical request bodies before fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    await assert.rejects(
+      () => new APIService().syncLocations([{ displayName: '14 Bell Street', created_at: '2026-05-17T01:00:00.000Z' }]),
+      /Use locations\.0\.createdAt/,
+    );
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

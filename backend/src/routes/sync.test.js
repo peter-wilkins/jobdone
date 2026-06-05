@@ -782,6 +782,27 @@ describe('SyncRoute Contacts sync', () => {
     assert.equal(JSON.parse(res.body).aliases[0].toClientId, 'contact-alain');
   });
 
+  test('rejects legacy Contact request fields before downstream processing', async () => {
+    let pushCalled = false;
+    const app = await buildApp({
+      pushReplicaContacts: async () => {
+        pushCalled = true;
+        return { contacts: [], aliases: [] };
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/contacts/push',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contacts: [{ displayName: 'Alan', created_at: '2026-05-17T01:00:00.000Z' }] }),
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(JSON.parse(res.body).error, 'Use contacts.0.createdAt, not contacts.0.created_at');
+    assert.equal(pushCalled, false);
+  });
+
   test('syncs locally discovered aliases to backend', async () => {
     const app = await buildApp({
       saveContactAlias: async (userId, alias) => {
@@ -851,6 +872,29 @@ describe('SyncRoute Locations sync', () => {
       createdAt: null,
       updatedAt: null,
     });
+  });
+
+  test('rejects legacy Location request fields before downstream processing', async () => {
+    let saveCalled = false;
+    const app = await buildApp({
+      saveLocation: async () => {
+        saveCalled = true;
+        return null;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/locations',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        locations: [{ displayName: '14 Bell Street', display_name: '14 Bell Street' }],
+      }),
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(JSON.parse(res.body).error, 'Use locations.0.displayName, not locations.0.display_name');
+    assert.equal(saveCalled, false);
   });
 
   test('fetches cloud locations for authenticated user', async () => {

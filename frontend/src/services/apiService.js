@@ -8,6 +8,7 @@ import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
 import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
+import { parseContactPullPayload, parseContactsPayload, parseLocationsPayload } from '../contracts/syncRequests.js';
 import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
 
 const ENV = import.meta.env || {};
@@ -80,6 +81,11 @@ async function throwApiError(response, fallbackMessage) {
 }
 
 function typedSyncResponse(parsed, fallbackMessage) {
+  if (parsed.success) return parsed.data;
+  throw new Error(parsed.error || fallbackMessage);
+}
+
+function typedSyncRequest(parsed, fallbackMessage) {
   if (parsed.success) return parsed.data;
   throw new Error(parsed.error || fallbackMessage);
 }
@@ -246,10 +252,11 @@ export class APIService {
   }
 
   async pushContacts(contacts) {
+    const payload = typedSyncRequest(parseContactsPayload({ contacts }), 'Invalid contacts sync payload');
     const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ contacts }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -259,10 +266,11 @@ export class APIService {
   }
 
   async pullContacts(clientIds) {
+    const payload = typedSyncRequest(parseContactPullPayload({ clientIds }), 'Invalid contact pull payload');
     const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts/pull`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ clientIds }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const error = await response.json();
@@ -285,10 +293,11 @@ export class APIService {
   }
 
   async syncLocations(locations) {
+    const payload = typedSyncRequest(parseLocationsPayload({ locations }), 'Invalid locations sync payload');
     const response = await apiFetch(`${API_BASE_URL}/api/sync/locations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ locations }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       const error = await response.json();

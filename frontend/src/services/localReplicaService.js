@@ -124,10 +124,28 @@ export async function syncContactReplica({ db = dbService, api = apiService, aut
     : { aliases: [] };
 
   const pushed = toPush.length ? await api.pushContacts(toPush.map(contact => ({
-    ...contact,
+    id: contact.id,
+    localId: contact.id,
+    remoteId: contact.remoteId || null,
     clientId: contactClientId(contact),
+    status: contact.status || 'confirmed',
+    displayName: contact.displayName || '',
+    givenName: contact.givenName || '',
+    familyName: contact.familyName || '',
+    organization: contact.organization || '',
+    title: contact.title || '',
+    note: contact.note || '',
+    phones: contact.phones || [],
+    emails: contact.emails || [],
+    normalizedPhones: contact.normalizedPhones || [],
+    normalizedEmails: contact.normalizedEmails || [],
+    primaryPhone: contact.primaryPhone || null,
+    primaryEmail: contact.primaryEmail || null,
+    sourceCaptureIds: contact.sourceCaptureIds || [],
     contentHash: contactContentHash(contact),
     identityKeys: contactIdentityKeys(contact),
+    createdAt: contact.created_at || null,
+    updatedAt: contact.updated_at || null,
   }))) : { contacts: [], aliases: [] };
 
   const pulled = toPullClientIds.length ? await api.pullContacts(toPullClientIds) : { contacts: [], aliases: [] };

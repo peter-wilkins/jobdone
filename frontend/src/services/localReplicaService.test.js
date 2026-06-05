@@ -4,6 +4,7 @@ import {
   contactContentHash,
   contactManifestRow,
   diffContactManifest,
+  syncContactReplica,
 } from './localReplicaService.js';
 
 function contact(overrides = {}) {
@@ -81,4 +82,42 @@ test('repeated sync with existing alias does not push duplicate', () => {
 
   assert.deepEqual(diff.toPush, []);
   assert.deepEqual(diff.localAliases, []);
+});
+
+test('contact replica push sends canonical fields without local sync metadata', async () => {
+  let pushedContacts;
+  const result = await syncContactReplica({
+    auth: { isLoggedIn: () => true },
+    db: {
+      getContactsForReplica: async () => [
+        contact({
+          id: 'contact-local-1',
+          syncStatus: 'pending',
+          synced_at: null,
+          created_at: '2026-05-17T01:00:00.000Z',
+          updated_at: '2026-05-17T01:01:00.000Z',
+        }),
+      ],
+      saveContactAlias: async () => {},
+      upsertCloudContact: async () => {},
+    },
+    api: {
+      getContactManifest: async () => ({ contacts: [], aliases: [] }),
+      pushContactAliases: async () => ({ aliases: [] }),
+      pullContacts: async () => ({ contacts: [], aliases: [] }),
+      pushContacts: async (contacts) => {
+        pushedContacts = contacts;
+        return { contacts: [], aliases: [] };
+      },
+    },
+  });
+
+  assert.equal(result.pushed, 0);
+  assert.equal(pushedContacts[0].clientId, 'contact-local-1');
+  assert.equal(pushedContacts[0].createdAt, '2026-05-17T01:00:00.000Z');
+  assert.equal(pushedContacts[0].updatedAt, '2026-05-17T01:01:00.000Z');
+  assert.equal(Object.prototype.hasOwnProperty.call(pushedContacts[0], 'created_at'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(pushedContacts[0], 'updated_at'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(pushedContacts[0], 'synced_at'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(pushedContacts[0], 'syncStatus'), false);
 });
