@@ -91,12 +91,12 @@ The local-first sync boundary between the device's IndexedDB data and the backen
 _Avoid_: Generic Table Copier, Server Source of Truth, Reason-specific Sync Flow
 
 **Client ID**:
-The stable app/API identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI, local references, and app-facing backend payloads. Backend server IDs may exist inside the backend database, but they must not replace or leak alongside Client IDs in app-facing Local Replica payloads.
-_Avoid_: Disposable Temp ID, Remote ID as App Identity, Server ID in App Payloads, Rewriting Local References on Sync
+The stable app/API identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI, local references, and app-facing backend payloads. Local Replica Client IDs should be UUIDv7 values generated on-device so they are offline-capable and reasonably append-friendly in PostgreSQL. Backend server IDs may exist inside the backend database, but they must not replace or leak alongside Client IDs in app-facing Local Replica payloads.
+_Avoid_: Disposable Temp ID, Remote ID as App Identity, Server ID in App Payloads, Date-Math Random IDs, Rewriting Local References on Sync
 
 **Client ID Alias**:
-A Local Replica mapping from an old or duplicate Client ID to the canonical Client ID for the same real-world object. Aliases allow Contacts and Locations to collapse exact duplicates without rewriting every existing local reference immediately. Reads, searches, sync manifests, and Entry structure resolution should resolve aliases at boundaries so historical references keep working.
-_Avoid_: Broken Reference Rewrite, Duplicate Object Fork, Server ID Replacement
+A Local Replica mapping from an old or duplicate Client ID to the canonical Client ID for the same real-world object. Aliases allow Contacts and Locations to collapse exact duplicates without rewriting every existing local reference immediately. Aliases are app-visible only inside Local Replica plumbing; normal UI should never show them. Reads, searches, sync manifests, candidate sets, and Entry structure resolution should resolve aliases at boundaries so historical references keep working.
+_Avoid_: Broken Reference Rewrite, Duplicate Object Fork, Server ID Replacement, User-Facing Alias
 
 **Work Context**:
 A Team-configured Entry structure dimension that captures what the work belongs to for that Team, beyond global Location, Contact, and Tags. Examples include Backlog Item, Machine, Vehicle, Asset, Project, or another Team-specific operational object. Work Context should use Team language and settings, not product-specific words such as chore.
