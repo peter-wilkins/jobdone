@@ -481,8 +481,7 @@ export class APIService {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `HTTP ${response.status}: Recall failed`);
+        await throwApiError(response, 'Recall failed');
       }
 
       const result = await response.json();

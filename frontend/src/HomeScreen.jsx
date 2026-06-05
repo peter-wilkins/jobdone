@@ -319,6 +319,7 @@ export function HomeScreen({
   const [activeQuery, setActiveQuery] = useState(null);
   const [queryResults, setQueryResults] = useState(null);
   const [isRecalling, setIsRecalling] = useState(false);
+  const [queryInputText, setQueryInputText] = useState('');
 
   // Query history dropdown state
   const [queryDropdownOpen, setQueryDropdownOpen] = useState(false);
@@ -1803,6 +1804,10 @@ export function HomeScreen({
     } catch (err) {
       if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
         setError(OFFLINE_MSG);
+      } else if (err?.status === 401 || err?.status === 403) {
+        setError('Log in to search your synced entries.');
+      } else if (err?.status === 400) {
+        setError(err?.message || 'Type a search query first.');
       } else {
         setError('Something went wrong — try again.');
       }
@@ -2048,37 +2053,72 @@ export function HomeScreen({
       return <div className="h-12" />;
     }
 
-    // Idle state - clickable bar body opens query history dropdown
+    const trimmedQueryInput = queryInputText.trim();
+    const visibleRecentQueries = recentQueries
+      .filter(q => {
+        if (!trimmedQueryInput) return true;
+        return q.text.toLowerCase().includes(trimmedQueryInput.toLowerCase());
+      })
+      .slice(0, 6);
+
+    // Idle state - browser-bar search with recent query suggestions
     return (
       <div className="relative h-12" ref={dropdownRef}>
-        <button
-          onClick={() => setQueryDropdownOpen(o => !o)}
-          className="w-full h-12 px-4 flex items-center justify-between text-left hover:bg-gray-50 transition"
+        <form
+          className="flex h-12 items-center px-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            executeQuery(queryInputText);
+          }}
         >
-          <span className="text-sm text-gray-400">Recent searches…</span>
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+          <div className="relative w-full">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m1.6-5.4a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="search"
+              value={queryInputText}
+              onChange={(event) => setQueryInputText(event.target.value)}
+              onFocus={() => setQueryDropdownOpen(true)}
+              placeholder="Search your entries"
+              className="h-9 w-full rounded-full border border-gray-200 bg-gray-50 pl-9 pr-12 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
+              aria-label="Search entries"
+            />
+            <button
+              type="submit"
+              disabled={!trimmedQueryInput || isRecalling}
+              className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+              title="Search"
+              aria-label="Search"
+            >
+              {isRecalling ? (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-6-6l6 6-6 6" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </form>
 
         {/* Dropdown */}
-        {queryDropdownOpen && (
+        {queryDropdownOpen && visibleRecentQueries.length > 0 && (
           <div className="absolute left-4 right-4 top-12 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-            {recentQueries.length === 0 ? (
-              <div className="px-4 py-6 text-center text-gray-400 text-sm">No recent searches</div>
-            ) : (
-              <div className="p-2">
-                {recentQueries.map((q, i) => (
-                  <button
-                    key={q.id || i}
-                    onClick={() => executeQuery(q.text)}
-                    className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition text-sm text-gray-700 truncate"
-                  >
-                    {q.text}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="p-2">
+              {visibleRecentQueries.map((q, i) => (
+                <button
+                  key={q.id || i}
+                  onClick={() => {
+                    setQueryInputText(q.text);
+                    executeQuery(q.text);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition text-sm text-gray-700 truncate"
+                >
+                  {q.text}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

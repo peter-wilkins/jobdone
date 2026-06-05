@@ -178,3 +178,24 @@ test('recall rejects empty queries before fetch', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('recall failed responses preserve server status and message', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Authentication required' }), {
+    status: 401,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  try {
+    await assert.rejects(
+      () => new APIService().recall('tap repair'),
+      (error) => {
+        assert.equal(error.status, 401);
+        assert.equal(error.message, 'Authentication required');
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
