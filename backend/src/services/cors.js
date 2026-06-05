@@ -1,9 +1,8 @@
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://jobdone-staging.vercel.app',
-  'https://jobdone-production.vercel.app',
+  'https://jobdone.continuumkit.org',
   'https://jobdone-frontend-staging.vercel.app',
   'https://jobdone-frontend-production.vercel.app',
-  'https://frontend-six-sage-63.vercel.app',
   'http://localhost:5173',
   'http://localhost:4173',
 ];

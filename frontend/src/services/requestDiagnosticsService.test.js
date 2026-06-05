@@ -146,22 +146,32 @@ test('does not retain non-200 response bodies when debug details are disabled', 
 test('records network failures without request bodies', async () => {
   installStorage();
   resetRequestDiagnosticsForTests();
+  setApiErrorDetailsEnabled(true);
   globalThis.fetch = async () => {
     throw new Error('network down');
   };
 
-  await assert.rejects(
-    fetchWithRequestDiagnostics('https://api.example.test/api/recall', {
+  let thrown;
+  try {
+    await fetchWithRequestDiagnostics('https://api.example.test/api/recall', {
       method: 'POST',
       body: JSON.stringify({ query: 'private words' }),
-    }),
-    /network down/
-  );
+    });
+  } catch (error) {
+    thrown = error;
+  }
 
   const [request] = recentApiRequests();
+  const [detail] = recentApiErrorDetails();
+  assert.match(thrown.message, /network down/);
+  assert.equal(thrown.debugDetail.endpoint, '/api/recall');
   assert.equal(request.endpoint, '/api/recall');
   assert.equal(request.failure_kind, 'network_error');
+  assert.equal(detail.endpoint, '/api/recall');
+  assert.equal(detail.failureKind, 'network_error');
+  assert.equal(detail.message, 'network down');
   assert.equal(JSON.stringify(request).includes('private words'), false);
+  assert.equal(JSON.stringify(detail).includes('private words'), false);
 
   removeGlobals();
 });

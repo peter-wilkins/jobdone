@@ -177,6 +177,7 @@ export function recordApiErrorDetail(detail = {}) {
   } catch {
     // Non-browser tests do not need UI events.
   }
+  return sanitized;
 }
 
 export async function fetchWithRequestDiagnostics(url, options = {}, timeoutMs = null) {
@@ -224,15 +225,29 @@ export async function fetchWithRequestDiagnostics(url, options = {}, timeoutMs =
     }
     return response;
   } catch (error) {
+    const durationMs = nowMs() - startedAt;
+    const failureKind = error?.name === 'AbortError' ? 'timeout' : 'network_error';
     recordApiRequest({
       requestId,
       endpoint,
       method,
       status: null,
       ok: false,
-      durationMs: nowMs() - startedAt,
-      failureKind: error?.name === 'AbortError' ? 'timeout' : 'network_error',
+      durationMs,
+      failureKind,
     });
+    if (apiErrorDetailsEnabled()) {
+      error.debugDetail = recordApiErrorDetail({
+        requestId,
+        endpoint,
+        method,
+        status: null,
+        durationMs: Math.round(durationMs),
+        failureKind,
+        errorName: error?.name || 'Error',
+        message: error?.message || 'Network request failed',
+      });
+    }
     error.requestId = requestId;
     throw error;
   } finally {

@@ -56,6 +56,7 @@ extract_deployment_url() {
 }
 
 deploy_backend() {
+  local cors_allowed_origins="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS,https://jobdone-frontend-production.vercel.app,http://localhost:5173,http://localhost:4173"
   npx vercel --cwd backend build \
     --target=production \
     >&2
@@ -69,6 +70,7 @@ deploy_backend() {
     -e SUPABASE_URL="$JOBDONE_PROD_SUPABASE_URL" \
     -e SUPABASE_KEY="$JOBDONE_PROD_SUPABASE_PUBLISHABLE_KEY" \
     -e FRONTEND_URL="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS" \
+    -e CORS_ALLOWED_ORIGINS="$cors_allowed_origins" \
     2>&1)"
   printf '%s\n' "$output" >&2
   printf '%s\n' "$output" | extract_deployment_url

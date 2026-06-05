@@ -52,6 +52,8 @@ function App() {
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
 
   async function runConfirmedDataSync(reason) {
+    const syncUser = authService.getUser();
+    setApiErrorDetailsEnabled(debugApiDetailsEnabledForUser(syncUser));
     try {
       const result = await syncOrchestratorService.syncConfirmedData({ reason });
       if (result.ok) {
@@ -231,7 +233,10 @@ function App() {
         debugDetail: apiDebugDetail,
       }
     : null;
-  const activeNotice = authNotice || syncNotice || debugApiNotice;
+  const syncNoticeWithDebug = syncNotice
+    ? { ...syncNotice, debugDetail: syncNotice.debugDetail || apiDebugDetail }
+    : null;
+  const activeNotice = authNotice || syncNoticeWithDebug || debugApiNotice;
   const activeDebugDetail = activeNotice?.debugDetail || null;
   const authStatusBar = activeNotice ? (
     <div className={`fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>

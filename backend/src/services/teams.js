@@ -130,7 +130,7 @@ export function presentTeam(row = {}) {
 }
 
 function inviteUrlFor(row = {}, appBaseUrl = '') {
-  const baseUrl = String(appBaseUrl || process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://jobdone-production.vercel.app').replace(/\/+$/, '');
+  const baseUrl = String(appBaseUrl || process.env.FRONTEND_URL || process.env.VITE_APP_URL || 'https://jobdone.continuumkit.org').replace(/\/+$/, '');
   return `${baseUrl}/invite?token=${encodeURIComponent(tokenForInviteId(row.id))}`;
 }
 
