@@ -27,6 +27,8 @@ Entry sync will use one camelCase API/local payload shape:
 
 Snake_case names such as `created_at`, `capture_id`, and `context_clues`, and UI-local aliases such as `locationSnapshots` or `attachmentSnapshots`, should not cross the API boundary. The backend may map to database column names only at the database adapter boundary.
 
+Shared API contracts should live in a small root-level `shared/contracts/` module imported by both frontend and backend. Start with plain JavaScript plus Zod, then let TypeScript checking grow around it; do not add package/workspace ceremony before it proves useful.
+
 Kysely is the preferred candidate to replace the homegrown Supabase-like query builder because it is SQL-like and can use generated database types. PgTyped remains a good option for complex raw SQL paths such as Recall. Named prepared statements should not be added while JobDone uses Supabase transaction pooling; parameterized queries remain required.
 
 ## Consequences
