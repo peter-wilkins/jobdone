@@ -14,9 +14,11 @@
     "frontend/src/contracts/localCapture.js",
     "frontend/src/contracts/syncRequests.js",
     "frontend/src/contracts/syncResponses.js",
+    "backend/src/contracts/databaseRows.js",
     "backend/src/contracts/entrySync.js",
     "backend/src/contracts/syncRequests.js",
     "backend/src/contracts/syncResponses.js",
+    "backend/src/contracts/databaseRows.typecheck.ts",
     "frontend/src/contracts/entrySync.typecheck.ts",
     "frontend/src/contracts/localCapture.typecheck.ts",
     "frontend/src/contracts/syncContactsLocations.typecheck.ts"

@@ -178,12 +178,12 @@ describe('Cloud Entry response mapping', () => {
     const contact = toCanonicalContactRecord({
       id: 'contact-cloud-1',
       clientId: 'contact-local-1',
-      display_name: 'Ann Smith',
-      primary_phone: '+353123',
-      normalized_phones: ['+353123'],
-      source_capture_ids: ['entry-1'],
-      created_at: '2026-05-17T01:00:00.000Z',
-      updated_at: '2026-05-17T01:01:00.000Z',
+      displayName: 'Ann Smith',
+      primaryPhone: '+353123',
+      normalizedPhones: ['+353123'],
+      sourceCaptureIds: ['entry-1'],
+      createdAt: '2026-05-17T01:00:00.000Z',
+      updatedAt: '2026-05-17T01:01:00.000Z',
     });
     const location = toCanonicalLocationRecord({
       id: 'location-cloud-1',
