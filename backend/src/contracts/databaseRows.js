@@ -4,19 +4,26 @@ const optionalString = z.string().nullable().optional();
 const optionalNumber = z.number().nullable().optional();
 const optionalTimestamp = z.union([z.string(), z.date()]).nullable().optional();
 const looseObject = z.record(z.string(), z.unknown());
+const optionalStringArray = z.array(z.string()).nullable().optional();
 
 export const databaseRowSchemas = {
   entryRowSchema: z.object({
     id: z.string(),
+    user_id: z.string().optional(),
     capture_id: optionalString,
     transcript: z.string().nullable().optional(),
     summary: z.string().nullable().optional(),
+    embedding: z.unknown().nullable().optional(),
+    embedding_model: optionalString,
     created_at: optionalTimestamp,
     synced_at: optionalTimestamp,
+    recall_score: optionalNumber,
+    match_reasons: optionalStringArray,
   }).strict(),
 
   locationRowSchema: z.object({
     id: optionalString,
+    user_id: z.string().optional(),
     local_id: optionalString,
     status: z.string().optional(),
     display_name: z.string().optional(),
@@ -31,6 +38,7 @@ export const databaseRowSchemas = {
 
   contactRowSchema: z.object({
     id: optionalString,
+    userId: z.string().optional(),
     clientId: optionalString,
     status: z.string().optional(),
     displayName: z.string().optional(),
@@ -41,13 +49,13 @@ export const databaseRowSchemas = {
     note: z.string().optional(),
     phones: z.array(looseObject).optional(),
     emails: z.array(looseObject).optional(),
-    normalizedPhones: z.array(z.string()).optional(),
-    normalizedEmails: z.array(z.string()).optional(),
+    normalizedPhones: optionalStringArray,
+    normalizedEmails: optionalStringArray,
     primaryPhone: optionalString,
     primaryEmail: optionalString,
-    sourceCaptureIds: z.array(z.string()).optional(),
+    sourceCaptureIds: optionalStringArray,
     contentHash: optionalString,
-    identityKeys: z.array(z.string()).optional(),
+    identityKeys: optionalStringArray,
     createdAt: optionalTimestamp,
     updatedAt: optionalTimestamp,
   }).strict(),

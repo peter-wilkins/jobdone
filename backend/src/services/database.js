@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
 import { createJobDoneDb } from './postgresDb.js';
+import {
+  parseContactRow,
+  parseEntryRow,
+  parseLocationRow,
+} from '../contracts/databaseRows.js';
 
 const LAB_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
 const LAB_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q';
@@ -69,6 +74,27 @@ function mergeByKey(existingValues = [], incomingValues = []) {
     }
   }
   return merged;
+}
+
+function assertDatabaseRow(parsed, label) {
+  if (parsed.success) return parsed.data;
+  throw new Error(`${label} database row contract failed: ${(parsed.errors || [parsed.error]).join('; ')}`);
+}
+
+export function assertEntryRow(row) {
+  return assertDatabaseRow(parseEntryRow(row), 'Entry');
+}
+
+export function assertLocationRow(row) {
+  return assertDatabaseRow(parseLocationRow(row), 'Location');
+}
+
+export function assertContactRow(row) {
+  return assertDatabaseRow(parseContactRow(row), 'Contact');
+}
+
+function assertRows(rows = [], assertRow) {
+  return (rows || []).map(row => assertRow(row));
 }
 
 function contactsMatch(existing, incoming) {
@@ -451,8 +477,9 @@ export async function saveEntry(userId, entryData) {
       throw error;
     }
 
-    console.log('[DB] Entry saved:', data[0]?.id);
-    return data[0];
+    const row = assertEntryRow(data?.[0]);
+    console.log('[DB] Entry saved:', row.id);
+    return row;
   } catch (error) {
     console.error('[DB] Failed to save entry:', error.message);
     throw error;
@@ -541,7 +568,7 @@ export async function getEntryByCaptureId(userId, captureId) {
       throw error;
     }
 
-    return data?.[0] || null;
+    return data?.[0] ? assertEntryRow(data[0]) : null;
   } catch (error) {
     console.error('[DB] Failed to fetch entry by capture_id:', error.message);
     throw error;
@@ -573,7 +600,7 @@ export async function getEntryByCreatedAt(userId, createdAt) {
       throw error;
     }
 
-    return data?.[0] || null;
+    return data?.[0] ? assertEntryRow(data[0]) : null;
   } catch (error) {
     console.error('[DB] Failed to fetch entry by created_at:', error.message);
     throw error;
@@ -736,7 +763,7 @@ export async function getEntries(userId) {
       throw error;
     }
 
-    const entries = data || [];
+    const entries = assertRows(data || [], assertEntryRow);
     if (entries.length === 0) return entries;
 
     const { data: clues, error: cluesError } = await jobdoneDb
@@ -816,7 +843,7 @@ export async function getEntries(userId) {
     for (const link of locationLinks || []) {
       if (!link.locations) continue;
       const list = locationsByEntry.get(link.entry_id) || [];
-      list.push(link.locations);
+      list.push(assertLocationRow(link.locations));
       locationsByEntry.set(link.entry_id, list);
     }
 
@@ -835,7 +862,7 @@ export async function getEntries(userId) {
     for (const link of contactLinks || []) {
       if (!link.contacts) continue;
       const list = contactsByEntry.get(link.entry_id) || [];
-      list.push(link.contacts);
+      list.push(assertContactRow(link.contacts));
       contactsByEntry.set(link.entry_id, list);
     }
 
@@ -916,7 +943,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
         .eq('local_id', location.local_id)
         .limit(1);
       if (existingError) throw existingError;
-      row = existing?.[0] || null;
+      row = existing?.[0] ? assertLocationRow(existing[0]) : null;
     }
 
     if (!row) {
@@ -930,7 +957,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
         .select()
         .single();
       if (error) throw error;
-      row = data;
+      row = assertLocationRow(data);
       existingLocations.push(row);
     } else {
       const { data, error } = await jobdoneDb
@@ -948,7 +975,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
         .select()
         .single();
       if (error) throw error;
-      row = data;
+      row = assertLocationRow(data);
     }
 
     const { error: linkError } = await jobdoneDb
@@ -961,7 +988,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
       }], { onConflict: 'user_id,entry_id,location_id' });
     if (linkError) throw linkError;
 
-    saved.push(row);
+    saved.push(assertLocationRow(row));
   }
 
   return saved;
@@ -986,7 +1013,7 @@ export async function saveLocation(userId, input = {}) {
       .eq('local_id', location.local_id)
       .limit(1);
     if (existingError) throw existingError;
-    row = existing?.[0] || null;
+    row = existing?.[0] ? assertLocationRow(existing[0]) : null;
   }
 
   if (!row) {
@@ -1000,7 +1027,7 @@ export async function saveLocation(userId, input = {}) {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return assertLocationRow(data);
   }
 
   const { data, error } = await jobdoneDb
@@ -1019,7 +1046,7 @@ export async function saveLocation(userId, input = {}) {
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return assertLocationRow(data);
 }
 
 export async function saveEntryContacts(userId, entryId, contacts = []) {
@@ -1278,7 +1305,7 @@ export async function saveContactForReplica(userId, contactData) {
       .select()
       .single();
     if (error) throw error;
-    return { contact: data, aliases };
+    return { contact: assertContactRow(data), aliases };
   }
 
   if (clientId && existing.clientId && clientId !== existing.clientId) {
@@ -1316,7 +1343,7 @@ export async function saveContactForReplica(userId, contactData) {
     .select()
     .single();
   if (error) throw error;
-  return { contact: data, aliases };
+  return { contact: assertContactRow(data), aliases };
 }
 
 export async function getContacts(userId) {
@@ -1332,7 +1359,7 @@ export async function getContacts(userId) {
     .eq('status', 'confirmed')
     .order('updatedAt', { ascending: false });
   if (error) throw error;
-  return data || [];
+  return assertRows(data || [], assertContactRow);
 }
 
 export async function getContactManifest(userId) {
@@ -1352,7 +1379,7 @@ export async function pullContactsByClientIds(userId, clientIds = []) {
     .eq('userId', userId)
     .in('clientId', clientIds);
   if (error) throw error;
-  return data || [];
+  return assertRows(data || [], assertContactRow);
 }
 
 export async function pushReplicaContacts(userId, contacts = []) {
@@ -1379,7 +1406,7 @@ export async function getLocations(userId) {
     .eq('status', 'confirmed')
     .order('updated_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  return assertRows(data || [], assertLocationRow);
 }
 
 export function buildContactLocationCooccurrences(contactLinks = [], locationLinks = []) {
@@ -1462,7 +1489,16 @@ export async function getContactLocationCooccurrences(userId) {
     throw locationError;
   }
 
-  return buildContactLocationCooccurrences(contactLinks || [], locationLinks || []);
+  const parsedContactLinks = (contactLinks || []).map(link => ({
+    ...link,
+    contacts: link.contacts ? assertContactRow(link.contacts) : link.contacts,
+  }));
+  const parsedLocationLinks = (locationLinks || []).map(link => ({
+    ...link,
+    locations: link.locations ? assertLocationRow(link.locations) : link.locations,
+  }));
+
+  return buildContactLocationCooccurrences(parsedContactLinks, parsedLocationLinks);
 }
 
 export async function getTagVocabulary(userId) {
@@ -1703,7 +1739,7 @@ async function attachEntryStructure(userId, entries = []) {
 
   const locationsByEntryId = new Map();
   for (const link of locationLinks) {
-    const location = link.locations;
+    const location = link.locations ? assertLocationRow(link.locations) : null;
     if (!location || location.status !== 'confirmed') continue;
     if (!locationsByEntryId.has(link.entry_id)) locationsByEntryId.set(link.entry_id, []);
     locationsByEntryId.get(link.entry_id).push(location);
@@ -1719,7 +1755,7 @@ async function attachEntryStructure(userId, entries = []) {
 
   const contactsByEntryId = new Map();
   for (const link of contactLinks) {
-    const contact = link.contacts;
+    const contact = link.contacts ? assertContactRow(link.contacts) : null;
     if (!contact || contact.status !== 'confirmed') continue;
     if (!contactsByEntryId.has(link.entry_id)) contactsByEntryId.set(link.entry_id, []);
     contactsByEntryId.get(link.entry_id).push(contact);
@@ -1756,7 +1792,7 @@ export async function recallEntries(userId, { query = '', limit = 10 } = {}) {
       throw error;
     }
 
-    const candidates = data || [];
+    const candidates = assertRows(data || [], assertEntryRow);
     if (candidates.length === 0) return [];
 
     return attachEntryStructure(userId, candidates);

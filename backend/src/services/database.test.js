@@ -2,6 +2,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   JOBDONE_DB_SCHEMA,
+  assertContactRow,
+  assertEntryRow,
+  assertLocationRow,
   authSupabaseKey,
   authSupabaseUrl,
   buildContactLocationCooccurrences,
@@ -54,6 +57,21 @@ describe('Postgres adapter value mapping', () => {
     );
     assert.deepEqual(valueForColumn('normalizedPhones', ['07709290759']), ['07709290759']);
     assert.equal(valueForColumn('embedding', [0.1, 0.2]), '[0.1,0.2]');
+  });
+
+  test('database row assertions reject app-shape fields at the adapter seam', () => {
+    assert.throws(
+      () => assertEntryRow({ id: 'entry-1', createdAt: '2026-06-05T12:00:00.000Z' }),
+      /Entry database row contract failed/
+    );
+    assert.throws(
+      () => assertLocationRow({ id: 'location-1', displayName: '14 Bell Street' }),
+      /Location database row contract failed/
+    );
+    assert.throws(
+      () => assertContactRow({ id: 'contact-1', display_name: 'Ann Smith' }),
+      /Contact database row contract failed/
+    );
   });
 });
 
