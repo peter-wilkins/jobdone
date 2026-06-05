@@ -5,10 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 STAGING_FILE="${STAGING_FILE:-.deploy/last-staging.env}"
-FRONTEND_PRODUCTION_PRIMARY_ALIAS="${FRONTEND_PRODUCTION_ALIAS:-jobdone-frontend-production.vercel.app}"
+FRONTEND_PRODUCTION_PRIMARY_ALIAS="${FRONTEND_PRODUCTION_ALIAS:-jobdone.continuumkit.org}"
 BACKEND_PRODUCTION_PRIMARY_ALIAS="${BACKEND_PRODUCTION_ALIAS:-jobdone-backend-production.vercel.app}"
 FRONTEND_PRODUCTION_ALIASES=(
   "$FRONTEND_PRODUCTION_PRIMARY_ALIAS"
+  "jobdone-frontend-production.vercel.app"
 )
 FRONTEND_REMOVED_ALIASES=(
   "jobdone-production.vercel.app"
@@ -25,6 +26,8 @@ BACKEND_PRODUCTION_ALIASES=(
 
 # shellcheck disable=SC1090
 . "${HOME}/.profile"
+
+JOBDONE_PROD_BACKEND_DB_URL="${JOBDONE_PROD_BACKEND_DB_URL:-${JOBDONE_PROD_SUPABASE_DB_URL:-}}"
 
 require_env() {
   local name="$1"

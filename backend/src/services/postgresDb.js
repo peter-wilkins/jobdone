@@ -288,9 +288,20 @@ function buildWhere(filters, values) {
   return ` where ${clauses.join(' and ')}`;
 }
 
-function valueForColumn(column, value) {
+const JSONB_COLUMNS = new Set([
+  'diagnostic_bundle',
+  'emails',
+  'metadata',
+  'payload',
+  'phones',
+]);
+
+export function valueForColumn(column, value) {
   if (column === 'embedding' && Array.isArray(value)) {
     return `[${value.join(',')}]`;
+  }
+  if (JSONB_COLUMNS.has(column) && value !== undefined && value !== null) {
+    return JSON.stringify(value);
   }
   return value ?? null;
 }

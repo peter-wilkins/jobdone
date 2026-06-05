@@ -333,7 +333,110 @@ CREATE UNIQUE INDEX entry_attachments_user_entry_local_uidx
 
 ALTER TABLE entry_attachments ENABLE ROW LEVEL SECURITY;
 
--- 14. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 14. teams (shared Backlog coordination, owner-managed)
+CREATE TABLE teams (
+  id                                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                              TEXT NOT NULL,
+  template                          TEXT NOT NULL DEFAULT 'high_trust'
+                                    CHECK (template IN ('high_trust', 'low_trust', 'family')),
+  points_enabled                    BOOLEAN NOT NULL DEFAULT FALSE,
+  approval_mode                     TEXT NOT NULL DEFAULT 'auto'
+                                    CHECK (approval_mode IN ('auto', 'manual')),
+  workers_can_create_backlog_items  BOOLEAN NOT NULL DEFAULT TRUE,
+  require_owner_self_review         BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at                        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX teams_created_at_idx ON teams(created_at ASC);
+
+ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
+
+-- 15. team_members (email-scoped Team membership)
+CREATE TABLE team_members (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id          UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  email            TEXT NOT NULL,
+  normalized_email TEXT GENERATED ALWAYS AS (lower(btrim(email))) STORED,
+  role             TEXT NOT NULL DEFAULT 'worker'
+                   CHECK (role IN ('owner', 'worker')),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX team_members_team_id_idx ON team_members(team_id);
+CREATE INDEX team_members_normalized_email_idx ON team_members(normalized_email);
+CREATE UNIQUE INDEX team_members_team_email_uidx ON team_members(team_id, normalized_email);
+
+ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
+
+-- 16. team_invites (long-lived email invite links)
+CREATE TABLE team_invites (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id            UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  email              TEXT NOT NULL,
+  normalized_email   TEXT GENERATED ALWAYS AS (lower(btrim(email))) STORED,
+  token_hash         TEXT NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'accepted', 'revoked')),
+  invited_by_email   TEXT NOT NULL,
+  accepted_member_id UUID REFERENCES team_members(id) ON DELETE SET NULL,
+  accepted_at        TIMESTAMPTZ,
+  revoked_at         TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX team_invites_team_id_idx ON team_invites(team_id);
+CREATE INDEX team_invites_normalized_email_idx ON team_invites(normalized_email);
+CREATE INDEX team_invites_token_hash_idx ON team_invites(token_hash);
+CREATE INDEX team_invites_invited_by_created_idx ON team_invites(invited_by_email, created_at DESC);
+CREATE UNIQUE INDEX team_invites_team_pending_email_uidx
+  ON team_invites(team_id, normalized_email)
+  WHERE status = 'pending';
+
+ALTER TABLE team_invites ENABLE ROW LEVEL SECURITY;
+
+-- 17. backlog_items (Team work that can be claimed)
+CREATE TABLE backlog_items (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id          UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  description      TEXT NOT NULL,
+  points           INTEGER CHECK (points IS NULL OR (points BETWEEN 1 AND 10)),
+  status           TEXT NOT NULL DEFAULT 'open'
+                   CHECK (status IN ('open', 'claimed', 'submitted', 'needs_more_evidence', 'approved')),
+  claimed_by_email TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX backlog_items_team_status_idx ON backlog_items(team_id, status);
+CREATE INDEX backlog_items_claimed_by_email_idx ON backlog_items(claimed_by_email);
+CREATE INDEX backlog_items_created_at_idx ON backlog_items(created_at DESC);
+
+ALTER TABLE backlog_items ENABLE ROW LEVEL SECURITY;
+
+-- 18. approval_requests (evidence and owner decisions for claimed work)
+CREATE TABLE approval_requests (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id         UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  backlog_item_id UUID NOT NULL REFERENCES backlog_items(id) ON DELETE CASCADE,
+  status          TEXT NOT NULL DEFAULT 'submitted'
+                  CHECK (status IN ('submitted', 'needs_more_evidence', 'approved')),
+  evidence_text   TEXT NOT NULL DEFAULT '',
+  submitted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX approval_requests_team_status_idx ON approval_requests(team_id, status);
+CREATE INDEX approval_requests_backlog_item_idx ON approval_requests(backlog_item_id);
+CREATE INDEX approval_requests_submitted_at_idx ON approval_requests(submitted_at ASC);
+
+ALTER TABLE approval_requests ENABLE ROW LEVEL SECURITY;
+
+-- 19. match_entries RPC — 1024-dim voyage-3-lite embeddings
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  extensions.vector(1024),

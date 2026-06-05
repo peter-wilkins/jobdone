@@ -18,6 +18,7 @@ import { createCorsOriginValidator } from './services/cors.js';
 export function createApp(options = {}) {
   const fastify = Fastify({
     logger: true,
+    bodyLimit: 25 * 1024 * 1024,
     ...options,
   });
 
@@ -58,6 +59,9 @@ export function createApp(options = {}) {
   });
 
   fastify.setErrorHandler((error, request, reply) => {
+    const statusCode = error.statusCode >= 400 && error.statusCode < 600
+      ? error.statusCode
+      : 500;
     fastify.log.error({
       err: error,
       request_id: request.requestId,
@@ -65,9 +69,9 @@ export function createApp(options = {}) {
       route: request.routeOptions?.url || request.routerPath || request.url,
       error_kind: error.code || error.name || 'Error',
     }, 'request_failed');
-    reply.status(500).send({
-      error: 'Internal server error',
-      message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    reply.status(statusCode).send({
+      error: statusCode === 413 ? 'Request body too large' : 'Internal server error',
+      message: process.env.NODE_ENV === 'development' || statusCode === 413 ? error.message : undefined,
     });
   });
 

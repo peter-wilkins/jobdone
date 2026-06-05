@@ -9,7 +9,7 @@ case "$target" in
     backend_url="${BACKEND_STAGING_URL:-https://jobdone-backend-staging.vercel.app}"
     ;;
   production|prod)
-    frontend_url="${FRONTEND_PRODUCTION_URL:-https://jobdone-frontend-production.vercel.app}"
+    frontend_url="${FRONTEND_PRODUCTION_URL:-https://jobdone.continuumkit.org}"
     backend_url="${BACKEND_PRODUCTION_URL:-https://jobdone-backend-production.vercel.app}"
     ;;
   *)

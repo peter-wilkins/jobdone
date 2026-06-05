@@ -13,7 +13,13 @@ where table_schema in ('jobdone', 'public')
     'contacts',
     'entry_contacts',
     'queries',
-    'feedback'
+    'feedback',
+    'entry_attachments',
+    'teams',
+    'team_members',
+    'team_invites',
+    'backlog_items',
+    'approval_requests'
   )
 order by table_ref;
 
@@ -32,7 +38,13 @@ where schemaname in ('jobdone', 'public')
     'contacts',
     'entry_contacts',
     'queries',
-    'feedback'
+    'feedback',
+    'entry_attachments',
+    'teams',
+    'team_members',
+    'team_invites',
+    'backlog_items',
+    'approval_requests'
   )
 order by table_ref;
 

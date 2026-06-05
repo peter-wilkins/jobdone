@@ -13,6 +13,7 @@ import {
   isRecencyRecallQuery,
   recallQueryTerms,
   sslConfigForConnection,
+  valueForColumn,
 } from './postgresDb.js';
 
 describe('Database schema binding', () => {
@@ -35,6 +36,21 @@ describe('Database schema binding', () => {
 
     assert.equal(authSupabaseUrl(env), 'https://dtwuflwgcwxygjgkvzfl.supabase.co');
     assert.equal(authSupabaseKey(env), 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q');
+  });
+});
+
+describe('Postgres adapter value mapping', () => {
+  test('serializes JSONB columns without corrupting text arrays', () => {
+    assert.equal(
+      valueForColumn('phones', [{ value: '07709 290759', normalized: '07709290759' }]),
+      '[{"value":"07709 290759","normalized":"07709290759"}]'
+    );
+    assert.equal(
+      valueForColumn('metadata', { originalName: 'photo.jpg', originalSize: 1024 }),
+      '{"originalName":"photo.jpg","originalSize":1024}'
+    );
+    assert.deepEqual(valueForColumn('normalizedPhones', ['07709290759']), ['07709290759']);
+    assert.equal(valueForColumn('embedding', [0.1, 0.2]), '[0.1,0.2]');
   });
 });
 

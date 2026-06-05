@@ -96,6 +96,9 @@ JobDone stores app data in the `jobdone` schema:
 - `contacts`
 - `tag_categories`, `tags`, `tag_vocabulary`
 - `entry_locations`, `entry_contacts`, `entry_tags`
+- `entry_attachments`
+- `teams`, `team_members`, `team_invites`
+- `backlog_items`, `approval_requests`
 - `queries`
 - `feedback`
 
