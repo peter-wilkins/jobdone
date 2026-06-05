@@ -10,8 +10,12 @@ SUPABASE_ACCESS_TOKEN=... npm run auth:emails:apply -- --env staging
 ```
 
 Use `--env production` for prod. The script patches only the Magic Link template
-and subject. It supports both plain sign-in emails and Team invite emails by
-branching on `{{ .Data.email_kind }}`.
+and subject.
+
+The Magic Link email deliberately uses neutral "Open JobDone" copy. Supabase
+renders `{{ .Data }}` from persistent user metadata, so using it for transient
+"sign in" versus "Team invite" context can leak stale copy into later emails.
+Team invite context is handled in the app after the link opens.
 
 Current Supabase docs:
 

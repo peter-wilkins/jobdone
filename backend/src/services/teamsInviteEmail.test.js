@@ -1,22 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { teamInviteEmailData } from './teams.js';
+import { buildAuthEmailPayload } from '../../../scripts/apply-supabase-auth-email-templates.js';
 
-test('builds custom Supabase template data for Team invite emails', () => {
-  const data = teamInviteEmailData({
-    inviteUrl: 'https://frontend.example/invite?token=abc',
-    teamName: 'Dog Food Team',
-    inviterEmail: 'owner@example.com',
-  });
+test('magic-link template uses neutral copy rather than stale user metadata', () => {
+  const payload = buildAuthEmailPayload();
+  const content = payload.mailer_templates_magic_link_content;
 
-  assert.deepEqual(data, {
-    email_kind: 'team_invite',
-    app_name: 'JobDone',
-    team_name: 'Dog Food Team',
-    inviter_email: 'owner@example.com',
-    invite_url: 'https://frontend.example/invite?token=abc',
-    action_text: 'Join Team',
-    headline: 'Join Dog Food Team on JobDone',
-    message: 'Open your Team Backlog, claim work, and capture evidence while it is fresh.',
-  });
+  assert.equal(payload.mailer_subjects_magic_link, 'Open JobDone');
+  assert.match(content, /Open JobDone/);
+  assert.doesNotMatch(content, /email_kind|\.Data\./);
+  assert.doesNotMatch(content, /Sign in to JobDone|JobDone sign-in link/);
 });

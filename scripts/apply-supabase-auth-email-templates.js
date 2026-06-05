@@ -22,12 +22,15 @@ export function buildAuthEmailPayload({
   if (!magicLinkTemplate.includes('{{ .ConfirmationURL }}')) {
     throw new Error('Magic-link template must include {{ .ConfirmationURL }}');
   }
-  if (!magicLinkTemplate.includes('email_kind')) {
-    throw new Error('Magic-link template must branch on email_kind');
+  if (magicLinkTemplate.includes('email_kind') || magicLinkTemplate.includes('.Data.')) {
+    throw new Error('Magic-link template must not depend on persistent Supabase user metadata for transient email context');
+  }
+  if (!magicLinkTemplate.includes('Open JobDone')) {
+    throw new Error('Magic-link template must use neutral Open JobDone copy');
   }
 
   return {
-    mailer_subjects_magic_link: 'JobDone sign-in link',
+    mailer_subjects_magic_link: 'Open JobDone',
     mailer_templates_magic_link_content: magicLinkTemplate,
   };
 }

@@ -5,7 +5,6 @@ import {
   authRedirectUrl,
   consumeAuthErrorFromLocation,
   isJobDoneAuthOrigin,
-  signInEmailData,
 } from './authService.js';
 
 test('auth redirect uses current browser origin when no app URL is configured', () => {
@@ -91,14 +90,4 @@ test('auth sessions persist until explicit sign out', () => {
   assert.equal(authClientOptions.auth.persistSession, true);
   assert.equal(authClientOptions.auth.autoRefreshToken, true);
   assert.equal(authClientOptions.auth.detectSessionInUrl, true);
-});
-
-test('plain sign-in emails explicitly clear Team invite email mode', () => {
-  assert.deepEqual(signInEmailData(), {
-    email_kind: 'sign_in',
-    app_name: 'JobDone',
-    action_text: 'Sign in',
-    headline: 'Sign in to JobDone',
-    message: 'Tap the button to sign in on this device. No password needed.',
-  });
 });
