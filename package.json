@@ -17,5 +17,8 @@
     "logs:backend": "bash scripts/tail-backend-prod-logs.sh",
     "auth:emails:dry-run": "node scripts/apply-supabase-auth-email-templates.js",
     "auth:emails:apply": "node scripts/apply-supabase-auth-email-templates.js --apply"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

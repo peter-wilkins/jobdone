@@ -9,7 +9,7 @@ function makeEntry(overrides = {}) {
   return {
     transcript: 'Fixed a dripping kitchen tap.',
     summary: 'Fixed dripping kitchen tap.',
-    created_at: '2026-05-17T01:00:00.000Z',
+    createdAt: '2026-05-17T01:00:00.000Z',
     ...overrides,
   };
 }
@@ -521,7 +521,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
   });
 
-  test('falls back to created_at when no captureId is provided', async () => {
+  test('falls back to createdAt when no captureId is provided', async () => {
     let embedCalled = false;
     let saveCalled = false;
     const existing = { id: 'entry-existing', ...makeEntry() };
@@ -529,7 +529,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     const app = await buildApp({
       getEntryByCreatedAt: async (userId, createdAt) => {
         assert.equal(userId, 'user-1');
-        assert.equal(createdAt, existing.created_at);
+        assert.equal(createdAt, existing.createdAt);
         return existing;
       },
       embeddingService: {
@@ -554,6 +554,72 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
     assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
+  });
+
+  test('rejects legacy created_at entry payloads before downstream processing', async () => {
+    let embedCalled = false;
+    let saveCalled = false;
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => {
+          embedCalled = true;
+          return makeVector();
+        },
+      },
+      saveEntry: async () => {
+        saveCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          created_at: '2026-05-17T01:00:00.000Z',
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(JSON.parse(res.body).error, 'Use entryData.createdAt, not entryData.created_at');
+    assert.equal(embedCalled, false);
+    assert.equal(saveCalled, false);
+  });
+
+  test('rejects legacy snapshot entry payloads before downstream processing', async () => {
+    let embedCalled = false;
+    let saveCalled = false;
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => {
+          embedCalled = true;
+          return makeVector();
+        },
+      },
+      saveEntry: async () => {
+        saveCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          locationSnapshots: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
+        }),
+      }),
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(JSON.parse(res.body).error, 'Use entryData.locations, not entryData.locationSnapshots');
+    assert.equal(embedCalled, false);
+    assert.equal(saveCalled, false);
   });
 });
 

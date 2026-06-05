@@ -1,6 +1,7 @@
 import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
+import { parseEntrySyncPayload } from '../../../shared/contracts/entrySync.js';
 
 function validateTagLabel(value) {
   if (/[\p{C}]/u.test(String(value || ''))) {
@@ -65,35 +66,27 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     if (!user) return;
 
     try {
-      const { entryData } = request.body;
-
-      if (!entryData) {
-        return reply.status(400).send({ error: 'entryData required' });
+      const parsed = parseEntrySyncPayload(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error, errors: parsed.errors });
       }
+      const { entryData } = parsed.data;
 
-      if (!entryData.summary || typeof entryData.summary !== 'string') {
-        return reply.status(400).send({ error: 'entryData.summary required' });
-      }
-
-      if (!entryData.created_at && !entryData.captureId && !entryData.capture_id) {
-        return reply.status(400).send({ error: 'entryData.created_at or captureId required' });
-      }
-
-      const tagValidation = validateEntryTags(entryData.tags || entryData.tagSnapshots || []);
+      const tagValidation = validateEntryTags(entryData.tags);
       if (!tagValidation.valid) {
         return reply.status(400).send({ error: tagValidation.error });
       }
 
-      const captureId = entryData.captureId || entryData.capture_id || null;
+      const captureId = entryData.captureId || null;
       const existing = captureId
         ? await db.getEntryByCaptureId(user.id, captureId)
-        : await db.getEntryByCreatedAt(user.id, entryData.created_at);
+        : await db.getEntryByCreatedAt(user.id, entryData.createdAt);
       if (existing) {
-        const contextClues = await db.saveContextClues(user.id, existing.id, entryData.contextClues || entryData.context_clues || []);
-        const locations = await db.saveEntryLocations(user.id, existing.id, entryData.locations || entryData.locationSnapshots || []);
-        const contacts = await db.saveEntryContacts(user.id, existing.id, entryData.contacts || entryData.contactSnapshots || []);
-        const tags = await db.saveEntryTags(user.id, existing.id, entryData.tags || entryData.tagSnapshots || []);
-        const incomingAttachments = entryData.attachments || entryData.attachmentSnapshots || [];
+        const contextClues = await db.saveContextClues(user.id, existing.id, entryData.contextClues);
+        const locations = await db.saveEntryLocations(user.id, existing.id, entryData.locations);
+        const contacts = await db.saveEntryContacts(user.id, existing.id, entryData.contacts);
+        const tags = await db.saveEntryTags(user.id, existing.id, entryData.tags);
+        const incomingAttachments = entryData.attachments;
         const attachments = await db.saveEntryAttachments(user.id, existing.id, incomingAttachments);
         const entry = { ...existing, context_clues: contextClues, locations, contacts, tags };
         if (attachments.length || incomingAttachments.length) entry.attachments = attachments;
@@ -106,11 +99,11 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         embedding,
         embedding_model: EMBEDDING_MODEL,
       });
-      const contextClues = await db.saveContextClues(user.id, saved.id, entryData.contextClues || entryData.context_clues || []);
-      const locations = await db.saveEntryLocations(user.id, saved.id, entryData.locations || entryData.locationSnapshots || []);
-      const contacts = await db.saveEntryContacts(user.id, saved.id, entryData.contacts || entryData.contactSnapshots || []);
-      const tags = await db.saveEntryTags(user.id, saved.id, entryData.tags || entryData.tagSnapshots || []);
-      const incomingAttachments = entryData.attachments || entryData.attachmentSnapshots || [];
+      const contextClues = await db.saveContextClues(user.id, saved.id, entryData.contextClues);
+      const locations = await db.saveEntryLocations(user.id, saved.id, entryData.locations);
+      const contacts = await db.saveEntryContacts(user.id, saved.id, entryData.contacts);
+      const tags = await db.saveEntryTags(user.id, saved.id, entryData.tags);
+      const incomingAttachments = entryData.attachments;
       const attachments = await db.saveEntryAttachments(user.id, saved.id, incomingAttachments);
 
       const entry = { ...saved, context_clues: contextClues, locations, contacts, tags };

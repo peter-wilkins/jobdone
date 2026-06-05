@@ -303,10 +303,10 @@ export async function saveEntry(userId, entryData) {
       .insert([
         {
           user_id: userId,
-          capture_id: entryData.captureId ?? entryData.capture_id ?? null,
+          capture_id: entryData.captureId ?? null,
           transcript: entryData.transcript,
           summary: entryData.summary,
-          created_at: new Date(entryData.created_at).toISOString(),
+          created_at: new Date(entryData.createdAt).toISOString(),
           embedding: toVectorLiteral(entryData.embedding),
           embedding_model: entryData.embedding_model ?? null,
         },

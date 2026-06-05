@@ -17,7 +17,8 @@
     "browser-image-compression": "^2.0.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "whisper.cpp": "^1.0.3"
+    "whisper.cpp": "^1.0.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

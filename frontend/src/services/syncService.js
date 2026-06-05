@@ -2,6 +2,7 @@ import { apiService } from './apiService.js';
 import { authService } from './authService.js';
 import { dbService } from './dbService.js';
 import { readyPhotoAttachments } from './photoAttachmentService.js';
+import { parseEntrySyncPayload } from '../../../shared/contracts/entrySync.js';
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -66,19 +67,27 @@ export class SyncService {
       const contacts = Array.isArray(entryData.contactSnapshots) ? entryData.contactSnapshots : [];
       const attachments = await serializeReadyAttachments(entryData);
 
-      const response = await apiService.syncSave({
+      const payload = {
         entryData: {
+          id: entryData.id,
           transcript: entryData.transcript,
           summary: entryData.summary,
-          created_at: entryData.created_at,
-          captureId: entryData.captureId || entryData.capture_id || null,
+          createdAt: entryData.createdAt || entryData.created_at,
+          captureId: entryData.captureId || null,
           contextClues,
           locations,
           contacts,
           tags,
           attachments,
         },
-      });
+      };
+
+      const parsed = parseEntrySyncPayload(payload);
+      if (!parsed.success) {
+        throw new Error(parsed.error);
+      }
+
+      const response = await apiService.syncSave(parsed.data);
 
       console.log('[Sync] Entry synced:', response.entry?.id);
       return response;
