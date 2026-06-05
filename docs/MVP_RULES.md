@@ -27,6 +27,9 @@ Prefer small, testable changes over broad platform work.
 - Prototype data is disposable while explicitly in MVP mode.
 - Destructive schema rewrites are acceptable when they keep the code and schema
   cleaner.
+- Prefer one clean canonical payload shape over compatibility normalization.
+  Old local drafts, stale IndexedDB rows, and disposable prototype data can be
+  cleared while there are no real users.
 
 When JobDone exits MVP mode, this flips: data preservation, careful migrations,
 and backwards compatibility become mandatory.
