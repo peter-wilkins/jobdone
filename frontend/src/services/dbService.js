@@ -1090,6 +1090,13 @@ export class DBService {
   /** Add an entry fetched from the cloud into local IndexedDB as confirmed */
   async addCloudEntry(cloudJob) {
     const db = await this.ensureDb();
+    const cloudLocations = Array.isArray(cloudJob.locations) ? cloudJob.locations : [];
+    const cloudContacts = Array.isArray(cloudJob.contacts) ? cloudJob.contacts : [];
+    const cloudTags = Array.isArray(cloudJob.tags) ? cloudJob.tags : [];
+    const cloudAttachments = Array.isArray(cloudJob.attachments) ? cloudJob.attachments : [];
+    const cloudContextClues = Array.isArray(cloudJob.contextClues)
+      ? cloudJob.contextClues
+      : (Array.isArray(cloudJob.context_clues) ? cloudJob.context_clues : []);
     const entry = {
       id: `entry-cloud-${cloudJob.id}`,
       remoteId: cloudJob.id,
@@ -1103,11 +1110,11 @@ export class DBService {
       summary: cloudJob.summary,
       createdAt: cloudJob.createdAt || cloudJob.created_at,
       syncedAt: cloudJob.syncedAt || cloudJob.synced_at || new Date().toISOString(),
-      captureId: cloudJob.capture_id || cloudJob.captureId || null,
-      locationIds: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location =>
+      captureId: cloudJob.captureId || cloudJob.capture_id || null,
+      locationIds: cloudLocations.map(location =>
         location.local_id || location.localId || location.id
       ).filter(Boolean),
-      locations: (cloudJob.locations || cloudJob.locationSnapshots || []).map(location => ({
+      locations: cloudLocations.map(location => ({
         id: location.local_id || location.localId || location.id,
         displayName: location.display_name || location.displayName || '',
         placeText: location.place_text || location.placeText || location.display_name || '',
@@ -1115,26 +1122,26 @@ export class DBService {
         latitude: location.latitude ?? null,
         longitude: location.longitude ?? null,
       })),
-      tagIds: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag =>
+      tagIds: cloudTags.map(tag =>
         tag.local_id || tag.localId || tag.id
       ).filter(Boolean),
-      contactIds: (cloudJob.contacts || cloudJob.contactSnapshots || []).map(contact =>
+      contactIds: cloudContacts.map(contact =>
         contact.local_id || contact.localId || contact.id
       ).filter(Boolean),
-      contacts: (cloudJob.contacts || cloudJob.contactSnapshots || []).map(contact => ({
+      contacts: cloudContacts.map(contact => ({
         id: contact.local_id || contact.localId || contact.id,
         displayName: contact.display_name || contact.displayName || '',
         primaryPhone: contact.primary_phone || contact.primaryPhone || null,
         primaryEmail: contact.primary_email || contact.primaryEmail || null,
       })),
-      tags: (cloudJob.tags || cloudJob.tagSnapshots || []).map(tag => ({
+      tags: cloudTags.map(tag => ({
         id: tag.local_id || tag.localId || tag.id,
         label: tag.label || '',
         normalizedLabel: tag.normalized_label || tag.normalizedLabel || normalizeTagKey(tag.label || ''),
         categoryId: tag.category_id || tag.categoryId || DEFAULT_TAG_CATEGORY.id,
         categoryName: tag.category_name || tag.categoryName || tag.tag_categories?.name || DEFAULT_TAG_CATEGORY.name,
       })),
-      attachments: cloudJob.attachments || cloudJob.attachmentSnapshots || [],
+      attachments: cloudAttachments,
       workContextIds: (cloudJob.workContexts || []).map(context => context.id).filter(Boolean),
       workContexts: cloudJob.workContexts || [],
     };
@@ -1143,9 +1150,9 @@ export class DBService {
       const req = tx.objectStore(STORE_NAME).add(normalizeEntryRecord(entry));
       req.onsuccess = () => {
         Promise.all([
-          this.upsertCloudContextClues(entry.id, cloudJob.id, cloudJob.context_clues || cloudJob.contextClues || []),
-          this.upsertCloudEntryLocations(entry.id, cloudJob.id, cloudJob.locations || cloudJob.locationSnapshots || []),
-          this.upsertCloudEntryTags(entry.id, cloudJob.id, cloudJob.tags || cloudJob.tagSnapshots || []),
+          this.upsertCloudContextClues(entry.id, cloudJob.id, cloudContextClues),
+          this.upsertCloudEntryLocations(entry.id, cloudJob.id, cloudLocations),
+          this.upsertCloudEntryTags(entry.id, cloudJob.id, cloudTags),
         ])
           .then(() => resolve(entry))
           .catch(reject);

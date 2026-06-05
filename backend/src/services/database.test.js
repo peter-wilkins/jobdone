@@ -7,6 +7,7 @@ import {
   buildContactLocationCooccurrences,
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
+  toCanonicalEntry,
 } from './database.js';
 import {
   buildSqlFirstRecallQuery,
@@ -51,6 +52,124 @@ describe('Postgres adapter value mapping', () => {
     );
     assert.deepEqual(valueForColumn('normalizedPhones', ['07709290759']), ['07709290759']);
     assert.equal(valueForColumn('embedding', [0.1, 0.2]), '[0.1,0.2]');
+  });
+});
+
+describe('Cloud Entry response mapping', () => {
+  test('maps Postgres Entry rows to canonical app fields', () => {
+    const mapped = toCanonicalEntry(
+      {
+        id: 'entry-cloud-1',
+        capture_id: 'capture-1',
+        transcript: 'Fixed tap',
+        summary: 'Fixed tap summary',
+        created_at: '2026-05-17T01:00:00.000Z',
+        synced_at: '2026-05-17T01:01:00.000Z',
+      },
+      {
+        contextClues: [{
+          id: 'context-cloud-1',
+          local_id: 'context-local-1',
+          kind: 'calendar_event',
+          source: 'calendar',
+          summary: 'Calendar event',
+          payload: { title: 'Visit' },
+          created_at: '2026-05-17T00:55:00.000Z',
+        }],
+        locations: [{
+          id: 'location-cloud-1',
+          local_id: 'location-local-1',
+          display_name: '14 Bell Street',
+          place_text: '14 Bell Street',
+          address_text: '14 Bell Street, Dublin',
+          latitude: 53.3498,
+          longitude: -6.2603,
+        }],
+        contacts: [{
+          id: 'contact-cloud-1',
+          local_id: 'contact-local-1',
+          display_name: 'Ann Smith',
+          primary_phone: '+353123',
+        }],
+        tags: [{
+          id: 'tag-cloud-1',
+          local_id: 'tag-local-1',
+          label: 'Boiler Service',
+          normalized_label: 'boiler service',
+          category_name: 'General',
+        }],
+        attachments: [{
+          id: 'attachment-cloud-1',
+          local_id: 'attachment-local-1',
+          kind: 'photo',
+          filename: 'photo.jpg',
+          mime_type: 'image/jpeg',
+          byte_size: 1234,
+        }],
+      }
+    );
+
+    assert.deepEqual(mapped, {
+      id: 'entry-cloud-1',
+      captureId: 'capture-1',
+      transcript: 'Fixed tap',
+      summary: 'Fixed tap summary',
+      createdAt: '2026-05-17T01:00:00.000Z',
+      syncedAt: '2026-05-17T01:01:00.000Z',
+      contextClues: [{
+        id: 'context-local-1',
+        remoteId: 'context-cloud-1',
+        kind: 'calendar_event',
+        source: 'calendar',
+        summary: 'Calendar event',
+        payload: { title: 'Visit' },
+        confidence: null,
+        metadata: {},
+        createdAt: '2026-05-17T00:55:00.000Z',
+      }],
+      locations: [{
+        id: 'location-local-1',
+        remoteId: 'location-cloud-1',
+        displayName: '14 Bell Street',
+        placeText: '14 Bell Street',
+        addressText: '14 Bell Street, Dublin',
+        latitude: 53.3498,
+        longitude: -6.2603,
+        status: 'confirmed',
+        createdAt: null,
+        updatedAt: null,
+      }],
+      contacts: [{
+        id: 'contact-local-1',
+        remoteId: 'contact-cloud-1',
+        displayName: 'Ann Smith',
+        primaryPhone: '+353123',
+        primaryEmail: null,
+      }],
+      tags: [{
+        id: 'tag-local-1',
+        remoteId: 'tag-cloud-1',
+        label: 'Boiler Service',
+        normalizedLabel: 'boiler service',
+        categoryId: null,
+        categoryName: 'General',
+      }],
+      attachments: [{
+        id: 'attachment-local-1',
+        remoteId: 'attachment-cloud-1',
+        kind: 'photo',
+        filename: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        byteSize: 1234,
+        width: null,
+        height: null,
+        metadata: {},
+        createdAt: null,
+      }],
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'created_at'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'capture_id'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'context_clues'), false);
   });
 });
 

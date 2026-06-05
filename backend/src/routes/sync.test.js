@@ -150,7 +150,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(contextArgs.userId, 'user-1');
     assert.equal(contextArgs.entryId, 'entry-1');
     assert.deepEqual(contextArgs.clues, [contextClue]);
-    assert.equal(JSON.parse(res.body).entry.context_clues.length, 1);
+    assert.equal(JSON.parse(res.body).entry.contextClues.length, 1);
   });
 
   test('stores confirmed Location associations after saving an entry', async () => {
@@ -183,7 +183,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(locationArgs.userId, 'user-1');
     assert.equal(locationArgs.entryId, 'entry-1');
     assert.equal(locationArgs.locations[0].displayName, '14 Bell Street');
-    assert.equal(JSON.parse(res.body).entry.locations[0].display_name, '14 Bell Street');
+    assert.equal(JSON.parse(res.body).entry.locations[0].displayName, '14 Bell Street');
   });
 
   test('continues to save entries with no Location associations', async () => {
@@ -239,7 +239,7 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(contactArgs.userId, 'user-1');
     assert.equal(contactArgs.entryId, 'entry-1');
     assert.equal(contactArgs.contacts[0].displayName, 'Ann Smith');
-    assert.equal(JSON.parse(res.body).entry.contacts[0].display_name, 'Ann Smith');
+    assert.equal(JSON.parse(res.body).entry.contacts[0].displayName, 'Ann Smith');
   });
 
   test('stores confirmed Tag associations after saving an entry', async () => {
@@ -518,7 +518,19 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, {
+      id: 'entry-existing',
+      captureId: 'capture-1',
+      transcript: 'Fixed a dripping kitchen tap.',
+      summary: 'Fixed dripping kitchen tap.',
+      createdAt: '2026-05-17T01:00:00.000Z',
+      syncedAt: null,
+      contextClues: [],
+      locations: [],
+      contacts: [],
+      tags: [],
+      attachments: [],
+    });
   });
 
   test('falls back to createdAt when no captureId is provided', async () => {
@@ -553,7 +565,19 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(embedCalled, false);
     assert.equal(saveCalled, false);
-    assert.deepEqual(JSON.parse(res.body).entry, { ...existing, context_clues: [], locations: [], contacts: [], tags: [] });
+    assert.deepEqual(JSON.parse(res.body).entry, {
+      id: 'entry-existing',
+      captureId: null,
+      transcript: 'Fixed a dripping kitchen tap.',
+      summary: 'Fixed dripping kitchen tap.',
+      createdAt: '2026-05-17T01:00:00.000Z',
+      syncedAt: null,
+      contextClues: [],
+      locations: [],
+      contacts: [],
+      tags: [],
+      attachments: [],
+    });
   });
 
   test('rejects legacy created_at entry payloads before downstream processing', async () => {

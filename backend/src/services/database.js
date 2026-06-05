@@ -288,6 +288,97 @@ export function normalizeContextClue(clue = {}) {
   };
 }
 
+function cloudLocalId(row = {}) {
+  return row.local_id || row.localId || row.id || null;
+}
+
+function toCanonicalContextClue(clue = {}) {
+  return {
+    id: cloudLocalId(clue),
+    remoteId: clue.remoteId || clue.id || null,
+    kind: clue.kind || '',
+    source: clue.source || '',
+    summary: clue.summary || '',
+    payload: clue.payload || {},
+    confidence: clue.confidence ?? null,
+    metadata: clue.metadata || {},
+    createdAt: clue.createdAt || clue.created_at || null,
+  };
+}
+
+function toCanonicalLocation(location = {}) {
+  return {
+    id: cloudLocalId(location),
+    remoteId: location.remoteId || location.location_id || location.id || null,
+    displayName: location.displayName || location.display_name || '',
+    placeText: location.placeText || location.place_text || location.display_name || '',
+    addressText: location.addressText || location.address_text || '',
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    status: location.status || 'confirmed',
+    createdAt: location.createdAt || location.created_at || null,
+    updatedAt: location.updatedAt || location.updated_at || location.created_at || null,
+  };
+}
+
+function toCanonicalContact(contact = {}) {
+  return {
+    id: cloudLocalId(contact),
+    remoteId: contact.remoteId || contact.contact_id || contact.id || null,
+    displayName: contact.displayName || contact.display_name || '',
+    primaryPhone: contact.primaryPhone || contact.primary_phone || null,
+    primaryEmail: contact.primaryEmail || contact.primary_email || null,
+  };
+}
+
+function toCanonicalTag(tag = {}) {
+  return {
+    id: cloudLocalId(tag),
+    remoteId: tag.remoteId || tag.tag_id || tag.id || null,
+    label: tag.label || '',
+    normalizedLabel: tag.normalizedLabel || tag.normalized_label || null,
+    categoryId: tag.categoryId || tag.category_id || tag.tag_categories?.id || null,
+    categoryName: tag.categoryName || tag.category_name || tag.tag_categories?.name || 'General',
+  };
+}
+
+function toCanonicalAttachment(attachment = {}) {
+  return {
+    id: cloudLocalId(attachment),
+    remoteId: attachment.remoteId || attachment.attachment_id || attachment.id || null,
+    kind: attachment.kind || '',
+    filename: attachment.filename || '',
+    mimeType: attachment.mimeType || attachment.mime_type || '',
+    byteSize: attachment.byteSize || attachment.byte_size || null,
+    width: attachment.width ?? null,
+    height: attachment.height ?? null,
+    metadata: attachment.metadata || {},
+    createdAt: attachment.createdAt || attachment.created_at || null,
+  };
+}
+
+export function toCanonicalEntry(entry = {}, {
+  contextClues = entry.contextClues || entry.context_clues || [],
+  locations = entry.locations || [],
+  contacts = entry.contacts || [],
+  tags = entry.tags || [],
+  attachments = entry.attachments || [],
+} = {}) {
+  return {
+    id: entry.id,
+    captureId: entry.captureId || entry.capture_id || null,
+    transcript: entry.transcript || '',
+    summary: entry.summary || '',
+    createdAt: entry.createdAt || entry.created_at || null,
+    syncedAt: entry.syncedAt || entry.synced_at || null,
+    contextClues: (contextClues || []).map(toCanonicalContextClue).filter(clue => clue.kind && clue.source),
+    locations: (locations || []).map(toCanonicalLocation).filter(location => location.id || location.displayName),
+    contacts: (contacts || []).map(toCanonicalContact).filter(contact => contact.id || contact.displayName),
+    tags: (tags || []).map(toCanonicalTag).filter(tag => tag.id || tag.label),
+    attachments: (attachments || []).map(toCanonicalAttachment).filter(attachment => attachment.id || attachment.filename),
+  };
+}
+
 /**
  * Save a confirmed entry to Supabase
  */
@@ -616,7 +707,7 @@ export async function getEntries(userId) {
     if (cluesError) {
       if (cluesError.code === '42P01' || /context_clues/i.test(cluesError.message || '')) {
         console.warn('[DB] context_clues table not found; returning entries without context clues');
-        return entries.map(entry => ({ ...entry, context_clues: [] }));
+        return entries.map(entry => toCanonicalEntry(entry));
       }
       console.error('[DB] Context clue fetch error:', cluesError);
       throw cluesError;
@@ -706,9 +797,8 @@ export async function getEntries(userId) {
       contactsByEntry.set(link.entry_id, list);
     }
 
-    return entries.map(entry => ({
-      ...entry,
-      context_clues: cluesByEntry.get(entry.id) || [],
+    return entries.map(entry => toCanonicalEntry(entry, {
+      contextClues: cluesByEntry.get(entry.id) || [],
       locations: locationsByEntry.get(entry.id) || [],
       contacts: contactsByEntry.get(entry.id) || [],
       tags: tagsByEntry.get(entry.id) || [],

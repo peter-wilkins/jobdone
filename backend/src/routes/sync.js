@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData, toCanonicalEntry } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
@@ -88,8 +88,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         const tags = await db.saveEntryTags(user.id, existing.id, entryData.tags);
         const incomingAttachments = entryData.attachments;
         const attachments = await db.saveEntryAttachments(user.id, existing.id, incomingAttachments);
-        const entry = { ...existing, context_clues: contextClues, locations, contacts, tags };
-        if (attachments.length || incomingAttachments.length) entry.attachments = attachments;
+        const entry = toCanonicalEntry(existing, { contextClues, locations, contacts, tags, attachments });
         return { success: true, entry };
       }
 
@@ -106,8 +105,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const incomingAttachments = entryData.attachments;
       const attachments = await db.saveEntryAttachments(user.id, saved.id, incomingAttachments);
 
-      const entry = { ...saved, context_clues: contextClues, locations, contacts, tags };
-      if (attachments.length || incomingAttachments.length) entry.attachments = attachments;
+      const entry = toCanonicalEntry(saved, { contextClues, locations, contacts, tags, attachments });
       return { success: true, entry };
     } catch (error) {
       console.error('Sync save error:', error);

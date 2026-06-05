@@ -44,7 +44,7 @@ async function pullCloudEntries({ db, api }) {
     const existsByRemoteId = await db.getEntryByRemoteId(cloudEntry.id);
     if (existsByRemoteId) continue;
 
-    const cloudCaptureId = cloudEntry.captureId || cloudEntry.capture_id;
+    const cloudCaptureId = cloudEntry.captureId;
     const existingCaptureEntry = cloudCaptureId
       ? await db.getEntryByCaptureId(cloudCaptureId)
       : null;
@@ -55,7 +55,7 @@ async function pullCloudEntries({ db, api }) {
       continue;
     }
 
-    const existingByCreatedAt = await db.getEntryByCreatedAt(cloudEntry.createdAt || cloudEntry.created_at);
+    const existingByCreatedAt = await db.getEntryByCreatedAt(cloudEntry.createdAt);
     if (existingByCreatedAt) {
       if (!existingByCreatedAt.remoteId) {
         await db.markEntrySynced(existingByCreatedAt.id, cloudEntry.id);
