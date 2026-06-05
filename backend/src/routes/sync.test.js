@@ -186,6 +186,54 @@ describe('SyncRoute POST /api/sync/save', () => {
     assert.equal(JSON.parse(res.body).entry.locations[0].displayName, '14 Bell Street');
   });
 
+  test('normalizes Date timestamps returned from database before responding', async () => {
+    const createdAt = new Date('2026-06-05T15:04:52.000Z');
+    const syncedAt = new Date('2026-06-05T15:05:00.000Z');
+
+    const app = await buildApp({
+      embeddingService: {
+        embedText: async () => makeVector(),
+      },
+      saveEntry: async (userId, entryData) => ({
+        id: 'entry-1',
+        capture_id: entryData.captureId || null,
+        transcript: entryData.transcript,
+        summary: entryData.summary,
+        created_at: createdAt,
+        synced_at: syncedAt,
+      }),
+      saveEntryLocations: async () => [{
+        id: 'location-cloud-1',
+        local_id: 'location-local-1',
+        display_name: '14 Bell Street',
+        place_text: '14 Bell Street',
+        address_text: '',
+        latitude: null,
+        longitude: null,
+        created_at: createdAt,
+        updated_at: syncedAt,
+      }],
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entryData: makeEntry({
+          locations: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
+        }),
+      }),
+    });
+
+    const body = JSON.parse(res.body);
+    assert.equal(res.statusCode, 200);
+    assert.equal(body.entry.createdAt, '2026-06-05T15:04:52.000Z');
+    assert.equal(body.entry.syncedAt, '2026-06-05T15:05:00.000Z');
+    assert.equal(body.entry.locations[0].createdAt, '2026-06-05T15:04:52.000Z');
+    assert.equal(body.entry.locations[0].updatedAt, '2026-06-05T15:05:00.000Z');
+  });
+
   test('continues to save entries with no Location associations', async () => {
     let locationArgs;
     const app = await buildApp({

@@ -14,6 +14,12 @@ export function buildSyncResponseSchemas(z) {
   const looseObjectSchema = z.record(z.string(), z.unknown());
   const optionalString = z.string().nullable().optional();
   const optionalNumber = z.number().nullable().optional();
+  const optionalTimestamp = z.preprocess(value => {
+    if (value instanceof Date && !Number.isNaN(value.valueOf())) {
+      return value.toISOString();
+    }
+    return value;
+  }, optionalString);
 
   const contextClueSchema = z.object({
     id: optionalString,
@@ -24,7 +30,7 @@ export function buildSyncResponseSchemas(z) {
     payload: looseObjectSchema.default({}),
     confidence: z.number().nullable().optional(),
     metadata: looseObjectSchema.default({}),
-    createdAt: optionalString,
+    createdAt: optionalTimestamp,
   }).strict();
 
   const locationSchema = z.object({
@@ -37,8 +43,8 @@ export function buildSyncResponseSchemas(z) {
     latitude: optionalNumber,
     longitude: optionalNumber,
     providerPlaceId: optionalString,
-    createdAt: optionalString,
-    updatedAt: optionalString,
+    createdAt: optionalTimestamp,
+    updatedAt: optionalTimestamp,
   }).strict();
 
   const contactSchema = z.object({
@@ -62,8 +68,8 @@ export function buildSyncResponseSchemas(z) {
     sourceCaptureIds: z.array(z.string()).default([]),
     contentHash: optionalString,
     identityKeys: z.array(z.string()).default([]),
-    createdAt: optionalString,
-    updatedAt: optionalString,
+    createdAt: optionalTimestamp,
+    updatedAt: optionalTimestamp,
   }).strict();
 
   const tagSchema = z.object({
@@ -85,7 +91,7 @@ export function buildSyncResponseSchemas(z) {
     width: optionalNumber,
     height: optionalNumber,
     metadata: looseObjectSchema.default({}),
-    createdAt: optionalString,
+    createdAt: optionalTimestamp,
   }).strict();
 
   const entrySchema = z.object({
@@ -93,8 +99,8 @@ export function buildSyncResponseSchemas(z) {
     captureId: optionalString,
     transcript: z.string(),
     summary: z.string(),
-    createdAt: optionalString,
-    syncedAt: optionalString,
+    createdAt: optionalTimestamp,
+    syncedAt: optionalTimestamp,
     contextClues: z.array(contextClueSchema).default([]),
     locations: z.array(locationSchema.omit({ providerPlaceId: true })).default([]),
     contacts: z.array(contactSchema.pick({

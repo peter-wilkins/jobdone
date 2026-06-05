@@ -7,7 +7,9 @@ import {
 
 test('enables API debug details for Peter allowlisted email', () => {
   assert.equal(isDebugEmail('poppetew@gmail.com'), true);
+  assert.equal(isDebugEmail('peter.wilkins2@protonmail.com'), true);
   assert.equal(debugApiDetailsEnabledForUser({ email: ' Poppetew@Gmail.com ' }), true);
+  assert.equal(debugApiDetailsEnabledForUser({ email: ' Peter.Wilkins2@ProtonMail.com ' }), true);
 });
 
 test('does not enable API debug details for normal users', () => {

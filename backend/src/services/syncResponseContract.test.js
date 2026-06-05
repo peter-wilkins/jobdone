@@ -102,4 +102,64 @@ describe('Sync response contracts', () => {
       }],
     }).success, false);
   });
+
+  test('normalizes backend Date timestamps to canonical ISO strings', () => {
+    const createdAt = new Date('2026-06-05T15:04:52.000Z');
+    const syncedAt = new Date('2026-06-05T15:05:00.000Z');
+
+    const entryResult = parseEntrySaveResponse({
+      success: true,
+      entry: {
+        id: 'entry-cloud-1',
+        captureId: null,
+        transcript: 'Fixed tap',
+        summary: 'Fixed tap.',
+        createdAt,
+        syncedAt,
+        contextClues: [],
+        locations: [{
+          id: 'location-local-1',
+          remoteId: 'location-cloud-1',
+          status: 'confirmed',
+          displayName: '14 Bell Street',
+          placeText: '14 Bell Street',
+          addressText: '',
+          latitude: null,
+          longitude: null,
+          createdAt,
+          updatedAt: syncedAt,
+        }],
+        contacts: [],
+        tags: [],
+        attachments: [],
+      },
+    });
+
+    assert.equal(entryResult.success, true);
+    assert.equal(entryResult.data.entry.createdAt, '2026-06-05T15:04:52.000Z');
+    assert.equal(entryResult.data.entry.syncedAt, '2026-06-05T15:05:00.000Z');
+    assert.equal(entryResult.data.entry.locations[0].createdAt, '2026-06-05T15:04:52.000Z');
+    assert.equal(entryResult.data.entry.locations[0].updatedAt, '2026-06-05T15:05:00.000Z');
+
+    const locationResult = parseLocationsResponse({
+      success: true,
+      locations: [{
+        id: 'location-local-1',
+        remoteId: 'location-cloud-1',
+        status: 'confirmed',
+        displayName: '14 Bell Street',
+        placeText: '14 Bell Street',
+        addressText: '',
+        latitude: null,
+        longitude: null,
+        providerPlaceId: null,
+        createdAt,
+        updatedAt: syncedAt,
+      }],
+    });
+
+    assert.equal(locationResult.success, true);
+    assert.equal(locationResult.data.locations[0].createdAt, '2026-06-05T15:04:52.000Z');
+    assert.equal(locationResult.data.locations[0].updatedAt, '2026-06-05T15:05:00.000Z');
+  });
 });

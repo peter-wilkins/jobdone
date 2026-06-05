@@ -2,6 +2,7 @@ const ENV = import.meta.env || {};
 
 const DEFAULT_DEBUG_EMAILS = [
   'poppetew@gmail.com',
+  'peter.wilkins2@protonmail.com',
 ];
 
 function configuredDebugEmails() {
