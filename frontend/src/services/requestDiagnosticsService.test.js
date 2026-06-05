@@ -4,9 +4,11 @@ import {
   createRequestId,
   fetchWithRequestDiagnostics,
   isValidRequestId,
+  recentApiErrorDetails,
   recentApiRequests,
   recordApiRequest,
   resetRequestDiagnosticsForTests,
+  setApiErrorDetailsEnabled,
 } from './requestDiagnosticsService.js';
 
 function installStorage() {
@@ -81,6 +83,62 @@ test('adds request id header and records response status', async () => {
   assert.equal(request.method, 'POST');
   assert.equal(request.status, 201);
   assert.equal(request.ok, true);
+
+  removeGlobals();
+});
+
+test('records sanitized non-200 response detail only when debug details are enabled', async () => {
+  installStorage();
+  resetRequestDiagnosticsForTests();
+  setApiErrorDetailsEnabled(true);
+  let capturedBody;
+  globalThis.fetch = async (_url, options) => {
+    capturedBody = options.body;
+    return new Response(JSON.stringify({
+      error: 'Use createdAt, not created_at',
+      token: 'secret-token',
+      details: { field: 'created_at' },
+    }), {
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        'content-type': 'application/json',
+        'x-jobdone-build': 'abc1234',
+        'x-jobdone-request-id': 'req_backend123456',
+      },
+    });
+  };
+
+  const response = await fetchWithRequestDiagnostics('https://api.example.test/api/sync/save', {
+    method: 'POST',
+    body: JSON.stringify({ entryData: { summary: 'private words' } }),
+  });
+  const [detail] = recentApiErrorDetails();
+
+  assert.equal(response.status, 400);
+  assert.equal(detail.endpoint, '/api/sync/save');
+  assert.equal(detail.method, 'POST');
+  assert.equal(detail.status, 400);
+  assert.equal(detail.backendBuild, 'abc1234');
+  assert.equal(detail.responseBody.error, 'Use createdAt, not created_at');
+  assert.equal(detail.responseBody.token, undefined);
+  assert.equal(JSON.stringify(detail).includes('private words'), false);
+  assert.match(capturedBody, /private words/);
+
+  removeGlobals();
+});
+
+test('does not retain non-200 response bodies when debug details are disabled', async () => {
+  installStorage();
+  resetRequestDiagnosticsForTests();
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'server unavailable' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  await fetchWithRequestDiagnostics('https://api.example.test/api/sync/save', { method: 'POST' });
+
+  assert.deepEqual(recentApiErrorDetails(), []);
 
   removeGlobals();
 });

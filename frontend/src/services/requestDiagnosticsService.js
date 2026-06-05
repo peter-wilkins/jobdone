@@ -1,6 +1,10 @@
 const API_REQUEST_STORAGE_KEY = 'jobdone-api-request-diagnostics';
+const API_ERROR_DETAIL_STORAGE_KEY = 'jobdone-api-error-details';
 const DEBUG_STORAGE_KEY = 'jobdone-debug-logs';
+const DEBUG_API_DETAILS_STORAGE_KEY = 'jobdone-debug-api-details';
+export const API_ERROR_DETAIL_EVENT = 'jobdone-api-error-detail';
 const MAX_REQUESTS = 40;
+const MAX_ERROR_DETAILS = 10;
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{12,80}$/;
 
 function safeRandomBytes(length = 16) {
@@ -37,6 +41,23 @@ function saveRequests(requests) {
   }
 }
 
+function loadErrorDetails() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(API_ERROR_DETAIL_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveErrorDetails(details) {
+  try {
+    localStorage.setItem(API_ERROR_DETAIL_STORAGE_KEY, JSON.stringify(details.slice(-MAX_ERROR_DETAILS)));
+  } catch {
+    // Debug details must not break API calls.
+  }
+}
+
 function debugLogsEnabled() {
   try {
     return localStorage.getItem(DEBUG_STORAGE_KEY) === 'true'
@@ -44,6 +65,16 @@ function debugLogsEnabled() {
       || import.meta.env?.VITE_DEBUG_LOGS === 'true';
   } catch {
     return import.meta.env?.VITE_DEBUG_LOGS === 'true';
+  }
+}
+
+function apiErrorDetailsEnabled() {
+  try {
+    return localStorage.getItem(DEBUG_API_DETAILS_STORAGE_KEY) === 'true'
+      || window.__JOBDONE_API_DEBUG__ === true
+      || import.meta.env?.VITE_DEBUG_API_DETAILS === 'true';
+  } catch {
+    return import.meta.env?.VITE_DEBUG_API_DETAILS === 'true';
   }
 }
 
@@ -91,6 +122,63 @@ export function recentApiRequests(limit = 25) {
   return loadRequests().slice(-limit);
 }
 
+export function recentApiErrorDetails(limit = 5) {
+  return loadErrorDetails().slice(-limit);
+}
+
+export function setApiErrorDetailsEnabled(enabled) {
+  try {
+    localStorage.setItem(DEBUG_API_DETAILS_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // Debug preference is best-effort.
+  }
+}
+
+function safeDebugValue(value, depth = 0) {
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.slice(0, 1000);
+  if (depth >= 4) return '[depth-limit]';
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => safeDebugValue(item, depth + 1));
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !/token|authorization|password|secret|audio|blob/i.test(key))
+        .slice(0, 40)
+        .map(([key, item]) => [key, safeDebugValue(item, depth + 1)])
+    );
+  }
+  return String(value).slice(0, 1000);
+}
+
+async function responseBodyForDebug(response) {
+  try {
+    const clone = response.clone?.();
+    if (!clone) return null;
+    const contentType = clone.headers?.get?.('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return safeDebugValue(await clone.json());
+    }
+    return String(await clone.text()).slice(0, 2000);
+  } catch (error) {
+    return { unreadable: error?.message || 'Could not read response body' };
+  }
+}
+
+export function recordApiErrorDetail(detail = {}) {
+  const sanitized = safeDebugValue({
+    ...detail,
+    at: detail.at || new Date().toISOString(),
+  });
+  const details = loadErrorDetails();
+  details.push(sanitized);
+  saveErrorDetails(details);
+  try {
+    window.dispatchEvent(new CustomEvent(API_ERROR_DETAIL_EVENT, { detail: sanitized }));
+  } catch {
+    // Non-browser tests do not need UI events.
+  }
+}
+
 export async function fetchWithRequestDiagnostics(url, options = {}, timeoutMs = null) {
   const requestId = createRequestId();
   const method = options.method || 'GET';
@@ -111,15 +199,29 @@ export async function fetchWithRequestDiagnostics(url, options = {}, timeoutMs =
       headers,
       signal: controller?.signal || options.signal,
     });
+    const durationMs = nowMs() - startedAt;
     recordApiRequest({
       requestId,
       endpoint,
       method,
       status: response.status,
       ok: response.ok,
-      durationMs: nowMs() - startedAt,
+      durationMs,
       failureKind: response.ok ? null : 'http_error',
     });
+    if (!response.ok && apiErrorDetailsEnabled()) {
+      recordApiErrorDetail({
+        requestId,
+        endpoint,
+        method,
+        status: response.status,
+        statusText: response.statusText || '',
+        durationMs: Math.round(durationMs),
+        backendBuild: response.headers?.get?.('x-jobdone-build') || null,
+        responseRequestId: response.headers?.get?.('x-jobdone-request-id') || null,
+        responseBody: await responseBodyForDebug(response),
+      });
+    }
     return response;
   } catch (error) {
     recordApiRequest({
@@ -149,6 +251,8 @@ export function endpointFromUrl(url) {
 export function resetRequestDiagnosticsForTests() {
   try {
     localStorage.removeItem(API_REQUEST_STORAGE_KEY);
+    localStorage.removeItem(API_ERROR_DETAIL_STORAGE_KEY);
+    localStorage.removeItem(DEBUG_API_DETAILS_STORAGE_KEY);
   } catch {
     // Ignore test/global environments without localStorage.
   }

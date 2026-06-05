@@ -10,6 +10,7 @@ function syncIssue(step, error) {
     message: error?.message || 'Sync failed',
     status: error?.status || null,
     requestId: error?.requestId || null,
+    debugDetail: error?.debugDetail || null,
   };
 }
 

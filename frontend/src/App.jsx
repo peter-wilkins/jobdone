@@ -19,6 +19,11 @@ import { queryHistoryService } from './services/queryHistoryService';
 import { diagnosticService } from './services/diagnosticService';
 import { crashReportService } from './services/crashReportService';
 import { currentDeploymentEnvironment } from './services/deploymentEnvironmentService';
+import { debugApiDetailsEnabledForUser } from './services/debugUserService';
+import {
+  API_ERROR_DETAIL_EVENT,
+  setApiErrorDetailsEnabled,
+} from './services/requestDiagnosticsService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -43,6 +48,8 @@ function App() {
   const [crashNotice, setCrashNotice] = useState(null);
   const [authNotice, setAuthNotice] = useState(null);
   const [syncNotice, setSyncNotice] = useState(null);
+  const [apiDebugDetail, setApiDebugDetail] = useState(null);
+  const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
 
   async function runConfirmedDataSync(reason) {
     try {
@@ -52,6 +59,7 @@ function App() {
       } else {
         setSyncNotice({
           message: 'Cloud sync hit a problem. Local data is safe; JobDone will retry.',
+          debugDetail: result.issues?.[0]?.debugDetail || null,
         });
       }
       return result;
@@ -76,6 +84,22 @@ function App() {
       document.body.style.paddingTop = previousPaddingTop;
     };
   }, [deploymentEnvironment]);
+
+  useEffect(() => {
+    const enabled = debugApiDetailsEnabledForUser(user);
+    setApiErrorDetailsEnabled(enabled);
+  }, [user]);
+
+  useEffect(() => {
+    const onApiErrorDetail = (event) => {
+      if (debugApiDetailsEnabledForUser(authService.getUser())) {
+        setApiDebugDetail(event.detail || null);
+        setApiDebugReportStatus(null);
+      }
+    };
+    window.addEventListener(API_ERROR_DETAIL_EVENT, onApiErrorDetail);
+    return () => window.removeEventListener(API_ERROR_DETAIL_EVENT, onApiErrorDetail);
+  }, []);
 
   useEffect(() => {
     diagnosticService.record('screen_open', { screen: screenFromLocation(), source: 'initial_load' });
@@ -163,6 +187,30 @@ function App() {
     setScreen('home');
   };
 
+  const sendApiDebugReport = async () => {
+    if (!apiDebugDetail) return;
+    setApiDebugReportStatus('sending');
+    try {
+      await apiService.saveFeedback({
+        transcript: `API debug report: ${apiDebugDetail.method || 'GET'} ${apiDebugDetail.endpoint || 'unknown'} returned ${apiDebugDetail.status || 'non-200'}.`,
+        created_at: new Date().toISOString(),
+        diagnostic_bundle: {
+          report_type: 'api_debug_report',
+          bridge_requested: true,
+          route: {
+            screen,
+            path: window.location.pathname,
+            hash: window.location.hash,
+          },
+          api_error_detail: apiDebugDetail,
+        },
+      });
+      setApiDebugReportStatus('sent');
+    } catch (error) {
+      setApiDebugReportStatus(error?.message || 'failed');
+    }
+  };
+
   const crashStatusBar = crashNotice ? (
     <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white shadow-sm">
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
@@ -177,21 +225,54 @@ function App() {
       </div>
     </div>
   ) : null;
-  const activeNotice = authNotice || syncNotice;
+  const debugApiNotice = debugApiDetailsEnabledForUser(user) && apiDebugDetail
+    ? {
+        message: `API debug: ${apiDebugDetail.method || 'GET'} ${apiDebugDetail.endpoint || 'unknown'} returned ${apiDebugDetail.status || 'non-200'}.`,
+        debugDetail: apiDebugDetail,
+      }
+    : null;
+  const activeNotice = authNotice || syncNotice || debugApiNotice;
+  const activeDebugDetail = activeNotice?.debugDetail || null;
   const authStatusBar = activeNotice ? (
     <div className={`fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>
-      <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
-        <span className="text-sm font-medium flex-1">{activeNotice.message}</span>
-        <button
-          type="button"
-          className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
-          onClick={() => {
-            setAuthNotice(null);
-            setSyncNotice(null);
-          }}
-        >
-          Dismiss
-        </button>
+      <div className="max-w-3xl mx-auto px-4 py-2">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium flex-1">{activeNotice.message}</span>
+          <button
+            type="button"
+            className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
+            onClick={() => {
+              setAuthNotice(null);
+              setSyncNotice(null);
+              setApiDebugDetail(null);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+        {activeDebugDetail && (
+          <details className="mt-2 rounded border border-white/30 bg-black/20 px-2 py-1 text-xs">
+            <summary className="cursor-pointer font-semibold">Debug details</summary>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded bg-white px-2 py-1 text-xs font-semibold text-red-700"
+                disabled={apiDebugReportStatus === 'sending'}
+                onClick={sendApiDebugReport}
+              >
+                {apiDebugReportStatus === 'sending' ? 'Sending...' : 'Send debug report'}
+              </button>
+              {apiDebugReportStatus && apiDebugReportStatus !== 'sending' && (
+                <span className="text-white/90">
+                  {apiDebugReportStatus === 'sent' ? 'Sent' : `Failed: ${apiDebugReportStatus}`}
+                </span>
+              )}
+            </div>
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words">
+              {JSON.stringify(activeDebugDetail, null, 2)}
+            </pre>
+          </details>
+        )}
       </div>
     </div>
   ) : null;
