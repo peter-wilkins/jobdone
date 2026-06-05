@@ -61,6 +61,9 @@ function parseWithLegacyCheck({ schema, payload, rows, replacements, prefix, fal
   return parseWithSchema(schema, payload, fallbackError);
 }
 
+/**
+ * @param {typeof import('zod').z} z
+ */
 export function buildSyncRequestSchemas(z) {
   const optionalString = z.string().nullable().optional();
   const optionalNumber = z.number().nullable().optional();

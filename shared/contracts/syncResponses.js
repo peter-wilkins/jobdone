@@ -10,6 +10,9 @@ function parseWithSchema(schema, payload, fallbackError) {
   };
 }
 
+/**
+ * @param {typeof import('zod').z} z
+ */
 export function buildSyncResponseSchemas(z) {
   const looseObjectSchema = z.record(z.string(), z.unknown());
   const optionalString = z.string().nullable().optional();
