@@ -1,5 +1,12 @@
 import { findReusableLocation } from './locationIdentityService.js';
 import { entryMatchesLocation } from './locationPresentationService.js';
+import {
+  normalizeLegacyLocalCaptureRecord,
+  parseEntryFromCaptureInput,
+  parseLocalCaptureInput,
+  parseLocalCaptureRecord,
+  parseLocalCaptureUpdate,
+} from '../contracts/localCapture.js';
 
 /**
  * IndexedDB service for local entry storage
@@ -7,7 +14,7 @@ import { entryMatchesLocation } from './locationPresentationService.js';
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 14;
+const DB_VERSION = 15;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -185,6 +192,18 @@ export function normalizeEntryRecord(entry = {}) {
   };
 }
 
+function assertParsedContract(parsed, fallbackMessage) {
+  if (parsed.success) return parsed.data;
+  throw new Error(parsed.error || fallbackMessage);
+}
+
+function normalizeLocalCaptureRecord(capture = {}) {
+  return assertParsedContract(
+    parseLocalCaptureRecord(normalizeLegacyLocalCaptureRecord(capture)),
+    'Invalid local Capture record',
+  );
+}
+
 export class DBService {
   constructor() {
     this.db = null;
@@ -271,9 +290,27 @@ export class DBService {
         if (!db.objectStoreNames.contains(CAPTURES_STORE)) {
           const capturesStore = db.createObjectStore(CAPTURES_STORE, { keyPath: 'id' });
           capturesStore.createIndex('status', 'status', { unique: false });
-          capturesStore.createIndex('created_at', 'created_at', { unique: false });
+          capturesStore.createIndex('createdAt', 'createdAt', { unique: false });
           capturesStore.createIndex('source', 'source', { unique: false });
           capturesStore.createIndex('kind', 'kind', { unique: false });
+        } else {
+          const capturesStore = event.target.transaction.objectStore(CAPTURES_STORE);
+          if (capturesStore.indexNames.contains('created_at')) {
+            capturesStore.deleteIndex('created_at');
+          }
+          if (!capturesStore.indexNames.contains('createdAt')) {
+            capturesStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+          capturesStore.openCursor().onsuccess = (cursorEvent) => {
+            const cursor = cursorEvent.target.result;
+            if (!cursor) return;
+            try {
+              cursor.update(normalizeLocalCaptureRecord(cursor.value));
+            } catch (error) {
+              console.warn('[DB] Invalid local Capture preserved during upgrade:', error.message);
+            }
+            cursor.continue();
+          };
         }
 
         // v8: local-first Contacts store.
@@ -749,7 +786,17 @@ export class DBService {
    * @param {string} [params.createdAt] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */
-  async createEntryFromCapture({ captureId, transcript, summary, createdAt, created_at, locations = [], contacts = [], tags = [], attachments = [] }) {
+  async createEntryFromCapture(input = {}) {
+    const {
+      captureId,
+      transcript,
+      summary,
+      createdAt,
+      locations = [],
+      contacts = [],
+      tags = [],
+      attachments = [],
+    } = assertParsedContract(parseEntryFromCaptureInput(input), 'Invalid Entry-from-Capture input');
     const db = await this.ensureDb();
     const now = new Date().toISOString();
     const existingLocations = Array.isArray(locations) && locations.length
@@ -793,7 +840,7 @@ export class DBService {
       status: 'confirmed',
       syncStatus: 'pending',
       remoteId: null,
-      createdAt: createdAt || created_at || now,
+      createdAt: createdAt || now,
       syncedAt: null,
       intent: 'NOTE',
       locationIds: locationSnapshots.map(location => location.id),
@@ -1340,24 +1387,28 @@ export class DBService {
    * @param {Array<object>} captureData.payloads - raw reviewable payload metadata
    * @param {string} [captureData.status] - lifecycle status, defaults ready_for_review
    */
-  async createCapture({ source = 'manual', payloads = [], status = 'ready_for_review', kind = 'entry', ...rest } = {}) {
-    if (!Array.isArray(payloads) || payloads.length === 0) {
-      throw new Error('Cannot create capture without payloads');
-    }
-
+  async createCapture(captureData = {}) {
+    const {
+      source = 'manual',
+      payloads = [],
+      status = 'ready_for_review',
+      kind = 'entry',
+      errorMessage = null,
+      devSignal,
+    } = assertParsedContract(parseLocalCaptureInput(captureData), 'Invalid local Capture input');
     const db = await this.ensureDb();
     const now = new Date().toISOString();
-    const capture = {
+    const capture = assertParsedContract(parseLocalCaptureRecord({
       id: this.generateCaptureId(),
       source,
       kind,
       payloads,
       status,
-      errorMessage: null,
-      created_at: now,
-      updated_at: now,
-      ...rest,
-    };
+      errorMessage,
+      ...(devSignal ? { devSignal } : {}),
+      createdAt: now,
+      updatedAt: now,
+    }), 'Invalid local Capture record');
 
     return new Promise((resolve, reject) => {
       const request = db
@@ -1379,7 +1430,17 @@ export class DBService {
         .objectStore(CAPTURES_STORE)
         .get(captureId);
 
-      request.onsuccess = () => resolve(request.result || null);
+      request.onsuccess = () => {
+        if (!request.result) {
+          resolve(null);
+          return;
+        }
+        try {
+          resolve(normalizeLocalCaptureRecord(request.result));
+        } catch (error) {
+          reject(new Error(error.message || 'Invalid local Capture record'));
+        }
+      };
       request.onerror = () => reject(new Error('Failed to fetch capture'));
     });
   }
@@ -1392,9 +1453,16 @@ export class DBService {
       const request = status ? store.index('status').getAll(status) : store.getAll();
 
       request.onsuccess = () => {
-        const captures = request.result
-          .filter(capture => capture.status !== 'confirmed' && capture.status !== 'rejected')
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        let captures;
+        try {
+          captures = request.result
+            .map(capture => normalizeLocalCaptureRecord(capture))
+            .filter(capture => capture.status !== 'confirmed' && capture.status !== 'rejected')
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        } catch (error) {
+          reject(new Error(error.message || 'Invalid local Capture record'));
+          return;
+        }
         resolve(captures);
       };
       request.onerror = () => reject(new Error('Failed to fetch captures'));
@@ -1403,18 +1471,23 @@ export class DBService {
 
   async updateCapture(captureId, updates) {
     const db = await this.ensureDb();
+    const parsedUpdates = assertParsedContract(parseLocalCaptureUpdate(updates), 'Invalid local Capture update');
 
     return new Promise((resolve, reject) => {
       const store = db.transaction([CAPTURES_STORE], 'readwrite').objectStore(CAPTURES_STORE);
       const getRequest = store.get(captureId);
 
       getRequest.onsuccess = () => {
-        const capture = getRequest.result;
-        if (!capture) { reject(new Error('Capture not found')); return; }
+        if (!getRequest.result) { reject(new Error('Capture not found')); return; }
+        const capture = normalizeLocalCaptureRecord(getRequest.result);
 
-        Object.assign(capture, updates, { updated_at: new Date().toISOString() });
-        const putRequest = store.put(capture);
-        putRequest.onsuccess = () => resolve(capture);
+        const nextCapture = assertParsedContract(parseLocalCaptureRecord({
+          ...capture,
+          ...parsedUpdates,
+          updatedAt: new Date().toISOString(),
+        }), 'Invalid local Capture record');
+        const putRequest = store.put(nextCapture);
+        putRequest.onsuccess = () => resolve(nextCapture);
         putRequest.onerror = () => reject(new Error('Failed to update capture'));
       };
       getRequest.onerror = () => reject(new Error('Failed to fetch capture'));

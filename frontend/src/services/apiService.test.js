@@ -134,3 +134,28 @@ test('cloud location pushes reject noncanonical request bodies before fetch', as
     globalThis.fetch = originalFetch;
   }
 });
+
+test('entry sync pushes reject noncanonical request bodies before fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    await assert.rejects(
+      () => new APIService().syncSave({
+        entryData: {
+          summary: 'Fixed tap',
+          createdAt: '2026-06-05T12:00:00.000Z',
+          created_at: '2026-06-05T12:00:00.000Z',
+        },
+      }),
+      /Use entryData\.createdAt/,
+    );
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

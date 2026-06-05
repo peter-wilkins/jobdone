@@ -119,7 +119,7 @@ export function InboxScreen({ onBack, onRecord }) {
                         {(capture.source || 'manual').replaceAll('_', ' ')}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500">{formatTime(new Date(capture.created_at))}</p>
+                    <p className="text-xs text-gray-500">{formatTime(new Date(capture.createdAt || capture.created_at))}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <button

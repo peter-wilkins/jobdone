@@ -8,6 +8,7 @@ import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
 import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
+import { parseEntrySyncPayload } from '../contracts/entrySync.js';
 import { parseContactPullPayload, parseContactsPayload, parseLocationsPayload } from '../contracts/syncRequests.js';
 import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse, parseLocationsResponse } from '../contracts/syncResponses.js';
 
@@ -205,11 +206,12 @@ export class APIService {
   async syncSave(payload) {
     try {
       console.log('[API] Syncing entry to cloud');
+      const syncPayload = typedSyncRequest(parseEntrySyncPayload(payload), 'Invalid entry sync payload');
 
       const response = await apiFetch(`${API_BASE_URL}/api/sync/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(syncPayload),
       });
 
       if (!response.ok) {

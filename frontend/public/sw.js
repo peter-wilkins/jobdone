@@ -1,11 +1,19 @@
 const CACHE_VERSION = 'jobdone-app-shell-v4';
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 8;
+const DB_VERSION = 15;
 const ENTRIES_STORE = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
 const CAPTURES_STORE = 'captures';
-const PEOPLE_STORE = 'people';
+const CONTEXT_CLUES_STORE = 'contextClues';
+const LOCATIONS_STORE = 'locations';
+const ENTRY_LOCATIONS_STORE = 'entryLocations';
+const TAG_CATEGORIES_STORE = 'tagCategories';
+const TAGS_STORE = 'tags';
+const TAG_VOCABULARY_STORE = 'tagVocabulary';
+const ENTRY_TAGS_STORE = 'entryTags';
+const CONTACTS_STORE = 'contacts';
+const CONTACT_ALIASES_STORE = 'contactClientAliases';
 const SHARE_TARGET_PATH = '/share-target';
 const MAX_SHARE_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_SHARE_TOTAL_BYTES = 50 * 1024 * 1024;
@@ -19,11 +27,63 @@ const APP_SHELL = [
 ];
 
 function ensureObjectStore(db, name, options, indexes) {
-  if (db.objectStoreNames.contains(name)) return;
+  if (db.objectStoreNames.contains(name)) return null;
 
   const store = db.createObjectStore(name, options);
-  indexes.forEach(index => store.createIndex(index.name, index.keyPath, { unique: false }));
+  indexes.forEach(index => ensureIndex(store, index.name, index.keyPath));
   return store;
+}
+
+function ensureIndex(store, name, keyPath) {
+  if (!store.indexNames.contains(name)) {
+    store.createIndex(name, keyPath, { unique: false });
+  }
+}
+
+function deleteIndexIfPresent(store, name) {
+  if (store.indexNames.contains(name)) {
+    store.deleteIndex(name);
+  }
+}
+
+function normalizeLegacyEntryRecord(entry = {}) {
+  if (!entry || typeof entry !== 'object') return entry;
+  const normalized = { ...entry };
+  if ('created_at' in normalized && !('createdAt' in normalized)) normalized.createdAt = normalized.created_at;
+  if ('synced_at' in normalized && !('syncedAt' in normalized)) normalized.syncedAt = normalized.synced_at;
+  if ('capture_id' in normalized && !('captureId' in normalized)) normalized.captureId = normalized.capture_id;
+  delete normalized.created_at;
+  delete normalized.synced_at;
+  delete normalized.capture_id;
+  return {
+    ...normalized,
+    captureId: normalized.captureId || null,
+    syncedAt: normalized.syncedAt || null,
+    locations: Array.isArray(normalized.locations) ? normalized.locations : [],
+    contacts: Array.isArray(normalized.contacts) ? normalized.contacts : [],
+    tags: Array.isArray(normalized.tags) ? normalized.tags : [],
+    attachments: Array.isArray(normalized.attachments) ? normalized.attachments : [],
+    workContexts: Array.isArray(normalized.workContexts) ? normalized.workContexts : [],
+  };
+}
+
+function normalizeLegacyCaptureRecord(capture = {}) {
+  if (!capture || typeof capture !== 'object') return capture;
+  const normalized = { ...capture };
+  if ('created_at' in normalized && !('createdAt' in normalized)) normalized.createdAt = normalized.created_at;
+  if ('updated_at' in normalized && !('updatedAt' in normalized)) normalized.updatedAt = normalized.updated_at;
+  delete normalized.created_at;
+  delete normalized.updated_at;
+  return normalized;
+}
+
+function migrateStoreRecords(store, normalize) {
+  store.openCursor().onsuccess = event => {
+    const cursor = event.target.result;
+    if (!cursor) return;
+    cursor.update(normalize(cursor.value));
+    cursor.continue();
+  };
 }
 
 function openDb() {
@@ -46,17 +106,19 @@ function openDb() {
 
       const entriesStore = ensureObjectStore(db, ENTRIES_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
-        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'createdAt', keyPath: 'createdAt' },
         { name: 'sync_status', keyPath: 'syncStatus' },
         { name: 'remoteId', keyPath: 'remoteId' },
         { name: 'captureId', keyPath: 'captureId' },
       ]);
       if (!entriesStore) {
         const existingEntriesStore = event.target.transaction.objectStore(ENTRIES_STORE);
-        if (!existingEntriesStore.indexNames.contains('captureId')) {
-          existingEntriesStore.createIndex('captureId', 'captureId', { unique: false });
-        }
+        deleteIndexIfPresent(existingEntriesStore, 'created_at');
+        ensureIndex(existingEntriesStore, 'createdAt', 'createdAt');
+        ensureIndex(existingEntriesStore, 'captureId', 'captureId');
+        migrateStoreRecords(existingEntriesStore, normalizeLegacyEntryRecord);
       }
+
       ensureObjectStore(db, FEEDBACK_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
         { name: 'created_at', keyPath: 'created_at' },
@@ -65,29 +127,80 @@ function openDb() {
         { name: 'created_at', keyPath: 'created_at' },
         { name: 'syncStatus', keyPath: 'syncStatus' },
       ]);
-      ensureObjectStore(db, CAPTURES_STORE, { keyPath: 'id' }, [
+      const capturesStore = ensureObjectStore(db, CAPTURES_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
-        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'createdAt', keyPath: 'createdAt' },
         { name: 'source', keyPath: 'source' },
         { name: 'kind', keyPath: 'kind' },
       ]);
-      ensureObjectStore(db, PEOPLE_STORE, { keyPath: 'id' }, [
+      if (!capturesStore) {
+        const existingCapturesStore = event.target.transaction.objectStore(CAPTURES_STORE);
+        deleteIndexIfPresent(existingCapturesStore, 'created_at');
+        ensureIndex(existingCapturesStore, 'createdAt', 'createdAt');
+        ensureIndex(existingCapturesStore, 'source', 'source');
+        ensureIndex(existingCapturesStore, 'kind', 'kind');
+        migrateStoreRecords(existingCapturesStore, normalizeLegacyCaptureRecord);
+      }
+
+      ensureObjectStore(db, CONTEXT_CLUES_STORE, { keyPath: 'id' }, [
+        { name: 'captureId', keyPath: 'captureId' },
+        { name: 'entryId', keyPath: 'entryId' },
+        { name: 'remoteEntryId', keyPath: 'remoteEntryId' },
+        { name: 'kind', keyPath: 'kind' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, LOCATIONS_STORE, { keyPath: 'id' }, [
         { name: 'status', keyPath: 'status' },
         { name: 'created_at', keyPath: 'created_at' },
         { name: 'updated_at', keyPath: 'updated_at' },
+        { name: 'remoteId', keyPath: 'remoteId' },
+        { name: 'normalizedDisplayName', keyPath: 'normalizedDisplayName' },
+      ]);
+      ensureObjectStore(db, ENTRY_LOCATIONS_STORE, { keyPath: 'id' }, [
+        { name: 'entryId', keyPath: 'entryId' },
+        { name: 'locationId', keyPath: 'locationId' },
+        { name: 'remoteEntryId', keyPath: 'remoteEntryId' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, TAG_CATEGORIES_STORE, { keyPath: 'id' }, [
+        { name: 'slug', keyPath: 'slug' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, TAGS_STORE, { keyPath: 'id' }, [
+        { name: 'categoryId', keyPath: 'categoryId' },
+        { name: 'normalizedLabel', keyPath: 'normalizedLabel' },
+        { name: 'status', keyPath: 'status' },
+        { name: 'remoteId', keyPath: 'remoteId' },
+        { name: 'updated_at', keyPath: 'updated_at' },
+      ]);
+      ensureObjectStore(db, TAG_VOCABULARY_STORE, { keyPath: 'tagId' }, [
+        { name: 'categoryId', keyPath: 'categoryId' },
+        { name: 'last_used_at', keyPath: 'last_used_at' },
+      ]);
+      ensureObjectStore(db, ENTRY_TAGS_STORE, { keyPath: 'id' }, [
+        { name: 'entryId', keyPath: 'entryId' },
+        { name: 'tagId', keyPath: 'tagId' },
+        { name: 'remoteEntryId', keyPath: 'remoteEntryId' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, CONTACTS_STORE, { keyPath: 'id' }, [
+        { name: 'status', keyPath: 'status' },
+        { name: 'created_at', keyPath: 'created_at' },
+        { name: 'updated_at', keyPath: 'updated_at' },
+        { name: 'primaryEmail', keyPath: 'primaryEmail' },
+        { name: 'primaryPhone', keyPath: 'primaryPhone' },
+      ]);
+      ensureObjectStore(db, CONTACT_ALIASES_STORE, { keyPath: 'fromClientId' }, [
+        { name: 'toClientId', keyPath: 'toClientId' },
+        { name: 'collection', keyPath: 'collection' },
+        { name: 'created_at', keyPath: 'created_at' },
       ]);
     };
   });
 
-  return openOnce().catch(async (error) => {
-    console.warn('[PWA] IndexedDB open failed, resetting local database:', error.message);
-    await new Promise((resolve) => {
-      const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
-      deleteRequest.onsuccess = () => resolve();
-      deleteRequest.onerror = () => resolve();
-      deleteRequest.onblocked = () => resolve();
-    });
-    return openOnce();
+  return openOnce().catch((error) => {
+    console.warn('[PWA] IndexedDB open failed; preserving local database:', error.message);
+    throw error;
   });
 }
 
@@ -180,8 +293,8 @@ function buildUnsupportedFileCapture({ files, title, text, url, combinedText }) 
       textPresent: Boolean(text),
       urlPresent: Boolean(url),
     },
-    created_at: now,
-    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
@@ -263,8 +376,8 @@ async function buildShareCapture(formData) {
       status: 'ready_for_review',
       errorMessage: null,
       payloads,
-      created_at: now,
-      updated_at: now,
+      createdAt: now,
+      updatedAt: now,
     };
   }
 
@@ -288,8 +401,8 @@ async function buildShareCapture(formData) {
       url,
       received_at: now,
     }],
-    created_at: now,
-    updated_at: now,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
