@@ -1,4 +1,4 @@
-import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData, toCanonicalEntry } from '../services/database.js';
+import { saveEntry, getEntries, getEntryByCaptureId, getEntryByCreatedAt, saveContact, getContacts, getContactManifest, pullContactsByClientIds, pushReplicaContacts, saveContactAlias, getContactAliases, saveContextClues, saveEntryLocations, saveEntryContacts, saveEntryTags, saveEntryAttachments, saveLocation, getLocations, deleteUserData, toCanonicalContactRecord, toCanonicalEntry, toCanonicalLocationRecord } from '../services/database.js';
 import { requireAuth } from '../services/auth.js';
 import { getEmbeddingService, EMBEDDING_MODEL } from '../services/embedding.js';
 import { parseEntrySyncPayload } from '../contracts/entrySync.js';
@@ -141,7 +141,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         saved.push(await db.saveContact(user.id, contact));
       }
       const rows = saved.filter(Boolean);
-      return { success: true, contacts: rows };
+      return { success: true, contacts: rows.map(toCanonicalContactRecord) };
     } catch (error) {
       console.error('Contacts sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save contacts' });
@@ -154,7 +154,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const contacts = await db.getContacts(user.id);
-      return { success: true, contacts };
+      return { success: true, contacts: contacts.map(toCanonicalContactRecord) };
     } catch (error) {
       console.error('Contacts sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch contacts' });
@@ -184,7 +184,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const clientIds = Array.isArray(request.body?.clientIds) ? request.body.clientIds : [];
       const contacts = await db.pullContactsByClientIds(user.id, clientIds);
       const aliases = await db.getContactAliases(user.id);
-      return { success: true, contacts, aliases };
+      return { success: true, contacts: contacts.map(toCanonicalContactRecord), aliases };
     } catch (error) {
       console.error('Contacts pull error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to pull contacts' });
@@ -198,7 +198,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     try {
       const contacts = Array.isArray(request.body?.contacts) ? request.body.contacts : [];
       const result = await db.pushReplicaContacts(user.id, contacts);
-      return { success: true, contacts: result.contacts || [], aliases: result.aliases || [] };
+      return { success: true, contacts: (result.contacts || []).map(toCanonicalContactRecord), aliases: result.aliases || [] };
     } catch (error) {
       console.error('Contacts push error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to push contacts' });
@@ -233,7 +233,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       for (const location of locations) {
         saved.push(await db.saveLocation(user.id, location));
       }
-      return { success: true, locations: saved.filter(Boolean) };
+      return { success: true, locations: saved.filter(Boolean).map(toCanonicalLocationRecord) };
     } catch (error) {
       console.error('Locations sync save error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to save locations' });
@@ -246,7 +246,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
 
     try {
       const locations = await db.getLocations(user.id);
-      return { success: true, locations };
+      return { success: true, locations: locations.map(toCanonicalLocationRecord) };
     } catch (error) {
       console.error('Locations sync fetch error:', error);
       return reply.status(500).send({ error: error.message || 'Failed to fetch locations' });

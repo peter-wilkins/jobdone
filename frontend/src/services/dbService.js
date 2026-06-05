@@ -2094,29 +2094,32 @@ export class DBService {
 
   async upsertCloudLocation(cloudLocation) {
     const db = await this.ensureDb();
-    const localId = cloudLocation.local_id || null;
+    const remoteId = cloudLocation.remoteId || cloudLocation.location_id || cloudLocation.id || null;
+    const localId = cloudLocation.localId || cloudLocation.local_id || (cloudLocation.remoteId ? cloudLocation.id : null);
     const existing = localId ? await this.getLocation(localId) : null;
+    const incomingUpdatedAt = cloudLocation.updatedAt || cloudLocation.updated_at || cloudLocation.createdAt || cloudLocation.created_at || null;
     if (
       existing?.syncStatus === 'pending' &&
-      new Date(existing.updated_at || 0) > new Date(cloudLocation.updated_at || cloudLocation.created_at || 0)
+      new Date(existing.updated_at || 0) > new Date(incomingUpdatedAt || 0)
     ) {
       return existing;
     }
 
     const locationData = {
       id: localId || existing?.id || `location-cloud-${cloudLocation.id}`,
-      displayName: cloudLocation.display_name || '',
-      placeText: cloudLocation.place_text || cloudLocation.display_name || '',
-      addressText: cloudLocation.address_text || '',
+      displayName: cloudLocation.displayName || cloudLocation.display_name || '',
+      placeText: cloudLocation.placeText || cloudLocation.place_text || cloudLocation.displayName || cloudLocation.display_name || '',
+      addressText: cloudLocation.addressText || cloudLocation.address_text || '',
       latitude: cloudLocation.latitude ?? null,
       longitude: cloudLocation.longitude ?? null,
       status: cloudLocation.status || 'confirmed',
-      normalizedDisplayName: normalizeLocationKey(cloudLocation.display_name || cloudLocation.place_text || ''),
-      remoteId: cloudLocation.id,
+      normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.display_name || cloudLocation.placeText || cloudLocation.place_text || ''),
+      remoteId,
       syncStatus: 'synced',
       synced_at: new Date().toISOString(),
-      created_at: cloudLocation.created_at || new Date().toISOString(),
-      updated_at: cloudLocation.updated_at || cloudLocation.created_at || new Date().toISOString(),
+      providerPlaceId: cloudLocation.providerPlaceId || cloudLocation.provider_place_id || existing?.providerPlaceId || null,
+      created_at: cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
+      updated_at: cloudLocation.updatedAt || cloudLocation.updated_at || cloudLocation.createdAt || cloudLocation.created_at || new Date().toISOString(),
     };
 
     return new Promise((resolve, reject) => {

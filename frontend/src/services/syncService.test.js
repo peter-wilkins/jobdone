@@ -56,3 +56,52 @@ test('syncEntry sends canonical entryData fields to the API', async () => {
     apiService.syncSave = originals.syncSave;
   }
 });
+
+test('syncLocations sends canonical Location fields to the API', async () => {
+  const originals = {
+    isLoggedIn: authService.isLoggedIn,
+    syncLocations: apiService.syncLocations,
+  };
+  let payload;
+
+  try {
+    authService.isLoggedIn = () => true;
+    apiService.syncLocations = async (locations) => {
+      payload = locations;
+      return { success: true, locations: [] };
+    };
+
+    await syncService.syncLocations([{
+      id: 'location-local-1',
+      status: 'confirmed',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '14 Bell Street, Dublin',
+      latitude: 53.3498,
+      longitude: -6.2603,
+      remoteId: 'location-cloud-1',
+      created_at: '2026-05-17T01:00:00.000Z',
+      updated_at: '2026-05-17T01:01:00.000Z',
+    }]);
+
+    assert.deepEqual(payload, [{
+      id: 'location-local-1',
+      localId: 'location-local-1',
+      status: 'confirmed',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '14 Bell Street, Dublin',
+      latitude: 53.3498,
+      longitude: -6.2603,
+      remoteId: 'location-cloud-1',
+      providerPlaceId: undefined,
+      createdAt: '2026-05-17T01:00:00.000Z',
+      updatedAt: '2026-05-17T01:01:00.000Z',
+    }]);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload[0], 'created_at'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload[0], 'updated_at'), false);
+  } finally {
+    authService.isLoggedIn = originals.isLoggedIn;
+    apiService.syncLocations = originals.syncLocations;
+  }
+});

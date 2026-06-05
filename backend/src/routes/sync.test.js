@@ -653,7 +653,7 @@ describe('SyncRoute Contacts sync', () => {
     const app = await buildApp({
       saveContact: async (userId, contact) => {
         savedArgs = { userId, contact };
-        return { id: 'contact-cloud-1', userId, clientId: contact.clientId || contact.localId };
+        return { id: 'contact-cloud-1', userId, clientId: contact.clientId || contact.localId, display_name: 'Ann Smith' };
       },
     });
 
@@ -670,10 +670,12 @@ describe('SyncRoute Contacts sync', () => {
     assert.equal(savedArgs.userId, 'user-1');
     assert.equal(savedArgs.contact.displayName, 'Ann Smith');
     assert.equal(JSON.parse(res.body).contacts[0].clientId, 'contact-local-1');
+    assert.equal(JSON.parse(res.body).contacts[0].displayName, 'Ann Smith');
+    assert.equal(Object.prototype.hasOwnProperty.call(JSON.parse(res.body).contacts[0], 'display_name'), false);
   });
 
   test('fetches cloud contacts for authenticated user', async () => {
-    const cloudContacts = [{ id: 'contact-cloud-1', clientId: 'contact-local-1', displayName: 'Ann Smith' }];
+    const cloudContacts = [{ id: 'contact-cloud-1', clientId: 'contact-local-1', display_name: 'Ann Smith' }];
     const app = await buildApp({
       getContacts: async (userId) => {
         assert.equal(userId, 'user-1');
@@ -687,7 +689,29 @@ describe('SyncRoute Contacts sync', () => {
     });
 
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(JSON.parse(res.body).contacts, cloudContacts);
+    assert.deepEqual(JSON.parse(res.body).contacts, [{
+      id: 'contact-cloud-1',
+      serverId: 'contact-cloud-1',
+      clientId: 'contact-local-1',
+      status: 'confirmed',
+      displayName: 'Ann Smith',
+      givenName: '',
+      familyName: '',
+      organization: '',
+      title: '',
+      note: '',
+      phones: [],
+      emails: [],
+      normalizedPhones: [],
+      normalizedEmails: [],
+      primaryPhone: null,
+      primaryEmail: null,
+      sourceCaptureIds: [],
+      contentHash: null,
+      identityKeys: [],
+      createdAt: null,
+      updatedAt: null,
+    }]);
   });
 
   test('returns contact manifest without full payloads', async () => {
@@ -814,7 +838,19 @@ describe('SyncRoute Locations sync', () => {
     assert.equal(res.statusCode, 200);
     assert.equal(saveArgs.userId, 'user-1');
     assert.equal(saveArgs.location.id, 'location-local-1');
-    assert.equal(JSON.parse(res.body).locations[0].id, 'cloud-location-1');
+    assert.deepEqual(JSON.parse(res.body).locations[0], {
+      id: 'location-local-1',
+      remoteId: 'cloud-location-1',
+      status: 'confirmed',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '',
+      latitude: 53.3498,
+      longitude: -6.2603,
+      providerPlaceId: null,
+      createdAt: null,
+      updatedAt: null,
+    });
   });
 
   test('fetches cloud locations for authenticated user', async () => {
@@ -832,6 +868,18 @@ describe('SyncRoute Locations sync', () => {
     });
 
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(JSON.parse(res.body).locations, cloudLocations);
+    assert.deepEqual(JSON.parse(res.body).locations, [{
+      id: 'location-cloud-1',
+      remoteId: 'location-cloud-1',
+      status: 'confirmed',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '',
+      latitude: null,
+      longitude: null,
+      providerPlaceId: null,
+      createdAt: null,
+      updatedAt: null,
+    }]);
   });
 });

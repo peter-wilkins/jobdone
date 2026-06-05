@@ -331,6 +331,48 @@ function toCanonicalContact(contact = {}) {
   };
 }
 
+export function toCanonicalContactRecord(contact = {}) {
+  return {
+    id: contact.id || contact.serverId || null,
+    serverId: contact.serverId || contact.id || null,
+    clientId: contact.clientId || contact.localId || contact.local_id || null,
+    status: contact.status || 'confirmed',
+    displayName: contact.displayName || contact.display_name || '',
+    givenName: contact.givenName || contact.given_name || '',
+    familyName: contact.familyName || contact.family_name || '',
+    organization: contact.organization || '',
+    title: contact.title || '',
+    note: contact.note || '',
+    phones: contact.phones || [],
+    emails: contact.emails || [],
+    normalizedPhones: contact.normalizedPhones || contact.normalized_phones || [],
+    normalizedEmails: contact.normalizedEmails || contact.normalized_emails || [],
+    primaryPhone: contact.primaryPhone || contact.primary_phone || null,
+    primaryEmail: contact.primaryEmail || contact.primary_email || null,
+    sourceCaptureIds: contact.sourceCaptureIds || contact.source_capture_ids || [],
+    contentHash: contact.contentHash || contact.content_hash || null,
+    identityKeys: contact.identityKeys || contact.identity_keys || [],
+    createdAt: contact.createdAt || contact.created_at || null,
+    updatedAt: contact.updatedAt || contact.updated_at || null,
+  };
+}
+
+export function toCanonicalLocationRecord(location = {}) {
+  return {
+    id: location.localId || location.local_id || location.id || null,
+    remoteId: location.remoteId || location.location_id || location.id || null,
+    status: location.status || 'confirmed',
+    displayName: location.displayName || location.display_name || '',
+    placeText: location.placeText || location.place_text || location.display_name || '',
+    addressText: location.addressText || location.address_text || '',
+    latitude: location.latitude ?? null,
+    longitude: location.longitude ?? null,
+    providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
+    createdAt: location.createdAt || location.created_at || null,
+    updatedAt: location.updatedAt || location.updated_at || location.created_at || null,
+  };
+}
+
 function toCanonicalTag(tag = {}) {
   return {
     id: cloudLocalId(tag),
@@ -884,7 +926,7 @@ export async function saveEntryLocations(userId, entryId, locations = []) {
     if (!row) {
       const { data, error } = await jobdoneDb
       .from('locations')
-        .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
+        .insert([{ user_id: userId, ...location, created_at: new Date(input.createdAt || input.created_at || Date.now()).toISOString() }])
         .select()
         .single();
       if (error) throw error;
@@ -954,7 +996,7 @@ export async function saveLocation(userId, input = {}) {
   if (!row) {
     const { data, error } = await jobdoneDb
       .from('locations')
-      .insert([{ user_id: userId, ...location, created_at: new Date(input.created_at || Date.now()).toISOString() }])
+      .insert([{ user_id: userId, ...location, created_at: new Date(input.createdAt || input.created_at || Date.now()).toISOString() }])
       .select()
       .single();
     if (error) throw error;

@@ -7,7 +7,9 @@ import {
   buildContactLocationCooccurrences,
   findReusableLocation,
   locationsHaveStrongIdentityMatch,
+  toCanonicalContactRecord,
   toCanonicalEntry,
+  toCanonicalLocationRecord,
 } from './database.js';
 import {
   buildSqlFirstRecallQuery,
@@ -170,6 +172,53 @@ describe('Cloud Entry response mapping', () => {
     assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'created_at'), false);
     assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'capture_id'), false);
     assert.equal(Object.prototype.hasOwnProperty.call(mapped, 'context_clues'), false);
+  });
+
+  test('maps standalone Contact and Location rows to canonical sync fields', () => {
+    const contact = toCanonicalContactRecord({
+      id: 'contact-cloud-1',
+      clientId: 'contact-local-1',
+      display_name: 'Ann Smith',
+      primary_phone: '+353123',
+      normalized_phones: ['+353123'],
+      source_capture_ids: ['entry-1'],
+      created_at: '2026-05-17T01:00:00.000Z',
+      updated_at: '2026-05-17T01:01:00.000Z',
+    });
+    const location = toCanonicalLocationRecord({
+      id: 'location-cloud-1',
+      local_id: 'location-local-1',
+      display_name: '14 Bell Street',
+      place_text: '14 Bell Street',
+      address_text: '14 Bell Street, Dublin',
+      latitude: 53.3498,
+      longitude: -6.2603,
+      created_at: '2026-05-17T01:00:00.000Z',
+      updated_at: '2026-05-17T01:01:00.000Z',
+    });
+
+    assert.equal(contact.displayName, 'Ann Smith');
+    assert.equal(contact.primaryPhone, '+353123');
+    assert.deepEqual(contact.normalizedPhones, ['+353123']);
+    assert.deepEqual(contact.sourceCaptureIds, ['entry-1']);
+    assert.equal(Object.prototype.hasOwnProperty.call(contact, 'display_name'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(contact, 'primary_phone'), false);
+
+    assert.deepEqual(location, {
+      id: 'location-local-1',
+      remoteId: 'location-cloud-1',
+      status: 'confirmed',
+      displayName: '14 Bell Street',
+      placeText: '14 Bell Street',
+      addressText: '14 Bell Street, Dublin',
+      latitude: 53.3498,
+      longitude: -6.2603,
+      providerPlaceId: null,
+      createdAt: '2026-05-17T01:00:00.000Z',
+      updatedAt: '2026-05-17T01:01:00.000Z',
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(location, 'display_name'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(location, 'local_id'), false);
   });
 });
 
