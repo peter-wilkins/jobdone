@@ -39,8 +39,13 @@ function parseWithLegacyCheck({ schema, payload, replacements, prefix, fallbackE
   return parseWithSchema(schema, payload, fallbackError);
 }
 
+/**
+ * @param {Record<string, unknown>} capture
+ * @returns {Record<string, unknown>}
+ */
 export function normalizeLegacyLocalCaptureRecord(capture = {}) {
   if (!capture || typeof capture !== 'object' || Array.isArray(capture)) return capture;
+  /** @type {Record<string, unknown>} */
   const normalized = { ...capture };
   if ('created_at' in normalized && !('createdAt' in normalized)) normalized.createdAt = normalized.created_at;
   if ('updated_at' in normalized && !('updatedAt' in normalized)) normalized.updatedAt = normalized.updated_at;
@@ -49,6 +54,9 @@ export function normalizeLegacyLocalCaptureRecord(capture = {}) {
   return normalized;
 }
 
+/**
+ * @param {typeof import('zod').z} z
+ */
 export function buildLocalCaptureSchemas(z) {
   const looseObjectSchema = z.record(z.string(), z.unknown());
   const optionalString = z.string().nullable().optional();
