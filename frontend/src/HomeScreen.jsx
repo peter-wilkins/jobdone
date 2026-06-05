@@ -8,6 +8,7 @@ import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
 import { captureContextService } from './services/captureContextService';
+import { recallLocalEntries } from './services/localRecallService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -1234,7 +1235,6 @@ export function HomeScreen({
     }
   };
 
-  const OFFLINE_MSG = 'Recall isn\'t available right now. Try again in a moment.';
   const isOffline = () => !navigator.onLine || !backendAvailable;
 
   const handleConfirm = async (id) => {
@@ -1771,13 +1771,26 @@ export function HomeScreen({
       setError('Type a search query first.');
       return;
     }
-    // Offline: show message, no network call
-    if (isOffline()) {
-      setError(OFFLINE_MSG);
-      return;
-    }
+    setError(null);
+
+    const publishResults = async (results) => {
+      setActiveQuery(trimmedText);
+      setQueryResults(results);
+      await queryHistoryService.add(trimmedText);
+      setRecentQueries(await queryHistoryService.getRecent());
+    };
+
+    const runLocalRecall = async () => {
+      await publishResults(recallLocalEntries(trimmedText, entries));
+    };
+
     setIsRecalling(true);
     try {
+      if (!user || isOffline()) {
+        await runLocalRecall();
+        return;
+      }
+
       const results = await apiService.recall(trimmedText);
       const localEntriesByRemoteId = new Map(
         entries
@@ -1796,16 +1809,12 @@ export function HomeScreen({
           syncStatus: result.syncStatus || localEntry.syncStatus,
         };
       });
-      setActiveQuery(trimmedText);
-      setQueryResults(enrichedResults);
-      // Save to local + server history
-      await queryHistoryService.add(trimmedText);
-      setRecentQueries(await queryHistoryService.getRecent());
+      await publishResults(enrichedResults);
     } catch (err) {
       if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
-        setError(OFFLINE_MSG);
+        await runLocalRecall();
       } else if (err?.status === 401 || err?.status === 403) {
-        setError('Log in to search your synced entries.');
+        await runLocalRecall();
       } else if (err?.status === 400) {
         setError(err?.message || 'Type a search query first.');
       } else {
