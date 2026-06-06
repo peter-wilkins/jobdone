@@ -31,10 +31,10 @@ CREATE TABLE "syncTransactions" (
   CHECK ("actorDeviceId" IS NULL OR btrim("actorDeviceId") <> '')
 );
 
-CREATE INDEX sync_transactions_replica_t_idx
+CREATE INDEX "syncTransactionsReplicaTIdx"
   ON "syncTransactions"("replicaEpoch", "t");
 
-CREATE INDEX sync_transactions_actor_user_t_idx
+CREATE INDEX "syncTransactionsActorUserTIdx"
   ON "syncTransactions"("actorUserId", "t")
   WHERE "actorUserId" IS NOT NULL;
 
@@ -52,15 +52,15 @@ CREATE TABLE "syncOwnerAccess" (
   CHECK (("revokedT" IS NULL AND "revokedAt" IS NULL) OR ("revokedT" IS NOT NULL AND "revokedAt" IS NOT NULL))
 );
 
-CREATE UNIQUE INDEX sync_owner_access_active_uidx
+CREATE UNIQUE INDEX "syncOwnerAccessActiveUidx"
   ON "syncOwnerAccess"("ownerKind", "ownerId", "userId")
   WHERE "revokedT" IS NULL;
 
-CREATE INDEX sync_owner_access_user_owner_idx
+CREATE INDEX "syncOwnerAccessUserOwnerIdx"
   ON "syncOwnerAccess"("userId", "ownerKind", "ownerId")
   WHERE "revokedT" IS NULL;
 
-CREATE INDEX sync_owner_access_owner_idx
+CREATE INDEX "syncOwnerAccessOwnerIdx"
   ON "syncOwnerAccess"("ownerKind", "ownerId", "role")
   WHERE "revokedT" IS NULL;
 
@@ -88,16 +88,16 @@ CREATE TABLE "syncObjects" (
   CHECK ("payloadBytes" IS NULL)
 );
 
-CREATE INDEX sync_objects_owner_changed_idx
+CREATE INDEX "syncObjectsOwnerChangedIdx"
   ON "syncObjects"("ownerKind", "ownerId", "changedT");
 
-CREATE INDEX sync_objects_owner_collection_changed_idx
+CREATE INDEX "syncObjectsOwnerCollectionChangedIdx"
   ON "syncObjects"("ownerKind", "ownerId", "collection", "changedT");
 
-CREATE INDEX sync_objects_payload_hash_idx
+CREATE INDEX "syncObjectsPayloadHashIdx"
   ON "syncObjects"("ownerKind", "ownerId", "collection", "payloadHash");
 
-CREATE INDEX sync_objects_deleted_idx
+CREATE INDEX "syncObjectsDeletedIdx"
   ON "syncObjects"("ownerKind", "ownerId", "deletedT")
   WHERE "deletedT" IS NOT NULL;
 
@@ -126,13 +126,13 @@ CREATE TABLE "syncIntents" (
   CHECK ("payloadHash" IS NULL OR btrim("payloadHash") <> '')
 );
 
-CREATE INDEX sync_intents_actor_received_idx
+CREATE INDEX "syncIntentsActorReceivedIdx"
   ON "syncIntents"("actorUserId", "receivedAt" DESC);
 
-CREATE INDEX sync_intents_owner_status_idx
+CREATE INDEX "syncIntentsOwnerStatusIdx"
   ON "syncIntents"("ownerKind", "ownerId", "status");
 
-CREATE INDEX sync_intents_committed_t_idx
+CREATE INDEX "syncIntentsCommittedTIdx"
   ON "syncIntents"("committedT")
   WHERE "committedT" IS NOT NULL;
 

@@ -122,7 +122,7 @@ Adopting a full local-first sync product such as Replicache, Zero, Electric, Pow
 
 CI should include schema conformance checks for JobDone-owned tables: `jobdone` schema only, camelCase identifiers for JobDone data, UUID owner IDs, UUID syncable IDs, required transaction fields for syncable rows, scoped association FKs, RLS enabled, and no `remoteId` or backend server IDs in app-facing contracts.
 
-Schema checks should support explicit modes. During MVP, `mvp-clean` mode checks contract shape and allows destructive clean resets. Once JobDone enters user-preserving safety mode, schema CI should add nondestructive/backwards-compatibility checks such as rejecting table drops, column drops, incompatible type changes, unsafe not-null changes, and unvalidated constraints unless a deliberate migration plan and backup path exist.
+Schema checks should support explicit modes. During MVP, `mvp-clean` mode checks contract shape and allows destructive clean resets. Its first CI implementation can statically check checked-in SQL so GitHub Actions does not need lab database access. Once JobDone enters user-preserving safety mode, schema CI should add nondestructive/backwards-compatibility checks such as rejecting table drops, column drops, incompatible type changes, unsafe not-null changes, and unvalidated constraints unless a deliberate migration plan and backup path exist.
 
 Property tests should be split at useful boundaries:
 

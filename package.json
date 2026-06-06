@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:frontend": "npm --prefix frontend run build",
+    "check:schema": "node scripts/check-local-replica-schema.js",
     "typecheck:contracts": "tsc -p tsconfig.contracts.json",
     "test:backend": "npm --prefix backend test",
     "vercel:build:backend": "vercel --cwd backend build --prod",

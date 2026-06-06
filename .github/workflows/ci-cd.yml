@@ -30,6 +30,9 @@ jobs:
       - name: Typecheck contracts
         run: npm run typecheck:contracts
 
+      - name: Check Local Replica schema
+        run: SCHEMA_MODE=mvp-clean npm run check:schema
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
