@@ -59,6 +59,10 @@ JOBDONE_STAGING_SUPABASE_URL
 JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
 ```
 
+Staging also enables the experimental Entry Local Replica path against the
+scratch `jobdone_next` schema. Production does not enable that flag until the
+staging smoke is boring.
+
 ## QA Gate
 
 Before promotion, run the smallest useful checks for the change:

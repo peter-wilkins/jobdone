@@ -28,6 +28,13 @@ export async function registerLocalReplicaRoutes(fastify, deps = {}) {
   const auth = deps.requireAuth ?? requireAuth;
   const store = deps.localReplicaStore ?? defaultStore;
 
+  fastify.get('/api/local-replica/health', async () => {
+    return {
+      configured: Boolean(store?.configured),
+      schema: store?.schema || null,
+    };
+  });
+
   fastify.post('/api/local-replica/push', async (request, reply) => {
     const user = await auth(request, reply);
     if (!user) return;

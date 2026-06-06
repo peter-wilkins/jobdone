@@ -43,3 +43,15 @@ if [[ "$frontend_build" != "$backend_build" ]]; then
 fi
 
 echo "$target build ids match."
+
+if [[ "$target" == "staging" ]]; then
+  local_replica_health="$(curl -fsSL "$backend_url/api/local-replica/health")"
+  node -e '
+    const health = JSON.parse(process.argv[1]);
+    if (health.configured !== true || health.schema !== "jobdone_next") {
+      console.error(`Local Replica not configured for staging: ${JSON.stringify(health)}`);
+      process.exit(1);
+    }
+  ' "$local_replica_health"
+  echo "staging local replica configured."
+fi
