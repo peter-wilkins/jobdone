@@ -259,6 +259,7 @@ export function HomeScreen({
   canAutoStart = false,
   recordRequestId = 0,
   onRecordRequestHandled,
+  onSyncResult,
 }) {
   const processingIdsRef = useRef(new Set());
   const handledRecordRequestRef = useRef(0);
@@ -1906,6 +1907,7 @@ export function HomeScreen({
           if (pending.length) {
             try {
               const result = await syncOrchestratorService.syncConfirmedData({ reason: 'home_load_retry' });
+              onSyncResult?.(result);
               if (result?.ok === false) {
                 console.warn('[UI] Retry sync had issues:', result.issues);
               } else {
@@ -1915,6 +1917,7 @@ export function HomeScreen({
               }
             } catch (e) {
               console.warn('[UI] Retry sync failed for confirmed Entries', e);
+              onSyncResult?.({ ok: false, issues: [{ message: e?.message || 'Sync failed' }] });
             }
           }
         }

@@ -51,19 +51,23 @@ function App() {
   const [apiDebugDetail, setApiDebugDetail] = useState(null);
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
 
+  function applySyncResultNotice(result) {
+    if (result?.ok) {
+      setSyncNotice(null);
+      return;
+    }
+    setSyncNotice({
+      message: 'Cloud sync hit a problem. Local data is safe; JobDone will retry.',
+      debugDetail: result?.issues?.[0]?.debugDetail || null,
+    });
+  }
+
   async function runConfirmedDataSync(reason) {
     const syncUser = authService.getUser();
     setApiErrorDetailsEnabled(debugApiDetailsEnabledForUser(syncUser));
     try {
       const result = await syncOrchestratorService.syncConfirmedData({ reason });
-      if (result.ok) {
-        setSyncNotice(null);
-      } else {
-        setSyncNotice({
-          message: 'Cloud sync hit a problem. Local data is safe; JobDone will retry.',
-          debugDetail: result.issues?.[0]?.debugDetail || null,
-        });
-      }
+      applySyncResultNotice(result);
       return result;
     } catch (error) {
       console.error('[Sync] Confirmed data sync failed:', error);
@@ -346,6 +350,7 @@ function App() {
         canAutoStart={canAutoStartHome}
         recordRequestId={recordRequestId}
         onRecordRequestHandled={handleRecordRequestHandled}
+        onSyncResult={applySyncResultNotice}
       />
     </>
   );
