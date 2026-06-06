@@ -11,11 +11,11 @@ Raw inbound material awaiting review — voice, text, shared contact, photo, or 
 _Avoid_: Draft, Item, Import, Upload
 
 **Entry**:
-A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Corrections are made by submitting a new Entry.
+A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Its durable user-visible body is `text`; voice-era `summary`/`transcript` distinctions belong to Capture, transcription, or evaluation layers, not the final Entry contract. Corrections are made by submitting a new Entry.
 _Avoid_: Event, Job, Note, Recording, Log
 
 **Contact**:
-A contactable real human known to the user, anchored by contact evidence such as a phone number, email address, shared vCard, or trusted calendar attendee. A Contact is familiar mobile-address-book language and does not imply billing ownership.
+A contactable real human known to the user, anchored by contact evidence such as a phone number, email address, shared vCard, or trusted calendar attendee. A Contact is familiar mobile-address-book language and does not imply billing ownership. The canonical Contact contract should preserve imported phone contacts as vCard/VCF text plus parsed fields JobDone currently understands, rather than discarding unknown contact data.
 _Avoid_: Customer, Client, Account, Person
 
 **Location**:
@@ -30,12 +30,16 @@ _Avoid_: Appointment Entry, Job, Booking
 External or inferred evidence used to predict Entry structure such as Location, Contact, Tags, or Team-configured Work Context for an Entry. Context Clues support review and prediction but are not themselves Timeline content.
 _Avoid_: Metadata, Signal, Evidence
 
+**User-Defined Context Clue**:
+A deferred extension where users or Teams can define additional structured context clues beyond built-in Location, Contact, and Team Work Context. User-Defined Context Clues may replace or reduce loose Tag usage if JobDone needs more precise domain context without creating vague labels.
+_Avoid_: Loose Tag, Arbitrary Metadata, Prompt Text
+
 **Capture Context**:
 Bounded, user-controlled context that helps JobDone summarize, extract, and predict structure for a Capture. Capture Context can come from a personal onboarding answer, a Team purpose/domain, claimed Backlog Items, Work Context, or future domain profiles. Capture Context is data about what the user is likely doing; it is not raw prompt text or model instructions.
 _Avoid_: Prompt, Prompt Injection, Product Mode
 
 **Tag**:
-A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are how JobDone structures operational memory; they are not decorative UI facets.
+A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are a provisional MVP structure and may be reduced or replaced by more precise User-Defined Context Clues if they prove too vague.
 _Avoid_: Label, Chip, Metadata
 
 **Tag Category**:
@@ -87,16 +91,48 @@ A prediction clue derived from confirmed Entries where a Contact and Location ap
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
 
 **Local Replica**:
-The local-first sync boundary between the device's IndexedDB data and the backend copy used for cross-device continuity. Local Replica sync should be lightweight, idempotent, and based on collection manifests and set diffs rather than whole-payload replacement. The core sync loop should not change behaviour based on why it was triggered; trigger reason is diagnostic context only. Collection-specific adapters may add merge rules where the real-world object requires it, such as Contacts. JobDone uses **Client ID** as the stable app/API identity for locally-created rows, following the Fulcro TempID pattern. Backend server IDs are backend-private implementation details and should not cross the app-facing API.
+The local-first sync boundary between the device's IndexedDB data and the backend copy used for cross-device continuity. Local Replica sync should be lightweight, idempotent, and based on collection changes and set diffs rather than whole-payload replacement. The core sync loop should not change behaviour based on why it was triggered; trigger reason is diagnostic context only. Collection-specific adapters may add merge rules where the real-world object requires it, such as Contacts. JobDone uses **Client ID** as the stable app/API identity for locally-created rows, following the Fulcro TempID pattern. Backend server IDs are backend-private implementation details and should not cross the app-facing API.
 _Avoid_: Generic Table Copier, Server Source of Truth, Reason-specific Sync Flow
 
+**Replica Snapshot**:
+The canonical app-facing object graph for syncable JobDone data. A Replica Snapshot is not an HTTP JSON shape; it is the typed product data contract that IndexedDB, API payloads, backend validation, and property tests should agree on. It can include personal collections such as Entries, Contacts, Locations, Tags, Queries, and Attachments, plus Team collections such as Teams, Team Members, Backlog Items, Claims, and Approval Requests. Captures are excluded because they are local-only before Confirmation.
+_Avoid_: HTTP Payload Shape, Personal Timeline Only, Whole Database Dump
+
+**Association Row**:
+A first-class immutable sync row that links two domain objects, such as Entry-to-Contact, Entry-to-Location, Entry-to-Tag, or Entry-to-Attachment. Association Rows have their own UUIDv7 Client ID, created transaction, and tombstone fields. They are not hidden composite-key join records in app-facing sync because they need stable identity for deltas, tombstones, property tests, and offline references.
+_Avoid_: Anonymous Join Row, Composite-Key-Only Link, Hidden Sync Detail
+
+**Owner Scope**:
+The explicit ownership key carried by every syncable row that belongs to a personal replica. Personal rows carry `userId`; Team-scoped rows carry `teamId`; Sync Intents also carry actor identity. Owner Scope should not be inferred only through parent links because sync pulls, exports, deletes, scoped foreign keys, and no-cross-user property tests need direct ownership facts on each collection.
+_Avoid_: Parent-Only Ownership, Implicit Tenant, Cross-Collection Guessing
+
+**JobDone SQL Shape**:
+The PostgreSQL representation for JobDone-owned sync tables should use the same camelCase identifiers as the app/API contract, including quoted names such as `userId`, `entryId`, `createdAt`, `createdT`, `changedT`, `deletedAt`, and `deletedT`. Snake_case should be treated as legacy or provider-owned unless explicitly allowlisted for a backend-only object.
+_Avoid_: Parallel SQL Naming Convention, Accidental Snake Case Adapter, Shape Translation Layer
+
 **Client ID**:
-The stable app/API identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI, local references, and app-facing backend payloads. Local Replica Client IDs should be UUIDv7 values generated on-device so they are offline-capable and reasonably append-friendly in PostgreSQL. Backend server IDs may exist inside the backend database, but they must not replace or leak alongside Client IDs in app-facing Local Replica payloads.
+The stable app/API identity assigned on-device when a local-first row is created. Client IDs may start life before login, offline, or before backend persistence; after sync they remain the identity used by the UI, local references, and app-facing backend payloads. Local Replica Client IDs must be UUIDv7 values for syncable app-facing collections so they are offline-capable and reasonably append-friendly in PostgreSQL. Backend-generated app-facing IDs should also be UUIDv7. Backend server IDs may exist inside the backend database, but they must not replace or leak alongside Client IDs in app-facing Local Replica payloads.
 _Avoid_: Disposable Temp ID, Remote ID as App Identity, Server ID in App Payloads, Date-Math Random IDs, Rewriting Local References on Sync
 
 **Client ID Alias**:
 A Local Replica mapping from an old or duplicate Client ID to the canonical Client ID for the same real-world object. Aliases allow Contacts and Locations to collapse exact duplicates without rewriting every existing local reference immediately. Aliases are app-visible only inside Local Replica plumbing; normal UI should never show them. Reads, searches, sync manifests, candidate sets, and Entry structure resolution should resolve aliases at boundaries so historical references keep working.
 _Avoid_: Broken Reference Rewrite, Duplicate Object Fork, Server ID Replacement, User-Facing Alias
+
+**Sync Intent**:
+A locally recorded user action that may need backend acceptance before it becomes committed shared state, such as creating a Team offline, claiming a Backlog Item, submitting evidence, or making a Team decision. Sync Intents carry a UUIDv7 idempotency key, actor identity, device identity, base sync position, kind, payload, and createdAt. The backend accepts, rejects, or reports conflicts for Sync Intents and returns the resulting collection changes.
+_Avoid_: Fire-and-Forget Mutation, Blind Offline Write, UI Event Log
+
+**Sync Transaction**:
+A backend transaction that commits accepted Sync Intents and assigns a single monotonically increasing **Server T**. Sync Transactions are the durable ordering source for Local Replica pulls. Rows record the transaction that created, updated, or deleted them rather than trusting device clocks for sync ordering.
+_Avoid_: UpdatedAt Cursor, Per-Table Clock, Device-Time Ordering
+
+**Server T**:
+The Datomic-like monotonic backend transaction number used as the Local Replica pull cursor. Server T represents committed backend order, not wall-clock time. Pulls ask for collection changes since a previous Server T and receive changes up to a new Server T.
+_Avoid_: Last Sync Timestamp, Client Clock Cursor, Per-Collection Version
+
+**Codec Adapter**:
+The transport encoding seam for Replica Snapshots and Sync Envelopes. JobDone's canonical contract is typed product data, not JSON specifically. JSON is the readable MVP codec, but a production codec such as Transit, MessagePack, or CBOR can be introduced behind this adapter if payload size or speed later proves it useful.
+_Avoid_: JSON as Domain Contract, Transport-Specific Product Shape
 
 **Work Context**:
 A Team-configured Entry structure dimension that captures what the work belongs to for that Team, beyond global Location, Contact, and Tags. Examples include Backlog Item, Machine, Vehicle, Asset, Project, or another Team-specific operational object. Work Context should use Team language and settings, not product-specific words such as chore.
@@ -253,6 +289,10 @@ _Avoid_: Product Invite, Manual Account Setup
 **Auto-Approval**:
 A Team setting where submitted work is approved immediately by policy instead of waiting for a manual Approver decision. Auto-Approval still creates an Approval Request and still requires evidence; it records that the Team chose trust/coordination over manual review.
 _Avoid_: No Approval, Skipping Evidence, Silent Completion
+
+**Team Trust Mode**:
+The Team-level write policy for shared Team data. High Trust Teams allow Team Members to edit Team data collaboratively. Low Trust Teams restrict Team data editing to the Team Owner. Trust Mode is separate from Auto-Approval: one controls editing shared data, the other controls review decisions.
+_Avoid_: Permission Matrix, Product Mode, Role Explosion
 
 **Team Template**:
 A suggested starting configuration for a new Team, such as High Trust Team, Low Trust Team, or Family Team. Templates set initial Team settings without creating separate product modes.
