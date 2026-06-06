@@ -233,7 +233,7 @@ export class LocalReplicaStore {
         replicaEpoch,
         baseT,
         intent,
-        committedT: status === 'idempotent' ? object.changedT : null,
+        committedT: null,
         result: intentResult({
           intentId: intent.id,
           status,
