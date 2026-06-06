@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { audioService } from './services/audioService';
 import { dbService, validateTagLabel } from './services/dbService';
 import { apiService } from './services/apiService';
-import { syncService } from './services/syncService';
+import { syncOrchestratorService } from './services/syncOrchestratorService';
+import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
 import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
@@ -1334,26 +1335,22 @@ export function HomeScreen({
 
       // Try to sync to cloud (optional - don't block if it fails)
       if (timelineEntry && timelineEntry.transcript && timelineEntry.summary) {
-        if (!user) {
-          // Not logged in — entry saved locally, will sync when user logs in
-          console.log('[Sync] Skipped — not logged in. Will retry on login.');
-        } else {
-          try {
-            const result = await syncService.syncEntry(timelineEntry);
-            if (result !== null) {
-              await dbService.markEntrySynced(id, result?.entry?.id);
-              await dbService.upsertCloudEntryLocations(id, result?.entry?.id, result?.entry?.locations || []);
-              await dbService.upsertCloudEntryTags(id, result?.entry?.id, result?.entry?.tags || []);
-              timelineEntry = {
-                ...timelineEntry,
-                syncStatus: 'synced',
-                remoteId: result?.entry?.id || timelineEntry.remoteId,
-              };
-            }
-          } catch (syncErr) {
-            console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
-            // Don't fail the UI - entry is safe locally, will retry on next login
+        try {
+          const syncOutcome = await syncConfirmedEntryAfterReview({
+            entryId: id,
+            entry: timelineEntry,
+            user,
+            reason: 'entry_confirm',
+          });
+          if (syncOutcome.entry) {
+            timelineEntry = syncOutcome.entry;
           }
+          if (syncOutcome.syncResult?.ok === false) {
+            console.warn('[UI] Cloud sync had issues, entry saved locally:', syncOutcome.syncResult.issues);
+          }
+        } catch (syncErr) {
+          console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
+          // Don't fail the UI - entry is safe locally, will retry on next login
         }
       }
 
@@ -1906,15 +1903,18 @@ export function HomeScreen({
         // Retry any confirmed entries that never made it to the cloud
         if (isAvailable) {
           const pending = sortedConfirmed.filter(e => e.syncStatus === 'pending' && e.transcript && e.summary);
-          for (const entry of pending) {
+          if (pending.length) {
             try {
-              const result = await syncService.syncEntry(entry);
-              if (result !== null) {
-                await dbService.markEntrySynced(entry.id, result?.entry?.id);
-                setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, syncStatus: 'synced' } : e));
+              const result = await syncOrchestratorService.syncConfirmedData({ reason: 'home_load_retry' });
+              if (result?.ok === false) {
+                console.warn('[UI] Retry sync had issues:', result.issues);
+              } else {
+                const refreshedConfirmed = await dbService.getEntries('confirmed');
+                const refreshedById = new Map(refreshedConfirmed.map(entry => [entry.id, entry]));
+                setEntries(prev => prev.map(entry => refreshedById.get(entry.id) || entry));
               }
             } catch (e) {
-              console.warn('[UI] Retry sync failed for entry', entry.id, e);
+              console.warn('[UI] Retry sync failed for confirmed Entries', e);
             }
           }
         }

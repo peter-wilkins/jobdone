@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
-import { syncService } from './services/syncService';
 import { syncOrchestratorService } from './services/syncOrchestratorService';
+import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
 import { parseContactPayload, buildContactSummary, summarizeContactConflicts, getContactIdentity } from './services/contactParser';
 import { FloatingRecordButton } from './FloatingRecordButton';
 
@@ -220,9 +220,14 @@ export function ShareTargetScreen({ onBack, onRecord, user }) {
         // Try sync if logged in
         if (user && entry) {
           try {
-            const result = await syncService.syncEntry(entry);
-            if (result?.entry?.id) {
-              await dbService.markEntrySynced(entryId, result.entry.id);
+            const result = await syncConfirmedEntryAfterReview({
+              entryId,
+              entry,
+              user,
+              reason: 'share_target_entry_confirm',
+            });
+            if (result.syncResult?.ok === false) {
+              console.warn('[ShareTarget] Sync had issues, entry saved locally:', result.syncResult.issues);
             }
           } catch (syncErr) {
             console.warn('[ShareTarget] Sync failed, entry saved locally:', syncErr);
