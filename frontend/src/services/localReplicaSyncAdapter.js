@@ -232,6 +232,8 @@ export async function syncLocalReplicaOnce({ store, api, limit = 100 } = {}) {
   const pending = await store.listPendingIntents();
   let pushed = 0;
   let pulled = 0;
+  const objects = [];
+  const results = [];
 
   if (pending.length) {
     const pushRequest = parseOrThrow(parsePushRequest({
@@ -243,6 +245,8 @@ export async function syncLocalReplicaOnce({ store, api, limit = 100 } = {}) {
     }), 'Invalid Local Replica push request');
     const pushResponse = await api.pushLocalReplica(pushRequest);
     const parsedPush = await applyPushResponse({ store, response: pushResponse });
+    results.push(...parsedPush.results);
+    objects.push(...parsedPush.objects);
     pushed = parsedPush.results.filter(result => ['accepted', 'idempotent'].includes(result.status)).length;
   }
 
@@ -255,6 +259,7 @@ export async function syncLocalReplicaOnce({ store, api, limit = 100 } = {}) {
     }), 'Invalid Local Replica pull request');
     const pullResponse = await api.pullLocalReplica(pullRequest);
     const parsedPull = await applyPullResponse({ store, response: pullResponse });
+    objects.push(...parsedPull.objects);
     pulled += parsedPull.objects.length;
     if (!parsedPull.hasMore || parsedPull.objects.length === 0) break;
   }
@@ -266,5 +271,7 @@ export async function syncLocalReplicaOnce({ store, api, limit = 100 } = {}) {
     pending: (await store.listPendingIntents()).length,
     lastPulledT: state.lastPulledT,
     lastKnownServerT: state.lastKnownServerT,
+    results,
+    objects,
   };
 }

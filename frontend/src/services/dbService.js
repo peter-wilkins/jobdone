@@ -1154,6 +1154,39 @@ export class DBService {
     return confirmed.filter(e => !e.remoteId);
   }
 
+  /** Get confirmed entries pending the Local Replica pipeline. */
+  async getConfirmedEntriesPendingLocalReplica() {
+    const confirmed = await this.getEntries('confirmed');
+    return confirmed.filter(entry => entry.syncStatus !== 'synced');
+  }
+
+  async putLocalReplicaEntry(entryData = {}) {
+    const db = await this.ensureDb();
+    const row = normalizeEntryRecord({
+      audioBlob: null,
+      audioSize: 0,
+      audioDuration: null,
+      errorMessage: null,
+      remoteId: null,
+      syncedAt: new Date().toISOString(),
+      locations: [],
+      contacts: [],
+      tags: [],
+      attachments: [],
+      workContexts: [],
+      ...entryData,
+      syncStatus: 'synced',
+    });
+
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([STORE_NAME], 'readwrite')
+        .objectStore(STORE_NAME)
+        .put(row);
+      request.onsuccess = () => resolve(row);
+      request.onerror = () => reject(new Error('Failed to save Local Replica entry'));
+    });
+  }
+
   /** Find a local entry by its Supabase remote ID */
   async getEntryByRemoteId(remoteId) {
     const db = await this.ensureDb();

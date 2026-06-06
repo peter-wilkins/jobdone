@@ -89,3 +89,54 @@ test('sync orchestrator keeps one confirmed-data sync in flight', async () => {
   assert.equal(result.ok, true);
   assert.equal(entryPullCount, 1);
 });
+
+test('sync uses old Entry sync path by default while Local Replica flag is off', async () => {
+  const calls = [];
+  const result = await syncConfirmedData(deps({
+    db: {
+      ...deps().db,
+      getConfirmedEntriesUnsynced: async () => [{ id: 'entry-1' }],
+    },
+    sync: {
+      syncEntry: async () => {
+        calls.push('old-entry-sync');
+        return { entry: { id: 'remote-entry-1', locations: [], tags: [] } };
+      },
+    },
+    entryReplicaSync: async () => {
+      calls.push('entry-replica');
+      return { pushed: 1, pulled: 0 };
+    },
+  }));
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ['old-entry-sync']);
+});
+
+test('sync can route Entries through Local Replica behind explicit flag', async () => {
+  const calls = [];
+  const result = await syncConfirmedData(deps({
+    localReplicaEntriesEnabled: true,
+    db: {
+      ...deps().db,
+      getConfirmedEntriesUnsynced: async () => {
+        calls.push('old-entry-query');
+        return [{ id: 'entry-1' }];
+      },
+    },
+    api: {
+      getCloudEntries: async () => {
+        calls.push('old-entry-pull');
+        return [];
+      },
+    },
+    entryReplicaSync: async () => {
+      calls.push('entry-replica');
+      return { pushed: 1, pulled: 2, conflicts: 0, rejected: 0, skipped: false };
+    },
+  }));
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ['entry-replica']);
+  assert.deepEqual(result.entries, { pushed: 1, pulled: 2, conflicts: 0, rejected: 0, skipped: false });
+});

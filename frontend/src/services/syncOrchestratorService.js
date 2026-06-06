@@ -1,6 +1,7 @@
 import { apiService } from './apiService.js';
 import { authService } from './authService.js';
 import { dbService } from './dbService.js';
+import { isLocalReplicaEntrySyncEnabled, syncEntryReplica } from './localReplicaEntryService.js';
 import { syncContactReplica, syncLocationReplica } from './localReplicaService.js';
 import { syncService } from './syncService.js';
 
@@ -75,6 +76,8 @@ export async function syncConfirmedData({
   api = apiService,
   sync = syncService,
   auth = authService,
+  entryReplicaSync = syncEntryReplica,
+  localReplicaEntriesEnabled = isLocalReplicaEntrySyncEnabled(),
   contactReplicaSync = syncContactReplica,
   locationReplicaSync = syncLocationReplica,
   reason = 'manual',
@@ -94,13 +97,22 @@ export async function syncConfirmedData({
     issues,
   };
 
-  result.entries.pushed = await pushUnsyncedEntries({ db, sync }, issues);
+  if (localReplicaEntriesEnabled) {
+    try {
+      result.entries = await entryReplicaSync({ db, api, auth });
+    } catch (error) {
+      console.warn('[Sync] Failed to sync Entry replica:', error);
+      issues.push(syncIssue('entries_replica', error));
+    }
+  } else {
+    result.entries.pushed = await pushUnsyncedEntries({ db, sync }, issues);
 
-  try {
-    result.entries.pulled = await pullCloudEntries({ db, api });
-  } catch (error) {
-    console.warn('[Sync] Failed to pull entries:', error);
-    issues.push(syncIssue('entries_pull', error));
+    try {
+      result.entries.pulled = await pullCloudEntries({ db, api });
+    } catch (error) {
+      console.warn('[Sync] Failed to pull entries:', error);
+      issues.push(syncIssue('entries_pull', error));
+    }
   }
 
   try {
