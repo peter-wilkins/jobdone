@@ -54,4 +54,16 @@ if [[ "$target" == "staging" ]]; then
     }
   ' "$local_replica_health"
   echo "staging local replica configured."
+
+  legacy_status="$(
+    curl -sS -o /dev/null -w '%{http_code}' \
+      -X POST "$backend_url/api/sync/save" \
+      -H 'content-type: application/json' \
+      --data '{"entryData":{}}'
+  )"
+  if [[ "$legacy_status" != "410" ]]; then
+    echo "Legacy Entry sync is not disabled on staging: HTTP $legacy_status" >&2
+    exit 1
+  fi
+  echo "staging legacy Entry sync disabled."
 fi

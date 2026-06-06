@@ -45,6 +45,7 @@ deploy_backend() {
     -e SUPABASE_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
     -e LOCAL_REPLICA_DB_URL="$JOBDONE_STAGING_SUPABASE_DB_URL" \
     -e LOCAL_REPLICA_SCHEMA="jobdone_next" \
+    -e DISABLE_LEGACY_ENTRY_SYNC="true" \
     -e FRONTEND_URL="https://$FRONTEND_STAGING_ALIAS" \
     -e CORS_ALLOWED_ORIGINS="$cors_allowed_origins" \
     2>&1)"

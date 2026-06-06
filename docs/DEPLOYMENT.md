@@ -62,6 +62,8 @@ JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
 Staging points Local Replica at the scratch `jobdone_next` schema while the
 contract is being proven. Entry sync no longer has a frontend fallback flag:
 confirmed Entries use Local Replica everywhere the backend is configured.
+Staging also disables the legacy `/api/sync/save` and `/api/sync/entries`
+Entry endpoints so accidental old-path writes fail loudly.
 Production must have the Local Replica schema and env wired before promotion.
 
 ## QA Gate

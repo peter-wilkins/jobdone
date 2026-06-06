@@ -81,6 +81,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
   const embeddingService = deps.embeddingService ?? getEmbeddingService();
+  const legacyEntrySyncDisabled = deps.disableLegacyEntrySync ?? process.env.DISABLE_LEGACY_ENTRY_SYNC === 'true';
 
   /**
    * POST /api/sync/save
@@ -88,6 +89,10 @@ export async function registerSyncRoutes(fastify, deps = {}) {
    * userId is taken from the validated JWT — not from the request body.
    */
   fastify.post('/api/sync/save', async (request, reply) => {
+    if (legacyEntrySyncDisabled) {
+      return reply.status(410).send({ error: 'Use /api/local-replica/* for Entry sync' });
+    }
+
     const user = await auth(request, reply);
     if (!user) return;
 
@@ -144,6 +149,10 @@ export async function registerSyncRoutes(fastify, deps = {}) {
    * Fetch all entries for the authenticated user.
    */
   fastify.get('/api/sync/entries', async (request, reply) => {
+    if (legacyEntrySyncDisabled) {
+      return reply.status(410).send({ error: 'Use /api/local-replica/* for Entry sync' });
+    }
+
     const user = await auth(request, reply);
     if (!user) return;
 

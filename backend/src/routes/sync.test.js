@@ -47,6 +47,47 @@ async function buildApp(deps = {}) {
 }
 
 describe('SyncRoute POST /api/sync/save', () => {
+  test('can disable legacy Entry save path during Local Replica cutover', async () => {
+    let saveCalled = false;
+    const app = await buildApp({
+      disableLegacyEntrySync: true,
+      saveEntry: async () => {
+        saveCalled = true;
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sync/save',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ entryData: makeEntry() }),
+    });
+
+    assert.equal(res.statusCode, 410);
+    assert.match(JSON.parse(res.body).error, /local-replica/);
+    assert.equal(saveCalled, false);
+  });
+
+  test('can disable legacy Entry pull path during Local Replica cutover', async () => {
+    let getEntriesCalled = false;
+    const app = await buildApp({
+      disableLegacyEntrySync: true,
+      getEntries: async () => {
+        getEntriesCalled = true;
+        return [];
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/sync/entries',
+    });
+
+    assert.equal(res.statusCode, 410);
+    assert.match(JSON.parse(res.body).error, /local-replica/);
+    assert.equal(getEntriesCalled, false);
+  });
+
   test('normalizes calendar context clues without excessive private payload fields', () => {
     const normalized = normalizeContextClue({
       id: 'context-clue-local-1',
