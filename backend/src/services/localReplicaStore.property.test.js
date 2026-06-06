@@ -5,7 +5,7 @@ import Fastify from 'fastify';
 import pg from 'pg';
 import { createLocalReplicaGenerator, localReplicaSeeds } from '../../../shared/contracts/localReplicaGenerators.js';
 import { registerLocalReplicaRoutes } from '../routes/localReplica.js';
-import { createLocalReplicaStore } from './localReplicaStore.js';
+import { createLocalReplicaStore, LocalReplicaStore } from './localReplicaStore.js';
 
 const { Pool } = pg;
 
@@ -41,6 +41,81 @@ async function postJson(app, url, payload) {
 function byId(objects = []) {
   return new Map(objects.map(object => [object.id, object]));
 }
+
+class ProbeLocalReplicaStore extends LocalReplicaStore {
+  constructor({ currentObject }) {
+    super({ pool: null, schema: 'jobdone_next' });
+    this.currentObject = currentObject;
+    this.persisted = null;
+  }
+
+  async findIntent() {
+    return null;
+  }
+
+  async hasOwnerAccess() {
+    return true;
+  }
+
+  async findObject() {
+    return this.currentObject;
+  }
+
+  async persistIntentResult(_client, args) {
+    this.persisted = args;
+    return { result: args.result, object: args.object };
+  }
+}
+
+test('Local Replica backend property loop keeps idempotent create retries DB-check safe', async () => {
+  const actorUserId = '2a091a40-b350-4d2f-9d91-4c4b5042e01f';
+
+  for (const seed of localReplicaSeeds(24, 600)) {
+    const generator = createLocalReplicaGenerator(seed);
+    const objectId = generator.uuid();
+    const changedT = 1 + (seed % 7);
+    const baseT = changedT + 1 + (seed % 5);
+    const payloadHash = `sha256:idempotent:${seed}`;
+    const currentObject = generator.syncObject({
+      id: objectId,
+      ownerKind: 'user',
+      ownerId: actorUserId,
+      collection: 'entries',
+      createdT: changedT,
+      changedT,
+      deletedT: null,
+      payloadJson: { id: objectId, text: `already synced ${seed}` },
+      payloadHash,
+    });
+    const store = new ProbeLocalReplicaStore({ currentObject });
+
+    const outcome = await store.applyIntent(null, {
+      actorUserId,
+      actorEmail: 'property@example.com',
+      actorDeviceId: 'property-device',
+      replicaEpoch: generator.uuid(),
+      baseT,
+      intent: generator.syncIntent({
+        ownerKind: 'user',
+        ownerId: actorUserId,
+        collection: 'entries',
+        action: 'createObject',
+        objectId,
+        baseObjectT: null,
+        payloadJson: { id: objectId, text: `already synced ${seed}` },
+        payloadHash,
+      }),
+    });
+
+    assert.equal(outcome.result.status, 'idempotent', `seed ${seed} idempotent`);
+    assert.equal(outcome.result.t, changedT, `seed ${seed} reports existing object T`);
+    assert.equal(store.persisted.committedT, null, `seed ${seed} no fake committedT`);
+    assert.ok(
+      store.persisted.committedT == null || store.persisted.committedT >= store.persisted.baseT,
+      `seed ${seed} mirrors syncIntents committedT check`,
+    );
+  }
+});
 
 test('Local Replica backend property loop pushes generated intents then pulls matching objects', {
   skip: DB_URL ? false : 'Set LOCAL_REPLICA_PROPERTY_DB_URL to run local Postgres property loop',
@@ -95,9 +170,27 @@ test('Local Replica backend property loop pushes generated intents then pulls ma
         payloadJson: { id: objectId, text: `created ${seed}`, seed },
         payloadHash: `sha256:create:${seed}`,
       });
-      const duplicate = await postJson(app, '/api/local-replica/push', {
+      const advanceObjectId = generator.uuid();
+      const advanceIntent = generator.syncIntent({
+        ownerKind: 'user',
+        ownerId: actorUserId,
+        collection: 'entries',
+        action: 'createObject',
+        objectId: advanceObjectId,
+        baseObjectT: null,
+        payloadJson: { id: advanceObjectId, text: `advance server t ${seed}`, seed },
+        payloadHash: `sha256:advance:${seed}`,
+      });
+      const advanced = await postJson(app, '/api/local-replica/push', {
         replicaEpoch,
         baseT: created.toT,
+        intents: [advanceIntent],
+      });
+      assert.equal(advanced.results[0].status, 'accepted', `seed ${seed} advance`);
+
+      const duplicate = await postJson(app, '/api/local-replica/push', {
+        replicaEpoch,
+        baseT: advanced.toT,
         intents: [duplicateCreate],
       });
       assert.equal(duplicate.results[0].status, 'idempotent', `seed ${seed} same-hash create`);
@@ -114,7 +207,7 @@ test('Local Replica backend property loop pushes generated intents then pulls ma
       });
       const updated = await postJson(app, '/api/local-replica/push', {
         replicaEpoch,
-        baseT: created.toT,
+        baseT: advanced.toT,
         intents: [updateIntent],
       });
       assert.equal(updated.results[0].status, 'accepted', `seed ${seed} update`);

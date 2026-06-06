@@ -119,32 +119,51 @@ test('Local Replica frontend property loop preserves pre-existing remote objects
   }
 });
 
-test('Local Replica create intent queueing reuses identical pending intents', async () => {
-  const generator = createLocalReplicaGenerator(701);
-  const ownerScope = generator.ownerScope();
-  const objectId = generator.uuid();
-  const payloadJson = { id: objectId, text: 'same local entry' };
-  const store = createMemoryLocalReplicaStore({ replicaEpoch: generator.uuid() });
+test('Local Replica create intent queueing reuses generated pending and settled-success intents', async () => {
+  for (const seed of localReplicaSeeds(24, 700)) {
+    const generator = createLocalReplicaGenerator(seed);
+    const ownerScope = generator.ownerScope();
+    const objectId = generator.uuid();
+    const payloadJson = { id: objectId, text: `same local entry ${seed}` };
+    const store = createMemoryLocalReplicaStore({ replicaEpoch: generator.uuid() });
 
-  const first = await queueCreateObjectIntent({
-    store,
-    ownerScope,
-    collection: 'entries',
-    objectId,
-    payloadJson,
-    now: generator.timestamp(1000),
-  });
-  const second = await queueCreateObjectIntent({
-    store,
-    ownerScope,
-    collection: 'entries',
-    objectId,
-    payloadJson,
-    now: generator.timestamp(2000),
-  });
+    const first = await queueCreateObjectIntent({
+      store,
+      ownerScope,
+      collection: 'entries',
+      objectId,
+      payloadJson,
+      now: generator.timestamp(1000),
+    });
+    const duplicatePending = await queueCreateObjectIntent({
+      store,
+      ownerScope,
+      collection: 'entries',
+      objectId,
+      payloadJson,
+      now: generator.timestamp(2000),
+    });
+    assert.equal(duplicatePending.id, first.id, `seed ${seed} reuses pending intent`);
+    assert.equal((await store.listPendingIntents()).length, 1, `seed ${seed} has one pending intent`);
 
-  assert.equal(second.id, first.id);
-  assert.equal((await store.listPendingIntents()).length, 1);
+    await store.markLocalReplicaIntentSettled(first.id, {
+      intentId: first.id,
+      status: seed % 2 === 0 ? 'accepted' : 'idempotent',
+      t: seed + 1,
+      objectId,
+      reason: null,
+    });
+    const duplicateSettled = await queueCreateObjectIntent({
+      store,
+      ownerScope,
+      collection: 'entries',
+      objectId,
+      payloadJson,
+      now: generator.timestamp(3000),
+    });
+    assert.equal(duplicateSettled.id, first.id, `seed ${seed} reuses settled success intent`);
+    assert.equal((await store.listPendingIntents()).length, 0, `seed ${seed} does not requeue settled success`);
+  }
 });
 
 test('Local Replica frontend materializer applies generated tombstones idempotently', async () => {
