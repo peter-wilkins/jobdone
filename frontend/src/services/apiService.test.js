@@ -141,6 +141,52 @@ test('Location Replica pushes reject noncanonical request bodies before fetch', 
   }
 });
 
+test('generic Local Replica push rejects noncanonical request bodies before fetch', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    await assert.rejects(
+      () => new APIService().pushLocalReplica({
+        replicaEpoch: LOCATION_ID,
+        base_t: 0,
+        intents: [],
+      }),
+      /expected number|unrecognized|must not cross/,
+    );
+    assert.equal(fetchCalled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('generic Local Replica pull rejects noncanonical response bodies', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    replicaEpoch: LOCATION_ID,
+    from_t: 0,
+    toT: 0,
+    hasMore: false,
+    objects: [],
+  }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+
+  try {
+    await assert.rejects(
+      () => new APIService().pullLocalReplica({ replicaEpoch: LOCATION_ID, sinceT: 0 }),
+      /expected number|unrecognized|must not cross/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('entry sync pushes reject noncanonical request bodies before fetch', async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;

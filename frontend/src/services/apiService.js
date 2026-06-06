@@ -16,6 +16,12 @@ import {
   parseLocationReplicaPullRequest,
   parseLocationReplicaRecordsResponse,
 } from '../contracts/locationReplica.js';
+import {
+  parsePullRequest,
+  parsePullResponse,
+  parsePushRequest,
+  parsePushResponse,
+} from '../contracts/localReplica.js';
 import { parseContactPullPayload, parseContactsPayload } from '../contracts/syncRequests.js';
 import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse } from '../contracts/syncResponses.js';
 
@@ -342,6 +348,36 @@ export class APIService {
     });
     if (!response.ok) await throwApiError(response, 'Location Replica alias push failed');
     return response.json();
+  }
+
+  async pushLocalReplica(request) {
+    const body = typedSyncRequest(parsePushRequest(request), 'Invalid Local Replica push request');
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) await throwApiError(response, 'Local Replica push failed');
+    return typedSyncResponse(parsePushResponse(await response.json()), 'Invalid Local Replica push response');
+  }
+
+  async pullLocalReplica(request) {
+    const body = typedSyncRequest(parsePullRequest(request), 'Invalid Local Replica pull request');
+    const response = await apiFetch(`${API_BASE_URL}/api/local-replica/pull`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) await throwApiError(response, 'Local Replica pull failed');
+    return typedSyncResponse(parsePullResponse(await response.json()), 'Invalid Local Replica pull response');
   }
 
   async lookupLocations(query) {

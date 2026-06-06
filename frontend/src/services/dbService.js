@@ -1,6 +1,7 @@
 import { findReusableLocation } from './locationIdentityService.js';
 import { entryMatchesLocation } from './locationPresentationService.js';
 import { createUuidV7, isUuidV7 } from '../../../shared/contracts/clientId.js';
+import { parseSyncObject } from '../contracts/localReplica.js';
 import {
   normalizeLegacyLocalCaptureRecord,
   parseEntryFromCaptureInput,
@@ -8,6 +9,7 @@ import {
   parseLocalCaptureRecord,
   parseLocalCaptureUpdate,
 } from '../contracts/localCapture.js';
+import { LOCAL_REPLICA_STATE_ID, localReplicaObjectKey } from './localReplicaStorage.js';
 
 /**
  * IndexedDB service for local entry storage
@@ -15,7 +17,7 @@ import {
  */
 
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 16;
+const DB_VERSION = 17;
 const STORE_NAME = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -29,6 +31,10 @@ const TAG_VOCABULARY_STORE = 'tagVocabulary';
 const ENTRY_TAGS_STORE = 'entryTags';
 const CONTACTS_STORE = 'contacts';
 const CLIENT_ID_ALIASES_STORE = 'clientIdAliases';
+const SYNC_OBJECTS_LOCAL_STORE = 'syncObjectsLocal';
+const SYNC_INTENTS_LOCAL_STORE = 'syncIntentsLocal';
+const REPLICA_STATE_STORE = 'replicaState';
+const LOCAL_REPLICA_MATERIALIZED_STORE = 'localReplicaMaterialized';
 const DEFAULT_TAG_CATEGORY = {
   id: 'tag-category-general',
   name: 'General',
@@ -214,6 +220,16 @@ function normalizeLocalCaptureRecord(capture = {}) {
   );
 }
 
+function normalizeLocalReplicaState(state = {}) {
+  return {
+    id: LOCAL_REPLICA_STATE_ID,
+    replicaEpoch: state.replicaEpoch || createUuidV7(),
+    lastPulledT: Number(state.lastPulledT || 0),
+    lastKnownServerT: Number(state.lastKnownServerT || state.lastPulledT || 0),
+    updatedAt: state.updatedAt || null,
+  };
+}
+
 export class DBService {
   constructor() {
     this.db = null;
@@ -339,6 +355,33 @@ export class DBService {
           aliasStore.createIndex('toClientId', 'toClientId', { unique: false });
           aliasStore.createIndex('collection', 'collection', { unique: false });
           aliasStore.createIndex('created_at', 'created_at', { unique: false });
+        }
+
+        // v17: generic Local Replica sync ledger and materialized cache.
+        if (!db.objectStoreNames.contains(REPLICA_STATE_STORE)) {
+          db.createObjectStore(REPLICA_STATE_STORE, { keyPath: 'id' });
+        }
+
+        if (!db.objectStoreNames.contains(SYNC_OBJECTS_LOCAL_STORE)) {
+          const syncObjectsStore = db.createObjectStore(SYNC_OBJECTS_LOCAL_STORE, { keyPath: 'key' });
+          syncObjectsStore.createIndex('collection', 'collection', { unique: false });
+          syncObjectsStore.createIndex('changedT', 'changedT', { unique: false });
+          syncObjectsStore.createIndex('ownerId', 'ownerId', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(SYNC_INTENTS_LOCAL_STORE)) {
+          const intentsStore = db.createObjectStore(SYNC_INTENTS_LOCAL_STORE, { keyPath: 'id' });
+          intentsStore.createIndex('status', 'status', { unique: false });
+          intentsStore.createIndex('createdAt', 'createdAt', { unique: false });
+          intentsStore.createIndex('collection', 'collection', { unique: false });
+          intentsStore.createIndex('objectId', 'objectId', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(LOCAL_REPLICA_MATERIALIZED_STORE)) {
+          const materializedStore = db.createObjectStore(LOCAL_REPLICA_MATERIALIZED_STORE, { keyPath: 'key' });
+          materializedStore.createIndex('collection', 'collection', { unique: false });
+          materializedStore.createIndex('id', 'id', { unique: false });
+          materializedStore.createIndex('changedT', 'changedT', { unique: false });
         }
 
         // v9: local Context Clue snapshots. Capture-linked clues stay local until Confirmation.
@@ -1827,6 +1870,155 @@ export class DBService {
         putRequest.onerror = () => reject(new Error('Failed to save Client ID alias'));
       };
       getRequest.onerror = () => reject(new Error('Failed to read Client ID alias'));
+    });
+  }
+
+  async getLocalReplicaState() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([REPLICA_STATE_STORE], 'readwrite');
+      const store = tx.objectStore(REPLICA_STATE_STORE);
+      const request = store.get(LOCAL_REPLICA_STATE_ID);
+      request.onsuccess = () => {
+        const existing = request.result ? normalizeLocalReplicaState(request.result) : normalizeLocalReplicaState();
+        if (request.result) {
+          resolve(existing);
+          return;
+        }
+        const put = store.put(existing);
+        put.onsuccess = () => resolve(existing);
+        put.onerror = () => reject(new Error('Failed to initialize Local Replica state'));
+      };
+      request.onerror = () => reject(new Error('Failed to read Local Replica state'));
+    });
+  }
+
+  async saveLocalReplicaState(state = {}) {
+    const db = await this.ensureDb();
+    const row = normalizeLocalReplicaState({
+      ...state,
+      updatedAt: state.updatedAt || new Date().toISOString(),
+    });
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([REPLICA_STATE_STORE], 'readwrite')
+        .objectStore(REPLICA_STATE_STORE)
+        .put(row);
+      request.onsuccess = () => resolve(row);
+      request.onerror = () => reject(new Error('Failed to save Local Replica state'));
+    });
+  }
+
+  async saveLocalReplicaIntent(intent = {}, metadata = {}) {
+    const db = await this.ensureDb();
+    const row = {
+      ...intent,
+      status: metadata.status || intent.status || 'pending',
+      result: metadata.result || intent.result || null,
+    };
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([SYNC_INTENTS_LOCAL_STORE], 'readwrite')
+        .objectStore(SYNC_INTENTS_LOCAL_STORE)
+        .put(row);
+      request.onsuccess = () => resolve(row);
+      request.onerror = () => reject(new Error('Failed to save Local Replica intent'));
+    });
+  }
+
+  async listPendingIntents() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([SYNC_INTENTS_LOCAL_STORE], 'readonly')
+        .objectStore(SYNC_INTENTS_LOCAL_STORE)
+        .index('status')
+        .getAll('pending');
+      request.onsuccess = () => resolve((request.result || [])
+        .sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')) || String(left.id || '').localeCompare(String(right.id || ''))));
+      request.onerror = () => reject(new Error('Failed to list pending Local Replica intents'));
+    });
+  }
+
+  async markLocalReplicaIntentSettled(intentId, result = {}) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([SYNC_INTENTS_LOCAL_STORE], 'readwrite');
+      const store = tx.objectStore(SYNC_INTENTS_LOCAL_STORE);
+      const request = store.get(intentId);
+      request.onsuccess = () => {
+        const existing = request.result;
+        if (!existing) {
+          resolve(null);
+          return;
+        }
+        const row = {
+          ...existing,
+          status: 'settled',
+          result,
+          settledAt: new Date().toISOString(),
+        };
+        const put = store.put(row);
+        put.onsuccess = () => resolve(row);
+        put.onerror = () => reject(new Error('Failed to settle Local Replica intent'));
+      };
+      request.onerror = () => reject(new Error('Failed to read Local Replica intent'));
+    });
+  }
+
+  async materializeLocalReplicaObject(syncObject = {}) {
+    const object = assertParsedContract(parseSyncObject(syncObject), 'Invalid Local Replica Sync Object');
+    const key = localReplicaObjectKey(object);
+    const ledgerRow = { ...object, key };
+    const materializedRow = {
+      key,
+      ownerKind: object.ownerKind,
+      ownerId: object.ownerId,
+      collection: object.collection,
+      id: object.id,
+      changedT: object.changedT,
+      deletedT: object.deletedT,
+      schemaVersion: object.schemaVersion,
+      payloadJson: object.payloadJson,
+    };
+
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([SYNC_OBJECTS_LOCAL_STORE, LOCAL_REPLICA_MATERIALIZED_STORE], 'readwrite');
+      const syncStore = tx.objectStore(SYNC_OBJECTS_LOCAL_STORE);
+      const materializedStore = tx.objectStore(LOCAL_REPLICA_MATERIALIZED_STORE);
+      syncStore.put(ledgerRow);
+      if (object.deletedT != null) {
+        materializedStore.delete(key);
+      } else {
+        materializedStore.put(materializedRow);
+      }
+      tx.oncomplete = () => resolve(object.deletedT != null ? null : materializedRow);
+      tx.onerror = () => reject(new Error('Failed to materialize Local Replica object'));
+    });
+  }
+
+  async getLocalReplicaMaterializedSnapshot() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction([LOCAL_REPLICA_MATERIALIZED_STORE], 'readonly')
+        .objectStore(LOCAL_REPLICA_MATERIALIZED_STORE)
+        .getAll();
+      request.onsuccess = () => {
+        const collections = {};
+        for (const row of request.result || []) {
+          collections[row.collection] ||= [];
+          collections[row.collection].push({
+            ownerKind: row.ownerKind,
+            ownerId: row.ownerId,
+            collection: row.collection,
+            id: row.id,
+            changedT: row.changedT,
+            schemaVersion: row.schemaVersion,
+            ...row.payloadJson,
+          });
+        }
+        for (const rows of Object.values(collections)) rows.sort((left, right) => left.id.localeCompare(right.id));
+        resolve({ collections });
+      };
+      request.onerror = () => reject(new Error('Failed to read Local Replica materialized snapshot'));
     });
   }
 

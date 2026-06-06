@@ -1,6 +1,6 @@
 const CACHE_VERSION = 'jobdone-app-shell-v4';
 const DB_NAME = 'plumber-job-log';
-const DB_VERSION = 15;
+const DB_VERSION = 17;
 const ENTRIES_STORE = 'entries';
 const FEEDBACK_STORE = 'feedback';
 const QUERIES_STORE = 'queries';
@@ -14,6 +14,11 @@ const TAG_VOCABULARY_STORE = 'tagVocabulary';
 const ENTRY_TAGS_STORE = 'entryTags';
 const CONTACTS_STORE = 'contacts';
 const CONTACT_ALIASES_STORE = 'contactClientAliases';
+const CLIENT_ID_ALIASES_STORE = 'clientIdAliases';
+const SYNC_OBJECTS_LOCAL_STORE = 'syncObjectsLocal';
+const SYNC_INTENTS_LOCAL_STORE = 'syncIntentsLocal';
+const REPLICA_STATE_STORE = 'replicaState';
+const LOCAL_REPLICA_MATERIALIZED_STORE = 'localReplicaMaterialized';
 const SHARE_TARGET_PATH = '/share-target';
 const MAX_SHARE_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_SHARE_TOTAL_BYTES = 50 * 1024 * 1024;
@@ -194,6 +199,28 @@ function openDb() {
         { name: 'toClientId', keyPath: 'toClientId' },
         { name: 'collection', keyPath: 'collection' },
         { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, CLIENT_ID_ALIASES_STORE, { keyPath: 'fromClientId' }, [
+        { name: 'toClientId', keyPath: 'toClientId' },
+        { name: 'collection', keyPath: 'collection' },
+        { name: 'created_at', keyPath: 'created_at' },
+      ]);
+      ensureObjectStore(db, REPLICA_STATE_STORE, { keyPath: 'id' }, []);
+      ensureObjectStore(db, SYNC_OBJECTS_LOCAL_STORE, { keyPath: 'key' }, [
+        { name: 'collection', keyPath: 'collection' },
+        { name: 'changedT', keyPath: 'changedT' },
+        { name: 'ownerId', keyPath: 'ownerId' },
+      ]);
+      ensureObjectStore(db, SYNC_INTENTS_LOCAL_STORE, { keyPath: 'id' }, [
+        { name: 'status', keyPath: 'status' },
+        { name: 'createdAt', keyPath: 'createdAt' },
+        { name: 'collection', keyPath: 'collection' },
+        { name: 'objectId', keyPath: 'objectId' },
+      ]);
+      ensureObjectStore(db, LOCAL_REPLICA_MATERIALIZED_STORE, { keyPath: 'key' }, [
+        { name: 'collection', keyPath: 'collection' },
+        { name: 'id', keyPath: 'id' },
+        { name: 'changedT', keyPath: 'changedT' },
       ]);
     };
   });
