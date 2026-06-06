@@ -59,9 +59,10 @@ JOBDONE_STAGING_SUPABASE_URL
 JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Staging also enables the experimental Entry Local Replica path against the
-scratch `jobdone_next` schema. Production does not enable that flag until the
-staging smoke is boring.
+Staging points Local Replica at the scratch `jobdone_next` schema while the
+contract is being proven. Entry sync no longer has a frontend fallback flag:
+confirmed Entries use Local Replica everywhere the backend is configured.
+Production must have the Local Replica schema and env wired before promotion.
 
 ## QA Gate
 

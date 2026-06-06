@@ -60,8 +60,9 @@ cat >> .env << 'EOF'
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
 SUPABASE_DB_URL=postgresql://postgres.project-ref:password@aws-0-region.pooler.supabase.com:5432/postgres
-# Optional; defaults to jobdone
-SUPABASE_DB_SCHEMA=jobdone
+# Local Replica DB. Staging may point at scratch schema jobdone_next.
+LOCAL_REPLICA_DB_URL=$SUPABASE_DB_URL
+LOCAL_REPLICA_SCHEMA=jobdone_next
 EOF
 ```
 
@@ -83,47 +84,33 @@ No error about Postgres means cloud sync is connected.
 Once backend is set up, frontend will:
 1. Record audio locally
 2. Get transcript + summary
-3. On confirm, POST to `/api/sync/save` with the job data
-4. Entry saves to Supabase cloud
+3. On Confirmation, queue a Local Replica Sync Intent
+4. Push/pull through `/api/local-replica/*`
+5. Materialize accepted Sync Objects back into IndexedDB
 
 ## What's Stored
 
-JobDone stores app data in the `jobdone` schema:
+JobDone stores syncable app data through Local Replica tables:
 
-- `entries`
-- `context_clues`
-- `locations`
-- `contacts`
-- `tag_categories`, `tags`, `tag_vocabulary`
-- `entry_locations`, `entry_contacts`, `entry_tags`
-- `entry_attachments`
-- `teams`, `team_members`, `team_invites`
-- `backlog_items`, `approval_requests`
-- `queries`
-- `feedback`
+- `syncObjects`
+- `syncIntents`
+- `syncTransactions`
+- `syncOwnerAccess`
 
-Each Entry record contains:
-- `user_id` — authenticated Supabase user id
-- `transcript` — raw audio transcription
-- `summary` — Claude-generated summary
-- `created_at` — when the job was logged
-- `synced_at` — when it was saved to cloud
+Each sync object contains owner scope, collection, Server T fields, tombstone
+fields, codec/encryption metadata, and the typed collection payload.
 
 ## Querying Jobs
 
 Via Supabase dashboard:
-1. **Table Editor** → choose schema `jobdone`
-2. Click `entries`
+1. **Table Editor** → choose Local Replica schema, usually `jobdone_next` in staging
+2. Click `syncObjects`
 3. See all your data
-4. Filter by user_id to see specific user's jobs
+4. Filter by `collection = 'entries'`
 
 Via SQL:
 
 ```bash
 . ~/.profile
-psql "$SUPABASE_DB_URL" -c "select id, summary, created_at from jobdone.entries order by created_at desc limit 10;"
+psql "$SUPABASE_DB_URL" -c "select id, \"payloadJson\"->>'text', \"createdAt\" from jobdone_next.\"syncObjects\" where collection = 'entries' order by \"createdT\" desc limit 10;"
 ```
-
-## Next: Frontend Sync Integration
-
-See `/frontend/README.md` for wiring the frontend to call `/api/sync/save` when confirming jobs.

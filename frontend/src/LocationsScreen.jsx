@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { dbService } from './services/dbService';
-import { syncService } from './services/syncService';
+import { syncOrchestratorService } from './services/syncOrchestratorService';
 import { apiService } from './services/apiService';
 import { locationClueService } from './services/locationClueService';
 import { chooseLookupLocationAction } from './services/locationLookupService';
@@ -170,11 +170,7 @@ export function LocationsScreen({ onBack, onRecord }) {
       });
       setSelectedLocation(updated);
       try {
-        const result = await syncService.syncLocations([updated]);
-        const cloudLocation = result?.locations?.[0];
-        if (cloudLocation?.id) {
-          await dbService.markLocationSynced(updated.id, cloudLocation.id);
-        }
+        await syncOrchestratorService.syncConfirmedData({ reason: 'location_map_pin' });
       } catch (syncErr) {
         console.warn('[Locations] Location map pin saved locally but did not sync:', syncErr);
       }
@@ -189,11 +185,8 @@ export function LocationsScreen({ onBack, onRecord }) {
 
   async function syncLocationIfPossible(location) {
     try {
-      const result = await syncService.syncLocations([location]);
-      const cloudLocation = result?.locations?.[0];
-      if (cloudLocation?.id) {
-        return dbService.markLocationSynced(location.id, cloudLocation.id);
-      }
+      await syncOrchestratorService.syncConfirmedData({ reason: 'location_saved' });
+      return dbService.getLocation(location.id);
     } catch (syncErr) {
       console.warn('[Locations] Location saved locally but did not sync:', syncErr);
     }

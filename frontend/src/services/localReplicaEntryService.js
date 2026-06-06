@@ -9,14 +9,6 @@ import {
 
 export const ENTRY_COLLECTION = 'entries';
 
-function envValue(name) {
-  return (import.meta.env || {})[name];
-}
-
-export function isLocalReplicaEntrySyncEnabled(value = envValue('VITE_LOCAL_REPLICA_ENTRY_SYNC')) {
-  return value === true || value === 'true' || value === 'entries';
-}
-
 function compactArray(value) {
   return Array.isArray(value) ? value.filter(Boolean) : [];
 }

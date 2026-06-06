@@ -8,7 +8,6 @@ import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
 import { shouldDeferAppUpdateNow } from './appUpdateGuardService.js';
-import { parseEntrySyncPayload } from '../contracts/entrySync.js';
 import {
   parseLocationReplicaManifestRequest,
   parseLocationReplicaManifestResponse,
@@ -23,7 +22,7 @@ import {
   parsePushResponse,
 } from '../contracts/localReplica.js';
 import { parseContactPullPayload, parseContactsPayload } from '../contracts/syncRequests.js';
-import { parseContactsResponse, parseEntriesResponse, parseEntrySaveResponse } from '../contracts/syncResponses.js';
+import { parseContactsResponse } from '../contracts/syncResponses.js';
 
 const ENV = import.meta.env || {};
 
@@ -209,48 +208,6 @@ export class APIService {
       throw new Error(error.error || 'Failed to save transcription evaluation');
     }
       return await response.json();
-  }
-
-  /**
-   * Save a confirmed entry to cloud
-   * @param {Object} payload - {entryData}
-   * @returns {Promise<{success: boolean, entry: Object}>}
-   */
-  async syncSave(payload) {
-    try {
-      console.log('[API] Syncing entry to cloud');
-      const syncPayload = typedSyncRequest(parseEntrySyncPayload(payload), 'Invalid entry sync payload');
-
-      const response = await apiFetch(`${API_BASE_URL}/api/sync/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify(syncPayload),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Sync failed');
-      }
-
-      const result = typedSyncResponse(parseEntrySaveResponse(await response.json()), 'Invalid entry sync response');
-      console.log('[API] Sync successful');
-      return result;
-    } catch (error) {
-      console.error('Sync error:', error);
-      throw error;
-    }
-  }
-
-  /** Fetch all cloud entries for the logged-in user */
-  async getCloudEntries() {
-    const response = await apiFetch(`${API_BASE_URL}/api/sync/entries`, {
-      headers: authHeader(),
-    });
-    if (!response.ok) {
-      await throwApiError(response, 'Failed to fetch cloud entries');
-    }
-    const result = typedSyncResponse(parseEntriesResponse(await response.json()), 'Invalid entries sync response');
-    return result.entries || [];
   }
 
   async getContactManifest(localManifest = { contacts: [] }) {

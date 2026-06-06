@@ -9,7 +9,7 @@ const entry = {
   syncStatus: 'pending',
 };
 
-test('confirmed Entry sync uses orchestrator so Local Replica flag owns routing', async () => {
+test('confirmed Entry sync uses orchestrator so Local Replica owns routing', async () => {
   const calls = [];
   const result = await syncConfirmedEntryAfterReview({
     entryId: entry.id,

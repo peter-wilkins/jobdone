@@ -58,7 +58,6 @@ deploy_frontend() {
     VITE_SUPABASE_ANON_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
     VITE_APP_URL="https://$FRONTEND_STAGING_ALIAS" \
     VITE_API_URL="https://$BACKEND_STAGING_ALIAS" \
-    VITE_LOCAL_REPLICA_ENTRY_SYNC="true" \
     npx vercel --cwd "$cwd" build \
       --target=production \
       >&2
