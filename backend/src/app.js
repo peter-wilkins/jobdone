@@ -9,6 +9,7 @@ import { registerRecallRoutes } from './routes/recall.js';
 import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
+import { registerLocalReplicaRoutes } from './routes/localReplica.js';
 import { registerTeamRoutes } from './routes/teams.js';
 import { registerTranscriptionEvaluationRoutes } from './routes/transcriptionEvaluations.js';
 import { registerRequestIdHooks } from './services/requestId.js';
@@ -43,6 +44,7 @@ export function createApp(options = {}) {
   fastify.register(registerQueryRoutes);
   fastify.register(registerStructureRoutes);
   fastify.register(registerLocationRoutes);
+  fastify.register(registerLocalReplicaRoutes);
   fastify.register(registerTeamRoutes);
   fastify.register(registerTranscriptionEvaluationRoutes);
 

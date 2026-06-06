@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test src/**/*.test.js",
+    "test:local-replica:integration": "node --test src/services/localReplicaStore.property.test.js",
     "test:recall:integration": "node scripts/recall-property-test.js"
   },
   "keywords": [
