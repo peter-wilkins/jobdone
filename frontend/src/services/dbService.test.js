@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mergeEntryUpdates, normalizeEntryRecord } from './dbService.js';
+import { isUuidV7 } from '../../../shared/contracts/clientId.js';
+import { DBService, mergeEntryUpdates, normalizeEntryRecord } from './dbService.js';
+
+test('new Entry IDs are UUIDv7 Client IDs for Local Replica sync', () => {
+  const db = new DBService();
+  const id = db.generateId();
+
+  assert.equal(isUuidV7(id), true);
+});
 
 test('Entry records normalize legacy local fields to canonical app fields', () => {
   const normalized = normalizeEntryRecord({
