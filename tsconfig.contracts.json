@@ -8,6 +8,7 @@
   "include": [
     "shared/contracts/entrySync.js",
     "shared/contracts/localReplica.js",
+    "shared/contracts/localReplicaGenerators.js",
     "shared/contracts/localCapture.js",
     "shared/contracts/syncRequests.js",
     "shared/contracts/syncResponses.js",
