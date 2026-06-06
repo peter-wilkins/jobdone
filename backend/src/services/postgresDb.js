@@ -29,7 +29,56 @@ function normalizePgError(error) {
   };
 }
 
-function selectedColumns(selection) {
+function columnRef(alias, column) {
+  return `${alias ? `${quoteIdent(alias)}.` : ''}${quoteIdent(column)}`;
+}
+
+function locationCoordinateExpression(alias, axis) {
+  const fn = axis === 'latitude' ? 'ST_Y' : 'ST_X';
+  const geo = columnRef(alias, 'geo');
+  return `case when ${geo} is null then null else extensions.${fn}(${geo}::extensions.geometry) end`;
+}
+
+export function locationSelectColumns(alias = null) {
+  return [
+    `${columnRef(alias, 'id')} as "id"`,
+    `${columnRef(alias, 'userId')} as "userId"`,
+    `${columnRef(alias, 'status')} as "status"`,
+    `${columnRef(alias, 'displayName')} as "displayName"`,
+    `${columnRef(alias, 'placeText')} as "placeText"`,
+    `${columnRef(alias, 'addressText')} as "addressText"`,
+    `${locationCoordinateExpression(alias, 'latitude')} as "latitude"`,
+    `${locationCoordinateExpression(alias, 'longitude')} as "longitude"`,
+    `${columnRef(alias, 'accuracyMeters')} as "accuracyMeters"`,
+    `${columnRef(alias, 'providerPlaceId')} as "providerPlaceId"`,
+    `${columnRef(alias, 'contentHash')} as "contentHash"`,
+    `${columnRef(alias, 'identityKeys')} as "identityKeys"`,
+    `${columnRef(alias, 'createdAt')} as "createdAt"`,
+    `${columnRef(alias, 'updatedAt')} as "updatedAt"`,
+  ].join(', ');
+}
+
+function locationJsonb(alias = 'j') {
+  return `jsonb_build_object(
+    'id', ${columnRef(alias, 'id')},
+    'userId', ${columnRef(alias, 'userId')},
+    'status', ${columnRef(alias, 'status')},
+    'displayName', ${columnRef(alias, 'displayName')},
+    'placeText', ${columnRef(alias, 'placeText')},
+    'addressText', ${columnRef(alias, 'addressText')},
+    'latitude', ${locationCoordinateExpression(alias, 'latitude')},
+    'longitude', ${locationCoordinateExpression(alias, 'longitude')},
+    'accuracyMeters', ${columnRef(alias, 'accuracyMeters')},
+    'providerPlaceId', ${columnRef(alias, 'providerPlaceId')},
+    'contentHash', ${columnRef(alias, 'contentHash')},
+    'identityKeys', ${columnRef(alias, 'identityKeys')},
+    'createdAt', ${columnRef(alias, 'createdAt')},
+    'updatedAt', ${columnRef(alias, 'updatedAt')}
+  )`;
+}
+
+function selectedColumns(selection, { table = null } = {}) {
+  if (table === 'locations' && (!selection || selection === '*')) return locationSelectColumns();
   if (!selection || selection === '*') return '*';
   if (/locations\(|contacts\(|tags\(|tag_categories\(/.test(selection)) return '*';
   return selection
@@ -306,6 +355,28 @@ export function valueForColumn(column, value) {
   return value ?? null;
 }
 
+function locationInputColumns(rows = [], patch = null) {
+  const rawColumns = patch
+    ? Object.keys(patch || {})
+    : Array.from(new Set(rows.flatMap(row => Object.keys(row))));
+  const columns = rawColumns.filter(column => column !== 'latitude' && column !== 'longitude');
+  if (rawColumns.includes('latitude') || rawColumns.includes('longitude')) {
+    columns.push('geo');
+  }
+  return Array.from(new Set(columns));
+}
+
+function pushLocationGeoExpression(values, row = {}) {
+  const latitude = Number(row.latitude);
+  const longitude = Number(row.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return 'null';
+  values.push(longitude);
+  const longitudeIndex = values.length;
+  values.push(latitude);
+  const latitudeIndex = values.length;
+  return `extensions.ST_SetSRID(extensions.ST_MakePoint($${longitudeIndex}, $${latitudeIndex}), 4326)::extensions.geography`;
+}
+
 function rowsFromResult(result, singleMode) {
   if (singleMode === 'single') return result.rows[0] || null;
   return result.rows;
@@ -514,7 +585,7 @@ class QueryBuilder {
     }
 
     const values = [];
-    let sql = `select ${selectedColumns(this.selection)} from ${tableRef(this.schema, this.table)}`;
+    let sql = `select ${selectedColumns(this.selection, { table: this.table })} from ${tableRef(this.schema, this.table)}`;
     sql += buildWhere(this.filters, values);
     sql += this.orderLimitSql();
     return [sql, values];
@@ -522,7 +593,9 @@ class QueryBuilder {
 
   joinSql(foreignKey, joinedTable, alias, includeCategory = false) {
     const values = [];
-    const joinedColumns = includeCategory
+    const joinedColumns = joinedTable === 'locations'
+      ? locationJsonb('j')
+      : includeCategory
       ? `to_jsonb(j.*) || jsonb_build_object('tag_categories', to_jsonb(tc.*))`
       : 'to_jsonb(j.*)';
     const userJoin = joinedTable === 'locations' || joinedTable === 'contacts'
@@ -555,10 +628,15 @@ class QueryBuilder {
   insertSql(upsert) {
     const rows = this.rows || [];
     if (!rows.length) return ['select null where false', []];
-    const columns = Array.from(new Set(rows.flatMap(row => Object.keys(row))));
+    const columns = this.table === 'locations'
+      ? locationInputColumns(rows)
+      : Array.from(new Set(rows.flatMap(row => Object.keys(row))));
     const values = [];
     const tuples = rows.map(row => {
       const placeholders = columns.map(column => {
+        if (this.table === 'locations' && column === 'geo') {
+          return pushLocationGeoExpression(values, row);
+        }
         values.push(valueForColumn(column, row[column]));
         return `$${values.length}`;
       });
@@ -573,20 +651,25 @@ class QueryBuilder {
       sql += ` on conflict (${conflicts.map(quoteIdent).join(', ')}) `;
       sql += updates.length ? `do update set ${updates.join(', ')}` : 'do nothing';
     }
-    if (this.returnRows) sql += ` returning ${selectedColumns(this.selection)}`;
+    if (this.returnRows) sql += ` returning ${selectedColumns(this.selection, { table: this.table })}`;
     return [sql, values];
   }
 
   updateSql() {
     const values = [];
-    const columns = Object.keys(this.patch || {});
+    const columns = this.table === 'locations'
+      ? locationInputColumns([], this.patch || {})
+      : Object.keys(this.patch || {});
     const setSql = columns.map(column => {
+      if (this.table === 'locations' && column === 'geo') {
+        return `${quoteIdent(column)} = ${pushLocationGeoExpression(values, this.patch || {})}`;
+      }
       values.push(valueForColumn(column, this.patch[column]));
       return `${quoteIdent(column)} = $${values.length}`;
     }).join(', ');
     let sql = `update ${tableRef(this.schema, this.table)} set ${setSql}`;
     sql += buildWhere(this.filters, values);
-    if (this.returnRows) sql += ` returning ${selectedColumns(this.selection)}`;
+    if (this.returnRows) sql += ` returning ${selectedColumns(this.selection, { table: this.table })}`;
     return [sql, values];
   }
 

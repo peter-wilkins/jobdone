@@ -1,5 +1,8 @@
 SET search_path = jobdone, extensions, public;
 
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
+ALTER EXTENSION postgis SET SCHEMA extensions;
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jobdone_backend') THEN
@@ -19,8 +22,8 @@ CREATE TABLE locations (
   "displayName"     TEXT NOT NULL,
   "placeText"       TEXT NOT NULL DEFAULT '',
   "addressText"     TEXT NOT NULL DEFAULT '',
-  latitude          DOUBLE PRECISION,
-  longitude         DOUBLE PRECISION,
+  geo               extensions.geography(Point, 4326),
+  "accuracyMeters"  DOUBLE PRECISION,
   "providerPlaceId" TEXT,
   "contentHash"     TEXT NOT NULL,
   "identityKeys"    TEXT[] NOT NULL DEFAULT '{}',
@@ -31,6 +34,7 @@ CREATE TABLE locations (
 
 CREATE INDEX locations_user_status_updated_idx ON locations("userId", status, "updatedAt" DESC);
 CREATE INDEX locations_identity_keys_idx ON locations USING GIN ("identityKeys");
+CREATE INDEX locations_geo_gist_idx ON locations USING GIST (geo);
 
 CREATE TABLE entry_locations (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

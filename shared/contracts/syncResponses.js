@@ -44,6 +44,7 @@ export function buildSyncResponseSchemas(z) {
     addressText: z.string(),
     latitude: optionalNumber,
     longitude: optionalNumber,
+    accuracyMeters: optionalNumber,
     providerPlaceId: optionalString,
     createdAt: optionalTimestamp,
     updatedAt: optionalTimestamp,

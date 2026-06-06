@@ -168,6 +168,7 @@ function localLocationCandidate(location) {
     addressText: location.addressText || location.address_text || '',
     latitude: location.latitude ?? null,
     longitude: location.longitude ?? null,
+    accuracyMeters: location.accuracyMeters ?? location.accuracy_meters ?? null,
     source: 'local_locations',
   };
 }
@@ -225,6 +226,7 @@ function locationDraftFromCandidate(candidate) {
     addressText: candidate.addressText || '',
     latitude: candidate.latitude ?? null,
     longitude: candidate.longitude ?? null,
+    accuracyMeters: candidate.accuracyMeters ?? candidate.accuracy ?? null,
     source: candidate.source || null,
   };
 }
@@ -1721,6 +1723,7 @@ export function HomeScreen({
         placeText: clue.payload.locationText || 'Current location',
         latitude: clue.payload.latitude ?? null,
         longitude: clue.payload.longitude ?? null,
+        accuracyMeters: clue.payload.accuracyMeters ?? clue.payload.accuracy ?? null,
         source: 'device_location',
       });
     } catch (err) {
@@ -1752,6 +1755,7 @@ export function HomeScreen({
         addressText: selectedDraft.addressText || '',
         latitude: strengthenedDraft.latitude,
         longitude: strengthenedDraft.longitude,
+        accuracyMeters: strengthenedDraft.accuracyMeters ?? null,
         source: selectedDraft.source || 'location_history',
       });
     } catch (err) {

@@ -663,6 +663,7 @@ export class DBService {
             addressText: reusableLocation?.addressText || location.addressText,
             latitude: reusableLocation?.latitude ?? location.latitude,
             longitude: reusableLocation?.longitude ?? location.longitude,
+            accuracyMeters: reusableLocation?.accuracyMeters ?? location.accuracyMeters ?? null,
           };
           const locationRecord = {
             ...(reusableLocation || {}),
@@ -823,6 +824,7 @@ export class DBService {
           addressText: reusableLocation?.addressText || location.addressText,
           latitude: reusableLocation?.latitude ?? location.latitude,
           longitude: reusableLocation?.longitude ?? location.longitude,
+          accuracyMeters: reusableLocation?.accuracyMeters ?? location.accuracyMeters ?? null,
           providerPlaceId: location.providerPlaceId || reusableLocation?.providerPlaceId || null,
           created_at: reusableLocation?.created_at || location.created_at || now,
         };
@@ -1176,6 +1178,7 @@ export class DBService {
         addressText: location.addressText || location.address_text || '',
         latitude: location.latitude ?? null,
         longitude: location.longitude ?? null,
+        accuracyMeters: location.accuracyMeters ?? location.accuracy_meters ?? location.accuracy ?? null,
       })),
       tagIds: cloudTags.map(tag =>
         tag.local_id || tag.localId || tag.id
@@ -1238,6 +1241,7 @@ export class DBService {
           addressText: cloudLocation.addressText || cloudLocation.address_text || '',
           latitude: cloudLocation.latitude ?? null,
           longitude: cloudLocation.longitude ?? null,
+          accuracyMeters: cloudLocation.accuracyMeters ?? cloudLocation.accuracy_meters ?? null,
           status: normalizeLocationStatus(cloudLocation.status),
           normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.display_name || ''),
           providerPlaceId: cloudLocation.providerPlaceId || cloudLocation.provider_place_id || null,
@@ -2041,6 +2045,7 @@ export class DBService {
       addressText: normalizeLocationText(location.addressText || location.address_text || ''),
       latitude: location.latitude ?? null,
       longitude: location.longitude ?? null,
+      accuracyMeters: location.accuracyMeters ?? location.accuracy_meters ?? location.accuracy ?? null,
       providerPlaceId: location.providerPlaceId || location.provider_place_id || null,
       created_at: location.created_at || null,
     };
@@ -2329,6 +2334,7 @@ export class DBService {
       addressText: cloudLocation.addressText || '',
       latitude: cloudLocation.latitude ?? null,
       longitude: cloudLocation.longitude ?? null,
+      accuracyMeters: cloudLocation.accuracyMeters ?? cloudLocation.accuracy_meters ?? null,
       status: normalizeLocationStatus(cloudLocation.status),
       normalizedDisplayName: normalizeLocationKey(cloudLocation.displayName || cloudLocation.placeText || ''),
       syncStatus: 'synced',

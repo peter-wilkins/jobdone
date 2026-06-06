@@ -97,6 +97,7 @@ export function canonicalLocationForHash(location = {}) {
     addressText: String(location.addressText || '').trim(),
     latitude: roundedCoordinate(location.latitude),
     longitude: roundedCoordinate(location.longitude),
+    accuracyMeters: roundedCoordinate(location.accuracyMeters ?? location.accuracy),
     providerPlaceId: location.providerPlaceId || null,
   };
 }
@@ -258,6 +259,7 @@ export async function syncLocationReplica({ db = dbService, api = apiService, au
     addressText: location.addressText || '',
     latitude: location.latitude ?? null,
     longitude: location.longitude ?? null,
+    accuracyMeters: location.accuracyMeters ?? location.accuracy ?? null,
     providerPlaceId: location.providerPlaceId || null,
     contentHash: locationContentHash(location),
     createdAt: location.created_at || location.createdAt || null,

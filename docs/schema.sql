@@ -5,6 +5,8 @@
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 ALTER EXTENSION vector SET SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
+ALTER EXTENSION postgis SET SCHEMA extensions;
 
 -- 2. Drop old app objects if present (clean rewrite)
 DROP SCHEMA IF EXISTS jobdone CASCADE;
@@ -93,14 +95,15 @@ CREATE TABLE locations (
   display_name  TEXT NOT NULL DEFAULT '',
   place_text    TEXT NOT NULL DEFAULT '',
   address_text  TEXT NOT NULL DEFAULT '',
-  latitude      DOUBLE PRECISION,
-  longitude     DOUBLE PRECISION,
+  geo           extensions.geography(Point, 4326),
+  accuracy_meters DOUBLE PRECISION,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX locations_user_id_idx    ON locations(user_id);
 CREATE INDEX locations_updated_at_idx ON locations(updated_at DESC);
+CREATE INDEX locations_geo_gist_idx   ON locations USING GIST (geo);
 CREATE UNIQUE INDEX locations_user_id_local_id_uidx ON locations(user_id, local_id) WHERE local_id IS NOT NULL;
 
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;

@@ -20,6 +20,7 @@ const legacyLocationFieldReplacements = {
   display_name: 'displayName',
   place_text: 'placeText',
   address_text: 'addressText',
+  accuracy_meters: 'accuracyMeters',
   provider_place_id: 'providerPlaceId',
 };
 
@@ -110,6 +111,7 @@ export function buildSyncRequestSchemas(z) {
     addressText: z.string().optional().default(''),
     latitude: optionalNumber,
     longitude: optionalNumber,
+    accuracyMeters: optionalNumber,
     providerPlaceId: optionalString,
     createdAt: optionalString,
     updatedAt: optionalString,

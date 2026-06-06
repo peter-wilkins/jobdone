@@ -30,6 +30,7 @@ export const databaseRowSchemas = {
     addressText: z.string().optional(),
     latitude: optionalNumber,
     longitude: optionalNumber,
+    accuracyMeters: optionalNumber,
     providerPlaceId: optionalString,
     contentHash: optionalString,
     identityKeys: optionalStringArray,

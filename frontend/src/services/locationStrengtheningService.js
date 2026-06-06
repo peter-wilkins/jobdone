@@ -25,6 +25,7 @@ export function strengthenLocationDraftWithClue(location = {}, clue = {}) {
     ...location,
     latitude,
     longitude,
+    accuracyMeters: payload.accuracyMeters ?? payload.accuracy ?? location.accuracyMeters ?? null,
     locationStrengthened: true,
     locationStrengthenedAt: payload.capturedAt || clue.created_at || new Date().toISOString(),
   };

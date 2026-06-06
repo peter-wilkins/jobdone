@@ -37,6 +37,7 @@ function location(overrides = {}) {
     addressText: '14 Bell Street, Testville',
     latitude: 51.5,
     longitude: -0.1,
+    accuracyMeters: 12,
     providerPlaceId: null,
     created_at: '2026-06-05T12:00:00.000Z',
     updated_at: '2026-06-05T12:01:00.000Z',
@@ -269,6 +270,7 @@ test('Location replica push sends canonical fields without remote/local metadata
   assert.equal(pushedLocations[0].status, 'active');
   assert.equal(pushedLocations[0].createdAt, '2026-06-05T12:00:00.000Z');
   assert.equal(pushedLocations[0].updatedAt, '2026-06-05T12:01:00.000Z');
+  assert.equal(pushedLocations[0].accuracyMeters, 12);
   assert.equal(Object.prototype.hasOwnProperty.call(pushedLocations[0], 'remoteId'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(pushedLocations[0], 'localId'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(pushedLocations[0], 'created_at'), false);
