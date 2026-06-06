@@ -229,6 +229,9 @@ export function diffContactManifest({ localContacts = [], remoteManifest = [], a
 export async function syncLocationReplica({ db = dbService, api = apiService, auth = authService } = {}) {
   if (!auth.isLoggedIn()) return { pushed: 0, pulled: 0, aliases: 0, skipped: true };
 
+  if (typeof db.ensureLocationClientIdsForReplica === 'function') {
+    await db.ensureLocationClientIdsForReplica();
+  }
   const localLocations = await db.getLocationsForReplica();
   const localManifest = localLocations.map(locationManifestRow);
   const remote = await api.getLocationReplicaManifest({ locations: localManifest });

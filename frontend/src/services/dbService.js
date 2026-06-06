@@ -1,6 +1,6 @@
 import { findReusableLocation } from './locationIdentityService.js';
 import { entryMatchesLocation } from './locationPresentationService.js';
-import { createUuidV7 } from '../../../shared/contracts/clientId.js';
+import { createUuidV7, isUuidV7 } from '../../../shared/contracts/clientId.js';
 import {
   normalizeLegacyLocalCaptureRecord,
   parseEntryFromCaptureInput,
@@ -2191,6 +2191,60 @@ export class DBService {
         resolve(locations);
       };
       request.onerror = () => reject(new Error('Failed to fetch locations for replica'));
+    });
+  }
+
+  async ensureLocationClientIdsForReplica() {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([LOCATIONS_STORE, ENTRY_LOCATIONS_STORE], 'readwrite');
+      const locationsStore = tx.objectStore(LOCATIONS_STORE);
+      const entryLocationsStore = tx.objectStore(ENTRY_LOCATIONS_STORE);
+      let migrated = 0;
+      let linkUpdates = 0;
+      const idMap = new Map();
+
+      tx.oncomplete = () => resolve({ migrated, linkUpdates });
+      tx.onerror = () => reject(new Error('Failed to migrate Location Client IDs'));
+
+      const locationsReq = locationsStore.getAll();
+      locationsReq.onsuccess = () => {
+        const now = new Date().toISOString();
+        for (const location of locationsReq.result || []) {
+          if (!location?.id || isUuidV7(location.id)) continue;
+          const nextId = this.generateLocationId();
+          idMap.set(location.id, nextId);
+          migrated += 1;
+          locationsStore.put({
+            ...location,
+            id: nextId,
+            status: normalizeLocationStatus(location.status),
+            syncStatus: 'pending',
+            updated_at: now,
+          });
+          locationsStore.delete(location.id);
+        }
+
+        if (!idMap.size) return;
+
+        const linksReq = entryLocationsStore.getAll();
+        linksReq.onsuccess = () => {
+          for (const link of linksReq.result || []) {
+            const nextLocationId = idMap.get(link.locationId);
+            if (!nextLocationId) continue;
+            linkUpdates += 1;
+            const nextLinkId = `entry-location-${link.entryId}-${nextLocationId}`;
+            if (link.id && link.id !== nextLinkId) entryLocationsStore.delete(link.id);
+            entryLocationsStore.put({
+              ...link,
+              id: nextLinkId,
+              locationId: nextLocationId,
+            });
+          }
+        };
+        linksReq.onerror = () => reject(new Error('Failed to migrate Entry Location links'));
+      };
+      locationsReq.onerror = () => reject(new Error('Failed to inspect Location Client IDs'));
     });
   }
 

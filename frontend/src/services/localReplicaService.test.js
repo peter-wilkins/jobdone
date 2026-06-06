@@ -236,9 +236,13 @@ test('contact replica push sends canonical fields without local sync metadata', 
 
 test('Location replica push sends canonical fields without remote/local metadata', async () => {
   let pushedLocations;
+  let migrationCalled = false;
   const result = await syncLocationReplica({
     auth: { isLoggedIn: () => true },
     db: {
+      ensureLocationClientIdsForReplica: async () => {
+        migrationCalled = true;
+      },
       getLocationsForReplica: async () => [
         location({
           syncStatus: 'pending',
@@ -259,6 +263,7 @@ test('Location replica push sends canonical fields without remote/local metadata
     },
   });
 
+  assert.equal(migrationCalled, true);
   assert.equal(result.pushed, 0);
   assert.equal(pushedLocations[0].id, LOCATION_ID);
   assert.equal(pushedLocations[0].status, 'active');

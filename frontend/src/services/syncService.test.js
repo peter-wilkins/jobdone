@@ -18,7 +18,7 @@ test('syncEntry sends canonical entryData fields to the API', async () => {
   try {
     authService.isLoggedIn = () => true;
     dbService.getContextCluesForEntry = async () => [{ kind: 'manual', summary: 'Evidence' }];
-    dbService.getLocationsForEntry = async () => [];
+    dbService.getLocationsForEntry = async () => [{ id: '01973e36-4c80-7abc-8a72-111111111111', displayName: '14 Bell Street' }];
     dbService.getTagsForEntry = async () => [];
     apiService.syncSave = async (nextPayload) => {
       payload = nextPayload;
@@ -30,7 +30,7 @@ test('syncEntry sends canonical entryData fields to the API', async () => {
       transcript: 'Fixed a dripping kitchen tap.',
       summary: 'Fixed dripping kitchen tap.',
       createdAt: '2026-05-17T01:00:00.000Z',
-      locations: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
+      locations: [{ id: 'legacy-location-1', displayName: 'Stale Bell Street snapshot' }],
       contacts: [{ id: 'contact-local-1', displayName: 'Ann Smith' }],
       tags: [{ id: 'tag-local-1', label: 'Boiler Service' }],
       attachments: [],
@@ -39,7 +39,7 @@ test('syncEntry sends canonical entryData fields to the API', async () => {
     assert.equal(payload.entryData.id, 'entry-local-1');
     assert.equal(payload.entryData.createdAt, '2026-05-17T01:00:00.000Z');
     assert.equal(payload.entryData.captureId, null);
-    assert.deepEqual(payload.entryData.locations, [{ id: 'location-local-1', displayName: '14 Bell Street' }]);
+    assert.deepEqual(payload.entryData.locations, [{ id: '01973e36-4c80-7abc-8a72-111111111111', displayName: '14 Bell Street' }]);
     assert.deepEqual(payload.entryData.contacts, [{ id: 'contact-local-1', displayName: 'Ann Smith' }]);
     assert.deepEqual(payload.entryData.tags, [{ id: 'tag-local-1', label: 'Boiler Service' }]);
     assert.equal(Object.prototype.hasOwnProperty.call(payload.entryData, 'created_at'), false);

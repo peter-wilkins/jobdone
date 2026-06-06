@@ -58,9 +58,10 @@ export class SyncService {
     try {
       console.log('[Sync] Syncing entry:', entryData.id);
       const contextClues = await dbService.getContextCluesForEntry(entryData.id);
-      const locations = Array.isArray(entryData.locations) && entryData.locations.length
-        ? entryData.locations
-        : await dbService.getLocationsForEntry(entryData.id);
+      const linkedLocations = await dbService.getLocationsForEntry(entryData.id);
+      const locations = linkedLocations.length
+        ? linkedLocations
+        : (Array.isArray(entryData.locations) ? entryData.locations : []);
       const tags = Array.isArray(entryData.tags) && entryData.tags.length
         ? entryData.tags
         : await dbService.getTagsForEntry(entryData.id);

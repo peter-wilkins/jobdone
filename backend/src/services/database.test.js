@@ -21,6 +21,7 @@ import {
   sslConfigForConnection,
   valueForColumn,
 } from './postgresDb.js';
+import { isUuidV7 } from '../../../shared/contracts/clientId.js';
 
 describe('Database schema binding', () => {
   test('defaults cloud persistence to the jobdone schema', () => {
@@ -240,6 +241,16 @@ describe('Cloud Entry response mapping', () => {
     });
     assert.equal(Object.prototype.hasOwnProperty.call(location, 'display_name'), false);
     assert.equal(Object.prototype.hasOwnProperty.call(location, 'remoteId'), false);
+  });
+
+  test('rekeys legacy Location IDs before writing UUID columns', () => {
+    const location = toCanonicalLocationRecord({
+      id: 'location-local-1',
+      displayName: '14 Bell Street',
+    });
+
+    assert.equal(isUuidV7(location.id), true);
+    assert.notEqual(location.id, 'location-local-1');
   });
 });
 
