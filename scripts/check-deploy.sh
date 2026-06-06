@@ -44,17 +44,20 @@ fi
 
 echo "$target build ids match."
 
-if [[ "$target" == "staging" ]]; then
+if [[ "$target" == "staging" || "$target" == "production" || "$target" == "prod" ]]; then
   local_replica_health="$(curl -fsSL "$backend_url/api/local-replica/health")"
   node -e '
     const health = JSON.parse(process.argv[1]);
+    const target = process.argv[2];
     if (health.configured !== true || health.schema !== "jobdone_next") {
-      console.error(`Local Replica not configured for staging: ${JSON.stringify(health)}`);
+      console.error(`Local Replica not configured for ${target}: ${JSON.stringify(health)}`);
       process.exit(1);
     }
-  ' "$local_replica_health"
-  echo "staging local replica configured."
+  ' "$local_replica_health" "$target"
+  echo "$target local replica configured."
+fi
 
+if [[ "$target" == "staging" ]]; then
   legacy_status="$(
     curl -sS -o /dev/null -w '%{http_code}' \
       -X POST "$backend_url/api/sync/save" \
