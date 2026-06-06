@@ -11,12 +11,11 @@ Staging:
 
 Production:
 
-- Frontend: <https://jobdone-frontend-production.vercel.app>
+- Frontend: <https://jobdone.continuumkit.org>
 - Backend: <https://jobdone-backend-production.vercel.app>
 
-`jobdone-frontend-production.vercel.app` is the temporary explicit production install
-route. Replace it with the owned JobDone domain when the production domain is
-ready.
+`jobdone-frontend-production.vercel.app` remains a production alias, but
+`jobdone.continuumkit.org` is canonical.
 
 The backend Vercel project must not have SSO deployment protection enabled for
 these `.vercel.app` aliases, otherwise browser QA and phone testing receive
@@ -31,7 +30,7 @@ Use the explicit frontend URLs when installing on Android:
 
 - Install staging from <https://jobdone-staging.vercel.app>. It uses
   the PWA name **JobDone Staging** and shows a yellow staging banner.
-- Install production from <https://jobdone-frontend-production.vercel.app>. It
+- Install production from <https://jobdone.continuumkit.org>. It
   uses the PWA name **JobDone Production** and currently shows a green
   production banner while dogfooding.
 
@@ -66,7 +65,7 @@ Before promotion, run the smallest useful checks for the change:
 
 ```bash
 npm run deploy:check:staging
-QA_BASE_URL=https://jobdone-staging.vercel.app npm --prefix frontend run qa:smoke
+npm run qa:staging
 ```
 
 For frontend-visible changes, also do a focused manual check on staging. Keep it
@@ -79,6 +78,12 @@ Promote the current commit to production aliases:
 ```bash
 npm run deploy:promote
 npm run deploy:check:production
+```
+
+Shortcut for normal release flow:
+
+```bash
+npm run deploy:release
 ```
 
 Promotion builds a fresh production-environment frontend and backend from the

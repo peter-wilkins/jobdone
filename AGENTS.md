@@ -74,10 +74,18 @@ Single-context repo — one `CONTEXT.md` and `docs/adr/` at the root. See `docs/
 Keep MVP/process rules in `docs/MVP_RULES.md`; keep `CONTEXT.md` focused on the
 JobDone domain model, product language, and durable platform decisions.
 
-### Frontend deployment
+### Deployment gate
 
-When changing the frontend, build and lint it, commit if the build is fine, then
-deploy the frontend to production by default. Use the safe Vercel sequence:
-`vercel --cwd frontend build --prod` followed by
-`vercel --cwd frontend deploy --prod --prebuilt --yes`, then verify the live
-build id from `https://frontend-jobdone1.vercel.app/`.
+Production deploys should go through staging first:
+
+```bash
+npm run deploy:staging
+npm run deploy:check:staging
+npm run qa:staging
+npm run deploy:promote
+npm run deploy:check:production
+```
+
+`npm run deploy:release` runs that whole sequence. Do not promote to production
+before staging Playwright smoke unless the user explicitly asks for an emergency
+hotfix.
