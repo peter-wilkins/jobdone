@@ -65,15 +65,20 @@ export function shouldStartBuildMismatchReload(backendBuild, {
   return true;
 }
 
+export function shouldApplyAppUpdateForApiResponse(response, {
+  currentBuild = BUILD_ID,
+  storage = globalThis.sessionStorage,
+  updateStarted = updateReloadStarted,
+  updateDeferred = shouldDeferAppUpdateNow(),
+} = {}) {
+  if (updateStarted || updateDeferred) return false;
+  const backendBuild = response?.headers?.get?.('x-jobdone-build');
+  return shouldStartBuildMismatchReload(backendBuild, { currentBuild, storage });
+}
+
 async function apiFetch(...args) {
   const response = await fetchWithRequestDiagnostics(...args);
-  const backendBuild = response.headers.get('x-jobdone-build');
-  if (
-    response.ok &&
-    !updateReloadStarted &&
-    shouldStartBuildMismatchReload(backendBuild) &&
-    !shouldDeferAppUpdateNow()
-  ) {
+  if (shouldApplyAppUpdateForApiResponse(response)) {
     updateReloadStarted = true;
     applyAvailableAppUpdate();
   }

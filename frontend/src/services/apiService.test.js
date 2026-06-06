@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   APIService,
   defaultApiBaseUrl,
+  shouldApplyAppUpdateForApiResponse,
   shouldApplyAppUpdateForBackendBuild,
   shouldStartBuildMismatchReload,
 } from './apiService.js';
@@ -37,6 +38,25 @@ test('allows only one build mismatch reload per frontend/backend build pair', ()
     currentBuild: 'front1',
     storage: sessionStorage,
   }), false);
+});
+
+test('detects app update headers even on failed API responses', () => {
+  const storage = new Map();
+  const sessionStorage = {
+    getItem: key => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, value),
+  };
+  const response = new Response(JSON.stringify({ error: 'old app contract' }), {
+    status: 500,
+    headers: { 'x-jobdone-build': 'backend2' },
+  });
+
+  assert.equal(shouldApplyAppUpdateForApiResponse(response, {
+    currentBuild: 'front1',
+    storage: sessionStorage,
+    updateStarted: false,
+    updateDeferred: false,
+  }), true);
 });
 
 test('routes explicit staging and production hostnames to matching backend aliases', () => {
