@@ -957,6 +957,38 @@ describe('SyncRoute Location Replica sync', () => {
     assert.equal(JSON.parse(res.body).locations[0].id, locationId);
   });
 
+  test('normalizes Location Replica manifest Date timestamps before response validation', async () => {
+    const app = await buildApp({
+      getLocationManifest: async () => ({
+        locations: [{
+          id: locationId,
+          status: 'active',
+          contentHash: 'hash-a',
+          identityKeys: [],
+          updatedAt: new Date('2026-06-06T15:30:09.548Z'),
+        }],
+        aliases: [],
+      }),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/local-replica/locations/manifest',
+      payload: {
+        locations: [{
+          id: locationId,
+          status: 'active',
+          contentHash: 'hash-a',
+          identityKeys: [],
+          updatedAt: '2026-06-06T15:30:09.548Z',
+        }],
+      },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(JSON.parse(res.body).locations[0].updatedAt, '2026-06-06T15:30:09.548Z');
+  });
+
   test('pushes canonical Location Replica records without backend IDs', async () => {
     let pushed;
     const app = await buildApp({

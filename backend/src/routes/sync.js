@@ -26,6 +26,22 @@ function toCanonicalLocationAlias(alias = {}) {
   };
 }
 
+function toIsoTimestamp(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function toCanonicalLocationManifestRow(location = {}) {
+  return {
+    id: location.id,
+    status: location.status || 'active',
+    contentHash: location.contentHash || '',
+    identityKeys: Array.isArray(location.identityKeys) ? location.identityKeys : [],
+    updatedAt: toIsoTimestamp(location.updatedAt),
+  };
+}
+
 function validateTagLabel(value) {
   if (/[\p{C}]/u.test(String(value || ''))) {
     return { valid: false, error: 'Tag label contains unsafe characters' };
@@ -278,7 +294,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
       const manifest = await db.getLocationManifest(user.id, parsed.data.locations);
       return assertSyncResponse(parseLocationReplicaManifestResponse({
         success: true,
-        locations: manifest.locations || [],
+        locations: (manifest.locations || []).map(toCanonicalLocationManifestRow),
         aliases: (manifest.aliases || []).map(toCanonicalLocationAlias),
       }));
     } catch (error) {
