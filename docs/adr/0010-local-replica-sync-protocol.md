@@ -59,6 +59,13 @@ The first `syncTransactions` contract is:
 
 Idempotency belongs to Sync Intents rather than Sync Transactions.
 
+The first SQL schema should also include two generic metadata tables:
+
+- `syncOwnerAccess` records which authenticated users may pull or push an owner scope. Personal user scopes can still be derived from the authenticated user, but Team scopes need readable ACL metadata even when payloads later become encrypted.
+- `syncIntents` records idempotency keys and accepted/rejected/conflict results for push retries. This is sync plumbing, not a product event log.
+
+These tables are still part of the dumb backend. They are not feature-specific tables; they protect access, idempotency, and retry correctness for every future collection.
+
 The first pull API should pull every collection needed for the frontend to function across all owner scopes the authenticated user may access. The client should not need to list collections in the request. The server derives allowed user and Team scopes from authentication and membership, then returns changes since the requested Server T.
 
 The first pull request shape is `replicaEpoch`, `sinceT`, and optional page limit. The response returns `replicaEpoch`, `fromT`, `toT`, `hasMore`, and `objects`.
