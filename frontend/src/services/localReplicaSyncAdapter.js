@@ -77,6 +77,18 @@ function syncIntentContractFields(intent = {}) {
   };
 }
 
+export function isReusableLocalReplicaIntent(intent = {}, fingerprint = {}) {
+  if (intent.ownerKind !== fingerprint.ownerKind) return false;
+  if (intent.ownerId !== fingerprint.ownerId) return false;
+  if (intent.collection !== fingerprint.collection) return false;
+  if (intent.action !== fingerprint.action) return false;
+  if ((intent.objectId ?? null) !== (fingerprint.objectId ?? null)) return false;
+  if ((intent.payloadHash ?? null) !== (fingerprint.payloadHash ?? null)) return false;
+  if (intent.status === 'pending') return true;
+  if (intent.status !== 'settled') return false;
+  return ['accepted', 'idempotent'].includes(intent.result?.status);
+}
+
 export class MemoryLocalReplicaStore {
   constructor({ replicaEpoch = createUuidV7(), state = {} } = {}) {
     this.state = normalizeState({ replicaEpoch, ...state });
@@ -109,6 +121,11 @@ export class MemoryLocalReplicaStore {
     return [...this.intents.values()]
       .filter(intent => intent.status === 'pending')
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  }
+
+  async findReusableLocalReplicaIntent(fingerprint) {
+    return [...this.intents.values()]
+      .find(intent => isReusableLocalReplicaIntent(intent, fingerprint)) || null;
   }
 
   async markLocalReplicaIntentSettled(intentId, result) {
@@ -173,6 +190,25 @@ export async function queueCreateObjectIntent({
 } = {}) {
   if (!store) throw new Error('Local Replica store is required');
   const state = await store.getLocalReplicaState();
+  const payloadHash = stableLocalReplicaHash(payloadJson);
+  const fingerprint = {
+    ownerKind: ownerScope.ownerKind,
+    ownerId: ownerScope.ownerId,
+    collection,
+    action: 'createObject',
+    objectId,
+    payloadHash,
+  };
+  const reusableIntent = typeof store.findReusableLocalReplicaIntent === 'function'
+    ? await store.findReusableLocalReplicaIntent(fingerprint)
+    : null;
+  if (reusableIntent) {
+    return {
+      ...parseOrThrow(parseSyncIntent(syncIntentContractFields(reusableIntent)), 'Invalid reusable Local Replica create intent'),
+      replicaEpoch: state.replicaEpoch,
+    };
+  }
+
   const id = createId();
   const payload = {
     id,
@@ -183,7 +219,7 @@ export async function queueCreateObjectIntent({
     objectId,
     baseObjectT: null,
     payloadJson,
-    payloadHash: stableLocalReplicaHash(payloadJson),
+    payloadHash,
     createdAt: now,
   };
   const intent = parseOrThrow(parseSyncIntent(payload), 'Invalid Local Replica create intent');

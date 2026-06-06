@@ -9,6 +9,7 @@ import {
   parseLocalCaptureRecord,
   parseLocalCaptureUpdate,
 } from '../contracts/localCapture.js';
+import { isReusableLocalReplicaIntent } from './localReplicaSyncAdapter.js';
 import { LOCAL_REPLICA_STATE_ID, localReplicaObjectKey } from './localReplicaStorage.js';
 
 /**
@@ -1967,6 +1968,22 @@ export class DBService {
       request.onsuccess = () => resolve((request.result || [])
         .sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')) || String(left.id || '').localeCompare(String(right.id || ''))));
       request.onerror = () => reject(new Error('Failed to list pending Local Replica intents'));
+    });
+  }
+
+  async findReusableLocalReplicaIntent(fingerprint = {}) {
+    const db = await this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const store = db.transaction([SYNC_INTENTS_LOCAL_STORE], 'readonly')
+        .objectStore(SYNC_INTENTS_LOCAL_STORE);
+      const request = store.indexNames.contains('objectId')
+        ? store.index('objectId').getAll(fingerprint.objectId ?? null)
+        : store.getAll();
+      request.onsuccess = () => {
+        const intents = request.result || [];
+        resolve(intents.find(intent => isReusableLocalReplicaIntent(intent, fingerprint)) || null);
+      };
+      request.onerror = () => reject(new Error('Failed to find reusable Local Replica intent'));
     });
   }
 

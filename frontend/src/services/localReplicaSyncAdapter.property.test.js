@@ -119,6 +119,34 @@ test('Local Replica frontend property loop preserves pre-existing remote objects
   }
 });
 
+test('Local Replica create intent queueing reuses identical pending intents', async () => {
+  const generator = createLocalReplicaGenerator(701);
+  const ownerScope = generator.ownerScope();
+  const objectId = generator.uuid();
+  const payloadJson = { id: objectId, text: 'same local entry' };
+  const store = createMemoryLocalReplicaStore({ replicaEpoch: generator.uuid() });
+
+  const first = await queueCreateObjectIntent({
+    store,
+    ownerScope,
+    collection: 'entries',
+    objectId,
+    payloadJson,
+    now: generator.timestamp(1000),
+  });
+  const second = await queueCreateObjectIntent({
+    store,
+    ownerScope,
+    collection: 'entries',
+    objectId,
+    payloadJson,
+    now: generator.timestamp(2000),
+  });
+
+  assert.equal(second.id, first.id);
+  assert.equal((await store.listPendingIntents()).length, 1);
+});
+
 test('Local Replica frontend materializer applies generated tombstones idempotently', async () => {
   for (const seed of localReplicaSeeds(10, 400)) {
     const generator = createLocalReplicaGenerator(seed);
