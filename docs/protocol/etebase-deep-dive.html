@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Etebase Deep Dive</title>
+    <style>
+      :root {
+        --ink: #182028;
+        --muted: #5c6670;
+        --paper: #fbfaf7;
+        --panel: #ffffff;
+        --line: #d9ded7;
+        --accent: #0f766e;
+        --accent-soft: #dff5f0;
+        --warn: #8a4f07;
+        --warn-soft: #fff1d8;
+        --bad: #8f1d1d;
+        --bad-soft: #ffe5e5;
+        --shadow: 0 18px 60px rgba(24, 32, 40, 0.09);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.56;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      .page {
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 46px 20px 70px;
+      }
+
+      header {
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 820px;
+        margin: 10px 0 14px;
+        font-size: clamp(2.2rem, 6vw, 4.6rem);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .lede {
+        max-width: 780px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.12rem;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .verdict {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+        margin: 28px 0;
+      }
+
+      .card {
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .card h2,
+      .card h3 {
+        margin: 0 0 8px;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .callout {
+        padding: 22px;
+        border: 1px solid #c3e7df;
+        border-radius: 8px;
+        background: var(--accent-soft);
+      }
+
+      .callout h2 {
+        margin: 0 0 8px;
+      }
+
+      .callout p {
+        margin: 0;
+      }
+
+      .callout.warn {
+        border-color: #f1d19b;
+        background: var(--warn-soft);
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 18px;
+      }
+
+      section {
+        margin-top: 34px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 1.45rem;
+      }
+
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f1f5f1;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .yes {
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .mixed {
+        color: var(--warn);
+        font-weight: 800;
+      }
+
+      .no {
+        color: var(--bad);
+        font-weight: 800;
+      }
+
+      footer {
+        margin-top: 44px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 780px) {
+        .page {
+          padding: 30px 14px 54px;
+        }
+
+        .verdict,
+        .split {
+          grid-template-columns: 1fr;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <div class="eyebrow">Reuse check</div>
+        <h1>Etebase Deep Dive</h1>
+        <p class="lede">
+          Can Etebase replace JobDone's planned privacy-first Local Replica
+          protocol, or should it stay prior art?
+        </p>
+        <div class="badges">
+          <span class="badge">Research date: 2026-06-07</span>
+          <span class="badge">Closest prior art</span>
+          <span class="badge">Verdict: study, do not adopt wholesale</span>
+        </div>
+      </header>
+
+      <div class="verdict">
+        <div class="callout">
+          <h2>Short verdict</h2>
+          <p>
+            Etebase is close enough that we should study it before building
+            encrypted payload mode. It does not replace Local Replica wholesale:
+            JobDone still needs Sync Intents, Server T, Sync Partitions, private
+            graph handling, Recall coverage, and non-password-rooted unlock.
+          </p>
+        </div>
+        <article class="card">
+          <h2>Reuse stance</h2>
+          <p>
+            Use Etebase as prior art now. Run a throwaway spike before doing
+            encryption. Do not block ordinary sync/Recall cleanup on it.
+          </p>
+        </article>
+      </div>
+
+      <section>
+        <h2>Current Signals</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Signal</th>
+              <th>Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Server</td>
+              <td>AGPL-3.0, Django/ASGI, self-hostable. GitHub pushed 2024-07-12.</td>
+              <td><span class="mixed">Good concept, license matters.</span></td>
+            </tr>
+            <tr>
+              <td>JavaScript client</td>
+              <td>BSD-3-Clause. npm `etebase` last modified 2022-05-01; repo pushed 2023-03-14.</td>
+              <td><span class="mixed">Stale for direct PWA dependency.</span></td>
+            </tr>
+            <tr>
+              <td>Android ecosystem</td>
+              <td>EteSync Android repo pushed 2026-02-27.</td>
+              <td><span class="yes">Wider project still alive.</span></td>
+            </tr>
+            <tr>
+              <td>Browser fit</td>
+              <td>Uses WASM and Web Workers; docs warn CSP can block WASM.</td>
+              <td><span class="mixed">Needs PWA spike.</span></td>
+            </tr>
+            <tr>
+              <td>Auth</td>
+              <td>Password-derived main key plus challenge-response login.</td>
+              <td><span class="no">Conflicts with frictionless/passkey direction.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>What Etebase Solves</h2>
+        <div class="split">
+          <article class="card">
+            <h3>Encrypted app data</h3>
+            <p>
+              Server stores encrypted Collections, Items, and Revisions. Client
+              owns crypto and app content.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Sharing</h3>
+            <p>
+              Public-key collection invitations, member listing, access levels,
+              revocation, and leaving collections.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Sync tokens</h3>
+            <p>
+              Collections expose `stoken` values for efficient changed-data
+              fetches.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Consistency checks</h3>
+            <p>
+              Transactions and `stoken` checks can fail stale writes instead of
+              overwriting silently.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Gaps Against Our Draft</h2>
+        <ul>
+          <li><strong>Server T:</strong> Etebase uses collection sync tokens, not one global Datomic-like transaction cursor.</li>
+          <li><strong>Sync Intents:</strong> business actions like claims, approvals, and invite acceptance still need an app-level intent layer.</li>
+          <li><strong>Recall coverage:</strong> Etebase does not appear to expose "local search is complete for this query" as a first-class concept.</li>
+          <li><strong>Private graph:</strong> encrypted payloads help, but access/fetch patterns can still leak relationship/query intent.</li>
+          <li><strong>Sync Partitions:</strong> collection type tokens are useful prior art, but cold-restore coverage still needs app design.</li>
+          <li><strong>Auth UX:</strong> current Etebase model is password-rooted; JobDone wants auth and unlock separable and eventually passkey-friendly.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Options</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Option</th>
+              <th>Pros</th>
+              <th>Cons</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Adopt Etebase wholesale</td>
+              <td>E2EE/sharing already built.</td>
+              <td>Auth mismatch, AGPL server, stale JS, no explicit coverage/intents.</td>
+              <td><span class="no">Not now.</span></td>
+            </tr>
+            <tr>
+              <td>Use as prior art</td>
+              <td>Low disruption, keeps property tests and Server T direction.</td>
+              <td>More code to build; later security review needed.</td>
+              <td><span class="yes">Recommended.</span></td>
+            </tr>
+            <tr>
+              <td>Fork/adapt</td>
+              <td>Builds on serious work.</td>
+              <td>High maintenance, AGPL implications, security-sensitive fork.</td>
+              <td><span class="mixed">Only if sync infra becomes product.</span></td>
+            </tr>
+            <tr>
+              <td>Use as encrypted blob store</td>
+              <td>Reuses encrypted storage.</td>
+              <td>Two sync systems, hard tests, more failures.</td>
+              <td><span class="no">Avoid.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div class="callout warn">
+        <h2>Recommended next move</h2>
+        <p>
+          Before encrypted payload implementation, run a throwaway Etebase spike:
+          fake Entry/Contact/Location/Attachment, share with second user, test
+          browser CSP/WASM, and see if collection/item fetch can support complete
+          Recall coverage.
+        </p>
+      </div>
+
+      <section>
+        <h2>Sources</h2>
+        <ul>
+          <li><a href="https://docs.etebase.com/overview">Etebase overview</a></li>
+          <li><a href="https://docs.etebase.com/installation">Etebase installation</a></li>
+          <li><a href="https://docs.etebase.com/guides/using_collections">Using collections</a></li>
+          <li><a href="https://docs.etebase.com/guides/collection_sharing">Collection sharing</a></li>
+          <li><a href="https://docs.etebase.com/protocol-specs/authentication">Authentication protocol</a></li>
+          <li><a href="https://github.com/etesync/server">Etebase server</a></li>
+          <li><a href="https://github.com/etesync/etebase-js">Etebase JS client</a></li>
+          <li><a href="./etebase-deep-dive.md">Markdown version</a></li>
+        </ul>
+      </section>
+
+      <footer>
+        Draft research note. Not legal advice, security review, or production
+        adoption decision.
+      </footer>
+    </main>
+  </body>
+</html>

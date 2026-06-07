@@ -25,6 +25,8 @@ Mostly yes for pieces, not exactly for the current narrow shape.
 
 If the goal is "E2EE app-data backend", Etebase is the closest. Before building encryption, we should check whether Etebase can be reused, forked, or copied conceptually.
 
+Deep dive: [etebase-deep-dive.md](./etebase-deep-dive.md).
+
 If the goal is "local-first E2EE collaboration protocol", any-sync is already serious and more ambitious.
 
 If the goal is "local-first sync with nice optimistic UI", Replicache, PowerSync, ElectricSQL, and RxDB all cover much of that ground.
@@ -66,6 +68,7 @@ Sources:
 - https://docs.etebase.com/overview
 - https://docs.etebase.com/protocol-specs/collections
 - https://blog.etesync.com/introducing-etebase-an-end-to-end-encrypted-sdk-and-backend/
+- [Etebase deep dive](./etebase-deep-dive.md)
 
 ### any-sync / Anytype
 
