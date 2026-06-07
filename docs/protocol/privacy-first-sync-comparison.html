@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy-First Sync Protocol - Prior Art Matrix</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172026;
+        --muted: #5c6670;
+        --paper: #fbfaf7;
+        --panel: #ffffff;
+        --line: #d8ddd6;
+        --accent: #0f766e;
+        --accent-soft: #d8f3ee;
+        --warn: #a15c07;
+        --warn-soft: #fff0d6;
+        --blue-soft: #e8f0ff;
+        --blue: #31599a;
+        --shadow: 0 18px 60px rgba(23, 32, 38, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--paper);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 48px 20px 72px;
+      }
+
+      header {
+        display: grid;
+        gap: 18px;
+        margin-bottom: 30px;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 820px;
+        margin: 0;
+        font-size: clamp(2.1rem, 6vw, 4.8rem);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        max-width: 820px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin: 28px 0;
+      }
+
+      .note {
+        min-height: 100%;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .note h2,
+      .note h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+
+      .note p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .matrix-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      table {
+        width: 100%;
+        min-width: 1080px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        font-size: 0.92rem;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f2f5f1;
+        color: #24313a;
+        font-size: 0.78rem;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      td:first-child {
+        font-weight: 700;
+        color: #111827;
+      }
+
+      .yes {
+        color: #0f6f45;
+        font-weight: 700;
+      }
+
+      .mixed {
+        color: var(--warn);
+        font-weight: 700;
+      }
+
+      .no {
+        color: #8f1d1d;
+        font-weight: 700;
+      }
+
+      .callout {
+        margin: 28px 0;
+        padding: 22px;
+        border: 1px solid #c7e8df;
+        border-radius: 8px;
+        background: var(--accent-soft);
+      }
+
+      .callout.warning {
+        border-color: #f2d29a;
+        background: var(--warn-soft);
+      }
+
+      .callout.blue {
+        border-color: #cbd9ff;
+        background: var(--blue-soft);
+      }
+
+      .callout h2 {
+        margin: 0 0 10px;
+        font-size: 1.25rem;
+      }
+
+      .callout p {
+        margin: 0;
+      }
+
+      section {
+        margin-top: 34px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 1.5rem;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      footer {
+        margin-top: 44px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 760px) {
+        .page {
+          padding: 30px 14px 52px;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .matrix-wrap {
+          margin-left: -6px;
+          margin-right: -6px;
+          border-radius: 0;
+        }
+      }
+
+      @media print {
+        body {
+          background: #ffffff;
+        }
+
+        .page {
+          max-width: none;
+          padding: 20px;
+        }
+
+        .note,
+        .matrix-wrap,
+        .callout {
+          box-shadow: none;
+        }
+
+        th {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <div class="eyebrow">Research note</div>
+        <h1>Privacy-First Sync Protocol Prior Art Matrix</h1>
+        <p class="summary">
+          A comparison between JobDone's draft privacy-first sync protocol and
+          existing E2EE, local-first, and managed sync systems. The goal is to
+          decide whether to reuse, fork, study, or keep designing.
+        </p>
+        <div class="status" aria-label="Document status">
+          <span class="pill">Draft 0</span>
+          <span class="pill">Research date: 2026-06-07</span>
+          <span class="pill">Not a novelty claim</span>
+        </div>
+      </header>
+
+      <div class="grid" aria-label="Short answer">
+        <article class="note">
+          <h2>Closest match</h2>
+          <p>
+            Etebase is closest for central-server E2EE app-data sync. Study it
+            before building encrypted payload mode.
+          </p>
+        </article>
+        <article class="note">
+          <h2>Most ambitious</h2>
+          <p>
+            any-sync is already a serious P2P, E2EE, local-first collaboration
+            protocol. It is likely too much machinery for our MVP.
+          </p>
+        </article>
+        <article class="note">
+          <h2>Our useful niche</h2>
+          <p>
+            Coverage-aware encrypted local recall: the app must know whether
+            local search has all required data before saying "nothing found".
+          </p>
+        </article>
+      </div>
+
+      <section>
+        <h2>Comparison Matrix</h2>
+        <div class="matrix-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>What it is</th>
+                <th>Server reads content?</th>
+                <th>Local-first?</th>
+                <th>Generic app data?</th>
+                <th>Privacy metadata stance</th>
+                <th>Query coverage concept</th>
+                <th>Fit</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Etebase / EteSync</td>
+                <td>E2EE SDK/backend for app data.</td>
+                <td><span class="yes">No, by design.</span></td>
+                <td><span class="mixed">Partly.</span> Client-heavy sync.</td>
+                <td><span class="yes">Yes.</span> Collections, Items, Revisions.</td>
+                <td>
+                  Encrypted collections/items. Deterministic encrypted
+                  collection type tokens for efficient fetch.
+                </td>
+                <td>Sync tokens, not explicit local query completeness.</td>
+                <td>Very close for central-server E2EE app sync.</td>
+                <td>Study deeply. Possible reuse/fork if maintenance/API fit works.</td>
+              </tr>
+              <tr>
+                <td>any-sync / Anytype</td>
+                <td>P2P/local-first E2EE collaboration protocol.</td>
+                <td><span class="yes">No, by design.</span></td>
+                <td><span class="yes">Yes.</span></td>
+                <td><span class="mixed">Yes, but DAG/CRDT oriented.</span></td>
+                <td>Encrypted spaces and signed DAG/CRDT updates.</td>
+                <td>Not framed around complete local search coverage.</td>
+                <td>Strong prior art, but more decentralized than current need.</td>
+                <td>Learn from it. Probably too much machinery for MVP.</td>
+              </tr>
+              <tr>
+                <td>Replicache</td>
+                <td>Local-first optimistic sync framework.</td>
+                <td><span class="mixed">Usually yes</span> unless app encrypts payloads.</td>
+                <td><span class="yes">Yes.</span></td>
+                <td><span class="yes">Yes, app-defined.</span></td>
+                <td>Privacy is app responsibility.</td>
+                <td>No first-class privacy/search coverage.</td>
+                <td>Great sync UX model, not privacy protocol.</td>
+                <td>Borrow mutation/pull concepts. Not replacement.</td>
+              </tr>
+              <tr>
+                <td>PowerSync</td>
+                <td>Backend DB to local SQLite sync engine.</td>
+                <td><span class="mixed">Usually yes</span> unless app encrypts rows.</td>
+                <td><span class="yes">Yes.</span></td>
+                <td><span class="yes">Yes, table/database oriented.</span></td>
+                <td>Sync rules/streams choose subsets. Privacy depends on schema.</td>
+                <td>Sync status, not encrypted recall coverage.</td>
+                <td>Excellent local DB sync, weak server-blind fit by default.</td>
+                <td>Consider only if abandoning custom sync. Borrow local DB ideas.</td>
+              </tr>
+              <tr>
+                <td>ElectricSQL</td>
+                <td>Postgres subset sync into local apps.</td>
+                <td><span class="mixed">Usually yes</span> unless app encrypts rows.</td>
+                <td><span class="yes">Yes.</span></td>
+                <td><span class="yes">Yes, Postgres-shaped.</span></td>
+                <td>Shapes choose subsets of data.</td>
+                <td>No explicit false-completeness search model.</td>
+                <td>Useful subset idea, not E2EE protocol.</td>
+                <td>Borrow Sync Partition inspiration.</td>
+              </tr>
+              <tr>
+                <td>RxDB</td>
+                <td>JavaScript local-first DB with replication plugins.</td>
+                <td><span class="mixed">Depends</span> on backend/encryption.</td>
+                <td><span class="yes">Yes.</span></td>
+                <td><span class="yes">Yes, document DB.</span></td>
+                <td>Encryption/compression possible. Metadata model app-defined.</td>
+                <td>No protocol-level coverage.</td>
+                <td>Useful frontend DB/sync toolkit.</td>
+                <td>Could be implementation tool, not protocol.</td>
+              </tr>
+              <tr>
+                <td>Matrix</td>
+                <td>Open communication protocol with sync API and E2EE.</td>
+                <td>
+                  <span class="mixed">Content can be encrypted;</span>
+                  homeserver still sees metadata.
+                </td>
+                <td><span class="mixed">Heavy clients possible.</span></td>
+                <td><span class="no">No.</span> Event/room communication.</td>
+                <td>Mature device/key concepts. Metadata leakage remains.</td>
+                <td>Limited timelines/sync gaps, not app-data query coverage.</td>
+                <td>Relevant for sync and key-management patterns.</td>
+                <td>Do not repurpose unless app is communication-shaped.</td>
+              </tr>
+              <tr>
+                <td>MLS</td>
+                <td>IETF E2EE group messaging protocol.</td>
+                <td><span class="yes">No message content;</span> metadata remains.</td>
+                <td><span class="no">No.</span></td>
+                <td><span class="no">No. Messaging only.</span></td>
+                <td>Strong crypto/key schedule; explicit metadata limits.</td>
+                <td>None.</td>
+                <td>Crypto ingredient, not app-data sync.</td>
+                <td>Use as group-crypto reference, not storage/sync.</td>
+              </tr>
+              <tr>
+                <td>Syncthing / file sync</td>
+                <td>File-level peer sync.</td>
+                <td><span class="mixed">Peers read; relays usually do not.</span></td>
+                <td><span class="yes">Yes, for files.</span></td>
+                <td><span class="no">No. Files only.</span></td>
+                <td>File names and structure may leak depending design.</td>
+                <td>File availability, not query coverage.</td>
+                <td>Too low-level.</td>
+                <td>Useful durability intuition only.</td>
+              </tr>
+              <tr>
+                <td>Firebase / Firestore</td>
+                <td>Managed cloud DB with offline cache.</td>
+                <td><span class="mixed">Yes</span> unless app encrypts fields.</td>
+                <td><span class="mixed">Offline cache, not privacy-first replica.</span></td>
+                <td><span class="yes">Yes.</span></td>
+                <td>Security Rules protect access, not provider readability.</td>
+                <td>Cache state, not complete private recall coverage.</td>
+                <td>Solves generic sync, not server-blind privacy.</td>
+                <td>Use if privacy-first requirement is dropped.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="callout warning">
+        <h2>Has someone already done it?</h2>
+        <p>
+          Mostly yes for pieces. Etebase is close enough that it should be
+          studied before building encryption. any-sync is close enough for P2P
+          collaboration that we should not reinvent that path. The remaining
+          niche is narrow: server-assisted, encrypted, typed app-data sync with
+          explicit local query coverage.
+        </p>
+      </div>
+
+      <section>
+        <h2>What seems distinctive</h2>
+        <ul>
+          <li>Central server as ordering, authorization, durability, and restore infrastructure, not content reader.</li>
+          <li>Typed app objects through Sync Intents and Server T, not generic database row mirroring.</li>
+          <li>Coarse Sync Partitions for encrypted cold restore.</li>
+          <li>Private Relationship Graph hidden from backend by default.</li>
+          <li>Explicit Recall/query coverage so local search does not silently lie.</li>
+          <li>Implementation-independent design that can run on Postgres first.</li>
+        </ul>
+      </section>
+
+      <div class="callout blue">
+        <h2>Recommended next research move</h2>
+        <p>
+          Do a one-page Etebase deep dive: current maintenance, license, server
+          deployability, browser/mobile client fit, collection-sharing model,
+          metadata leakage, and whether its sync token model can express query
+          coverage.
+        </p>
+      </div>
+
+      <section>
+        <h2>Sources</h2>
+        <ul>
+          <li><a href="https://docs.etebase.com/overview">Etebase overview</a></li>
+          <li><a href="https://docs.etebase.com/protocol-specs/collections">Etebase collections protocol</a></li>
+          <li><a href="https://github.com/anyproto/any-sync">any-sync</a></li>
+          <li><a href="https://doc.replicache.dev/">Replicache docs</a></li>
+          <li><a href="https://docs.powersync.com/">PowerSync docs</a></li>
+          <li><a href="https://electric-sql.com/product/sync">Electric sync</a></li>
+          <li><a href="https://rxdb.info/">RxDB</a></li>
+          <li><a href="https://spec.matrix.org/latest/">Matrix specification</a></li>
+          <li><a href="https://www.rfc-editor.org/rfc/rfc9420.html">MLS RFC 9420</a></li>
+          <li><a href="./prior-art-survey.md">Markdown survey</a></li>
+          <li><a href="./privacy-first-sync-protocol.md">Protocol overview</a></li>
+        </ul>
+      </section>
+
+      <footer>
+        Draft extracted from JobDone Local Replica architecture work. This
+        document should not be read as a claim that the protocol is novel or
+        production-ready.
+      </footer>
+    </main>
+  </body>
+</html>
