@@ -106,6 +106,10 @@ _Avoid_: Anonymous Join Row, Composite-Key-Only Link, Hidden Sync Detail
 The explicit ownership key carried by every syncable row that belongs to a personal replica. Personal rows carry `userId`; Team-scoped rows carry `teamId`; Sync Intents also carry actor identity. Owner Scope should not be inferred only through parent links because sync pulls, exports, deletes, scoped foreign keys, and no-cross-user property tests need direct ownership facts on each collection.
 _Avoid_: Parent-Only Ownership, Implicit Tenant, Cross-Collection Guessing
 
+**Private Context**:
+The UX name for the user's default personal Owner Scope. Private Context data remains stored as `ownerKind: user`, not as a hidden one-person Team. The interface may explain it as "only you can see this" and contrast it with Team Contexts, where invited Team Members can see data saved in that Team. Moving already-confirmed private data into a Team is a later design problem, not part of the first encryption model.
+_Avoid_: Hidden Personal Team, Ambiguous Mode, Surprise Sharing
+
 **JobDone SQL Shape**:
 The PostgreSQL representation for JobDone-owned sync tables should use the same camelCase identifiers as the app/API contract, including quoted names such as `userId`, `entryId`, `createdAt`, `createdT`, `changedT`, `deletedAt`, and `deletedT`. Snake_case should be treated as legacy or provider-owned unless explicitly allowlisted for a backend-only object.
 _Avoid_: Parallel SQL Naming Convention, Accidental Snake Case Adapter, Shape Translation Layer
@@ -133,6 +137,58 @@ _Avoid_: Last Sync Timestamp, Client Clock Cursor, Per-Collection Version
 **Codec Adapter**:
 The transport encoding seam for Replica Snapshots and Sync Envelopes. JobDone's canonical contract is typed product data, not JSON specifically. JSON is the readable MVP codec, but a production codec such as Transit, MessagePack, or CBOR can be introduced behind this adapter if payload size or speed later proves it useful.
 _Avoid_: JSON as Domain Contract, Transport-Specific Product Shape
+
+**Privacy-First Sync Protocol**:
+The implementation-independent convention behind Local Replica. It treats the server as ordering, authorization, durability, and coarse restore infrastructure, not as a trusted reader of user content. The protocol consists of Client IDs, Sync Intents, Server T, Sync Partitions, encrypted payloads, Keybags, owner access metadata, coverage reporting, and local materialization/querying. Supabase/Postgres is the MVP implementation, not the protocol boundary.
+_Avoid_: Supabase as Domain Model, Firebase Clone, Backend-as-Reader
+
+**Encrypted Payload Mode**:
+The intended default future mode for privacy-sensitive Local Replica payloads before JobDone has real users. Sync metadata such as Owner Scope, Client IDs, collection names, Server T facts, tombstones, payload hashes, and access rows may remain backend-readable for sync correctness, while Entry text, Contact details/vCards, Location labels/addresses/coordinates, Photos, and attachment payloads are encrypted on the device. Server-readable payloads become an explicit user/team opt-in for features that need backend content access, such as hosted AI improvement, server-side Recall, or content-rich diagnostics.
+_Avoid_: Encryption as Premium Add-on, Backend-Readable by Default, All-or-Nothing Database Encryption
+
+**Sync Partition**:
+A coarse backend-readable bucket used to restore encrypted Local Replica data without revealing the private graph. Sync Partitions may include Owner Scope, collection, Server T range, broad time bucket, payload kind, payload size, and tombstone state. They must not encode hidden Contact, Location, Backlog Item, Work Context, or query-specific relationships by default. Cold restore fetches Sync Partitions and rebuilds detailed relationships after local decrypt.
+_Avoid_: Search Partition, Hidden Contact Bucket, Backend Graph Index
+
+**Data Key**:
+The symmetric encryption key for one Owner Scope in Encrypted Payload Mode. Personal data uses one Data Key for the User Owner Scope; each Team uses its own Team Data Key. Sync payloads are encrypted with the relevant Data Key, while Data Keys are never stored plaintext on the backend.
+_Avoid_: One Global User Key, Per-Entry Encryption Key, Backend Master Key
+
+**Keybag**:
+The encrypted wrapping records that let authorized users, devices, or credentials unlock a Data Key. Sharing a Team means adding Keybag access for the Team Data Key, not re-encrypting every Backlog Item, Entry, or Attachment in that Team. Removing access revokes future unlocks, while already-cached local keys may need explicit device/session handling.
+_Avoid_: Re-encrypt Everything on Invite, Plaintext Team Key, Password Reset Backdoor
+
+**Unlock Method**:
+The local proof that lets a device unwrap Data Keys after account authentication. Account authentication proves which User is asking; Unlock Method proves the device/user can decrypt. Preferred Unlock Methods use platform passkeys/WebAuthn PRF where available, with a user-held Recovery Key or recovery phrase as the fallback. After first unlock, the device may keep a locally cached or platform-wrapped key for frictionless reopening. JobDone should not offer a server recovery backdoor for encrypted payloads, and the encryption design should not depend on any one authentication mechanism such as magic links, OAuth, or passkeys.
+_Avoid_: Auth Session as Encryption Root, Server Password Reset for E2EE, Permanent Unlock Prompt
+
+**Frictionless Encryption**:
+The UX goal that Encrypted Payload Mode should usually feel like normal JobDone use. Users should understand the important sharing boundary — private context versus Team context — but should not have to think about keys, ciphers, or wrapping records during ordinary capture, recall, sync, or Team work. Encryption setup, unlock, and recovery prompts should appear only when needed, be close to the action they unblock, and explain consequences in product language.
+_Avoid_: Crypto Ceremony, Surprise Encryption Failure, Hidden Sharing Boundary
+
+**Readable Team Access**:
+The encrypted-payload access state that lets a Team Member read Team Context payloads locally. Team Membership and Readable Team Access are separate facts: the backend can know a User is a Team Member before that User has an Unlock Method/Keybag record that can unwrap the Team Data Key. The UI should hide this distinction whenever access finishes immediately; if it cannot, use product copy such as "Finishing Team access" or "Waiting for Team access from the owner" rather than key-wrapping language.
+_Avoid_: Key Wrapping UI, Membership Means Readable, Crypto Status Jargon
+
+**Access Revocation**:
+The act of stopping future access to an Owner Scope. In Encrypted Payload Mode, revocation removes future membership/ACL and Keybag access, and can stop future sync for that User. It does not claim to erase data already decrypted or cached on that User's device. A Team may rotate its Team Data Key after revocation to protect future payloads, but key rotation is a stronger follow-up capability rather than the MVP definition of revocation.
+_Avoid_: Retroactive Forgetting, False Deletion Promise, Silent Future Access
+
+**Crypto-Erasure**:
+Making encrypted payloads unreadable by deleting or destroying the relevant Data Key and Keybag records. Crypto-Erasure can complement GDPR/account deletion, but it is not a substitute for explicit deletion or tombstoning of server sync objects where legal/product policy requires data removal. User exports must happen while the user has unlocked Data Keys, because the backend cannot read encrypted payloads in Encrypted Payload Mode.
+_Avoid_: Key Deletion as Full GDPR Compliance, Backend Export of Encrypted Content, Keep Everything Forever
+
+**Local-First Recall**:
+The normal Recall/search mode where the device searches locally materialized, decrypted JobDone data rather than asking the backend to inspect payload content. Local-First Recall can be implemented before Encrypted Payload Mode and becomes more important once payloads are encrypted. It should start with deterministic matching over confirmed Entry-centered facts and good Context Clues. Vector or semantic search can still be added later as a derived local index, encrypted sync artifact, or opt-in privacy-preserving compute path if property tests and dogfooding prove deterministic/context search is not enough. Backend Recall becomes an opt-in or secondary path for users/Teams that explicitly allow server-readable content or privacy-preserving compute.
+_Avoid_: Server Recall as Default, Backend Content Dependency, Online-Only Search
+
+**Private Relationship Graph**:
+The encrypted graph of how Entries relate to Contacts, Locations, Work Contexts, Backlog Items, and other Context Clues. In Encrypted Payload Mode, these relationships should normally live inside encrypted payloads or locally derived indexes, not backend-readable relationship rows. Opaque IDs may hide names but still leak repeated use and intent patterns, so backend restore should use coarse Sync Partition metadata rather than asking for everything linked to a specific hidden Contact or Location. Server-readable relationship indexes are opt-in features, not the default.
+_Avoid_: Backend-Readable Context Links, Graph Leakage, Search-by-Hidden-ID
+
+**Recall Scan**:
+The first Local-First Recall implementation strategy: load confirmed local Entries and their linked Contacts, Locations, Work Contexts, and time facts from IndexedDB, build candidate text in memory, then score deterministically. A derived local search index can be added later as a rebuildable cache if dogfooding or property tests show on-the-fly scanning is too slow.
+_Avoid_: Premature Search Index, Stale Index as Source of Truth, Backend Search Dependency
 
 **Work Context**:
 A Team-configured Entry structure dimension that captures what the work belongs to for that Team, beyond global Location, Contact, and Tags. Examples include Backlog Item, Machine, Vehicle, Asset, Project, or another Team-specific operational object. Work Context should use Team language and settings, not product-specific words such as chore.
@@ -468,6 +524,19 @@ _Avoid_: Search bar, Input field, Record button
 - A **Link** is attached to a Capture or Entry; fetching full page content is out of scope for MVP
 - Original user-attached **Photos** are required parts of their Entry; derived artifacts such as thumbnails, OCR text, labels, and embeddings are optional
 - Local IndexedDB is the source of truth for the current device experience; Supabase is a sync replica for cross-device continuity
+- Local Replica follows a Privacy-First Sync Protocol. Supabase/Postgres is the MVP implementation; protocol concepts such as Client IDs, Sync Intents, Server T, Sync Partitions, encrypted payloads, Keybags, owner access, and coverage reporting should not depend on Supabase table semantics.
+- Encrypted Payload Mode is the intended default for privacy-sensitive Local Replica payloads before JobDone has real users. Server-readable payloads should be opt-in for features that genuinely need backend content access.
+- Encrypted Payload Mode uses one Data Key per Owner Scope, wrapped through Keybag records for each authorized user/device/credential. Team sharing grants access to the Team Data Key rather than re-encrypting every Team payload.
+- Account authentication and encrypted-data unlock are separate. Authentication downloads encrypted blobs and Keybag metadata; an Unlock Method unwraps Data Keys locally. Passkey/WebAuthn PRF is preferred where available, a user-held Recovery Key is the fallback, and there is no server recovery backdoor. This design should not depend on any one authentication mechanism such as magic links, OAuth, or passkeys.
+- Encrypted Payload Mode should aim for Frictionless Encryption: users need clear context/sharing cues, not crypto concepts, during normal capture, recall, sync, or Team work.
+- Team Membership and Readable Team Access are separate in Encrypted Payload Mode. The UI should hide that distinction when possible; if key access cannot finish immediately, use product-language status such as "Finishing Team access" or "Waiting for Team access from the owner."
+- Access Revocation stops future Team sync/unlock access and may be followed by Team Data Key rotation for future payloads. It should not claim to erase data already decrypted or cached on a removed member's device.
+- GDPR/account deletion should combine explicit deletion or tombstoning with Crypto-Erasure where appropriate. Personal account deletion removes the User Owner Scope's server data/key access and clears local data; leaving a Team does not delete Team data. Exports require local unlock because the backend cannot read encrypted payloads.
+- Local-First Recall is the target default for Recall/search. It can be implemented before Encrypted Payload Mode and should search locally materialized data on the device; backend Recall becomes opt-in or secondary when server-readable content is explicitly allowed. Local-first does not rule out future vector search; vectors are derived search aids, not the source of truth.
+- Context Clue links belong to the Private Relationship Graph by default. The backend should not need readable `entryContact`, `entryLocation`, or `entryWorkContext` rows to support encrypted Recall; it should restore coarse owner/collection/time partitions and let the device rebuild graph/search state locally.
+- Sync Partitions are the default cold-restore shape for encrypted data: coarse Owner Scope, collection, Server T range, time bucket, payload kind/size, and tombstone metadata are readable; hidden Context Clue relationships stay encrypted/local unless explicitly opted in.
+- The first Local-First Recall implementation should use a Recall Scan rather than a persisted search index. Add a derived local search index later only when data volume or profiling proves the need.
+- The user's default personal surface can be described as a Private Context in UX, but it remains the personal User Owner Scope in storage. A real Team Context is created only when collaboration/team settings are needed.
 - The PWA caches the app shell and static assets for offline opening; API responses are not the source of truth
 - Foreground app-open retry is the canonical sync mechanism; browser Background Sync is only an optional optimization
 - Personal Timeline sync and Team queue refresh are separate freshness loops. Personal Timeline, Contact, Location, and Query sync runs for local-first personal data; Team Review and My Work refresh server-backed Team queues when the user enters or refocuses Team surfaces. Later push notifications can improve this, but they should be opt-in and are not required for correctness.
