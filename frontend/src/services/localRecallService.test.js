@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { recallLocalEntries } from './localRecallService.js';
+import {
+  recallCoverageFromReplicaState,
+  recallLocalEntries,
+  recallLocalEntriesWithCoverage,
+} from './localRecallService.js';
 
 test('local recall searches confirmed local entries without backend auth', () => {
   const results = recallLocalEntries('tap repair', [
@@ -62,4 +66,43 @@ test('local recall ranks exact phrase before token overlap', () => {
   ]);
 
   assert.deepEqual(results.map(entry => entry.id), ['entry-exact', 'entry-token-overlap']);
+});
+
+test('local recall searches durable Entry text', () => {
+  const results = recallLocalEntries('invoice pump', [
+    {
+      id: 'entry-text',
+      status: 'confirmed',
+      text: 'Invoice sent for pump replacement',
+      createdAt: '2026-06-05T09:00:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(results.map(entry => entry.id), ['entry-text']);
+});
+
+test('local recall returns complete coverage by default', () => {
+  const result = recallLocalEntriesWithCoverage('tap', [
+    {
+      id: 'entry-1',
+      status: 'confirmed',
+      text: 'Tap repair done',
+      createdAt: '2026-06-05T09:00:00.000Z',
+    },
+  ]);
+
+  assert.equal(result.coverage.status, 'complete');
+  assert.equal(result.coverage.message, '');
+  assert.deepEqual(result.entries.map(entry => entry.id), ['entry-1']);
+});
+
+test('local recall exposes partial restoring coverage', () => {
+  const coverage = recallCoverageFromReplicaState({
+    lastPulledT: 7,
+    lastKnownServerT: 9,
+  });
+  const result = recallLocalEntriesWithCoverage('tap', [], { coverage });
+
+  assert.equal(result.coverage.status, 'partialRestoring');
+  assert.match(result.coverage.message, /older history/i);
 });

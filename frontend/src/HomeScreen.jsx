@@ -9,7 +9,7 @@ import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
 import { captureContextService } from './services/captureContextService';
-import { recallLocalEntries } from './services/localRecallService';
+import { recallCoverageFromReplicaState, recallLocalEntriesWithCoverage } from './services/localRecallService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -323,6 +323,7 @@ export function HomeScreen({
   // Query/Recall state
   const [activeQuery, setActiveQuery] = useState(null);
   const [queryResults, setQueryResults] = useState(null);
+  const [queryCoverage, setQueryCoverage] = useState(null);
   const [isRecalling, setIsRecalling] = useState(false);
   const [queryInputText, setQueryInputText] = useState('');
 
@@ -1775,15 +1776,20 @@ export function HomeScreen({
     }
     setError(null);
 
-    const publishResults = async (results) => {
+    const publishResults = async (results, coverage = null) => {
       setActiveQuery(trimmedText);
       setQueryResults(results);
+      setQueryCoverage(coverage);
       await queryHistoryService.add(trimmedText);
       setRecentQueries(await queryHistoryService.getRecent());
     };
 
     const runLocalRecall = async () => {
-      await publishResults(recallLocalEntries(trimmedText, entries));
+      const coverage = user
+        ? recallCoverageFromReplicaState(await dbService.getLocalReplicaState())
+        : null;
+      const result = recallLocalEntriesWithCoverage(trimmedText, entries, { coverage });
+      await publishResults(result.entries, result.coverage);
     };
 
     setIsRecalling(true);
@@ -1811,7 +1817,7 @@ export function HomeScreen({
           syncStatus: result.syncStatus || localEntry.syncStatus,
         };
       });
-      await publishResults(enrichedResults);
+      await publishResults(enrichedResults, { status: 'complete', message: '' });
     } catch (err) {
       if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
         await runLocalRecall();
@@ -2029,6 +2035,7 @@ export function HomeScreen({
             onClick={() => {
               setActiveQuery(null);
               setQueryResults(null);
+              setQueryCoverage(null);
             }}
             className="shrink-0 w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 transition"
             title="Back to timeline"
@@ -3257,6 +3264,11 @@ export function HomeScreen({
             <p className="text-sm text-gray-500 mb-4">
               Showing results for: <span className="font-medium text-gray-900">{activeQuery}</span>
             </p>
+            {queryCoverage?.status && queryCoverage.status !== 'complete' && (
+              <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {queryCoverage.message || 'Search is still catching up.'}
+              </p>
+            )}
             {queryResults === null ? (
               <div className="py-12 text-center text-gray-400">
                 <p className="text-sm">Searching...</p>

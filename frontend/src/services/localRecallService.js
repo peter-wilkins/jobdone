@@ -43,6 +43,7 @@ function clueText(values = [], keys = []) {
 
 function entrySearchText(entry = {}) {
   return [
+    entry.text,
     entry.summary,
     entry.transcript,
     clueText(entry.locations, ['displayName', 'placeText', 'addressText']),
@@ -74,7 +75,38 @@ function scoreEntry(query, entry) {
   return score;
 }
 
-export function recallLocalEntries(query, entries = [], limit = 25) {
+const COVERAGE_STATUSES = new Set(['complete', 'partialRestoring', 'partialFiltered']);
+
+function defaultCoverageMessage(status) {
+  if (status === 'partialRestoring') return 'Older history is still restoring. These results may not include everything yet.';
+  if (status === 'partialFiltered') return 'Some teams or history ranges are filtered out of this search.';
+  return '';
+}
+
+export function normalizeRecallCoverage(coverage = {}) {
+  const status = COVERAGE_STATUSES.has(coverage?.status) ? coverage.status : 'complete';
+  return {
+    status,
+    reason: coverage?.reason || null,
+    message: coverage?.message ?? defaultCoverageMessage(status),
+    missingPartitions: Array.isArray(coverage?.missingPartitions) ? coverage.missingPartitions : [],
+  };
+}
+
+export function recallCoverageFromReplicaState(state = {}) {
+  const lastPulledT = Number(state?.lastPulledT || 0);
+  const lastKnownServerT = Number(state?.lastKnownServerT || lastPulledT);
+  if (lastKnownServerT > lastPulledT) {
+    return normalizeRecallCoverage({
+      status: 'partialRestoring',
+      reason: 'localReplicaBehindServer',
+      missingPartitions: [{ sinceT: lastPulledT, toT: lastKnownServerT }],
+    });
+  }
+  return normalizeRecallCoverage({ status: 'complete' });
+}
+
+function rankedLocalEntries(query, entries = [], limit = 25) {
   return (Array.isArray(entries) ? entries : [])
     .map((entry, index) => ({ entry, index, score: scoreEntry(query, entry) }))
     .filter(candidate => candidate.score > 0)
@@ -89,4 +121,16 @@ export function recallLocalEntries(query, entries = [], limit = 25) {
       ...candidate.entry,
       syncStatus: candidate.entry.syncStatus || 'local',
     }));
+}
+
+export function recallLocalEntriesWithCoverage(query, entries = [], options = {}) {
+  const limit = Number.isFinite(options.limit) ? options.limit : 25;
+  return {
+    entries: rankedLocalEntries(query, entries, limit),
+    coverage: normalizeRecallCoverage(options.coverage),
+  };
+}
+
+export function recallLocalEntries(query, entries = [], limit = 25) {
+  return rankedLocalEntries(query, entries, limit);
 }
