@@ -370,7 +370,16 @@ async function teamsForWorkEmail(db, userEmail) {
   const email = normalizedEmail(userEmail);
   if (!email) return [];
   const { data, error } = await db.query(
-    `select t.*
+    `select
+        t.*,
+        tm.role as member_role,
+        exists (
+          select 1
+            from ${db.schema}.team_invites ti
+           where ti.team_id = tm.team_id
+             and ti.normalized_email = tm.normalized_email
+             and ti.status = 'accepted'
+        ) as joined_by_invite
        from ${db.schema}.team_members tm
        join ${db.schema}.teams t on t.id = tm.team_id
       where tm.normalized_email = $1
@@ -379,6 +388,50 @@ async function teamsForWorkEmail(db, userEmail) {
   );
   if (error) throw error;
   return data || [];
+}
+
+function canCreateBacklogItemsForTeam(team = {}) {
+  const isOwner = team.member_role === 'owner' && !team.joined_by_invite;
+  return Boolean(isOwner || team.workers_can_create_backlog_items);
+}
+
+async function requireBacklogCreateTeam(db, userEmail, selectedTeamId = null) {
+  const email = validateEmail(userEmail);
+  if (!selectedTeamId) {
+    return await requireOwnedTeam(db, email, null);
+  }
+
+  const { data, error } = await db.query(
+    `select
+        t.*,
+        tm.role as member_role,
+        exists (
+          select 1
+            from ${db.schema}.team_invites ti
+           where ti.team_id = tm.team_id
+             and ti.normalized_email = tm.normalized_email
+             and ti.status = 'accepted'
+        ) as joined_by_invite
+       from ${db.schema}.team_members tm
+       join ${db.schema}.teams t on t.id = tm.team_id
+      where tm.normalized_email = $1
+        and tm.team_id = $2
+      limit 1`,
+    [email, selectedTeamId]
+  );
+  if (error) throw error;
+  const team = (data || [])[0] || null;
+  if (!team) {
+    const notFound = new Error('Team not found.');
+    notFound.statusCode = 404;
+    throw notFound;
+  }
+  if (!canCreateBacklogItemsForTeam(team)) {
+    const forbidden = new Error('This Team only allows the Team Owner to plan Backlog work.');
+    forbidden.statusCode = 403;
+    throw forbidden;
+  }
+  return team;
 }
 
 async function pendingInvitesForTeam(db, teamId, appBaseUrl = '') {
@@ -590,6 +643,9 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = null, userEmail 
   return {
     team: visibleTeams.length === 1 ? presentTeam(visibleTeams[0]) : null,
     teams: visibleTeams.map(presentTeam),
+    teamAccess: {
+      canCreateBacklogItems: visibleTeams.length === 1 && canCreateBacklogItemsForTeam(visibleTeams[0]),
+    },
     inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId, teamForRow(row))),
     openBacklogItems: (rows || []).filter(row => row.status === 'open').map(row => presentBacklogItem(row, teamForRow(row))),
     approvedItems: approvedRows.slice(0, 20).map(row => withApprovalRequest(row, approvalByBacklogId, teamForRow(row))),
@@ -889,14 +945,14 @@ export async function acceptTeamInvite(token, { db = jobdoneDb, userEmail } = {}
   };
 }
 
-export async function createBacklogItem(input, { db = jobdoneDb, ownerEmail, teamId: selectedTeamId = null } = {}) {
+export async function createBacklogItem(input, { db = jobdoneDb, userEmail = null, ownerEmail = null, teamId: selectedTeamId = null } = {}) {
   if (!db) {
     const error = new Error('Team database not configured');
     error.statusCode = 503;
     throw error;
   }
-  const ownedTeam = await requireOwnedTeam(db, ownerEmail, selectedTeamId);
-  const teamId = ownedTeam.id;
+  const team = await requireBacklogCreateTeam(db, userEmail || ownerEmail, selectedTeamId);
+  const teamId = team.id;
   const values = validateBacklogItemInput(input);
   const { data, error } = await db
     .from('backlog_items')
@@ -904,7 +960,7 @@ export async function createBacklogItem(input, { db = jobdoneDb, ownerEmail, tea
     .select('*')
     .single();
   if (error) throw error;
-  return presentBacklogItem(data);
+  return presentBacklogItem(data, team);
 }
 
 export async function createAndClaimBacklogItem(input, { db = jobdoneDb, userEmail, teamId: selectedTeamId = null } = {}) {

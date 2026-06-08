@@ -121,7 +121,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await mustAuth(request, reply);
       if (!user) return reply;
-      const backlogItem = await createItem(request.body || {}, { ownerEmail: user.email, teamId: teamIdFromRequest(request) });
+      const backlogItem = await createItem(request.body || {}, { userEmail: user.email, teamId: teamIdFromRequest(request) });
       return reply.status(201).send({ backlogItem });
     } catch (error) {
       return errorReply(reply, error);

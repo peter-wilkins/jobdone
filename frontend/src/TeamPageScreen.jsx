@@ -6,6 +6,11 @@ import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
 const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
+const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
+
+function pointsOptions() {
+  return Array.from({ length: 10 }, (_, index) => index + 1);
+}
 
 function approvalStatusText(status) {
   if (status === 'needs_more_evidence') return 'Needs more evidence';
@@ -71,6 +76,11 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [approvedItems, setApprovedItems] = useState([]);
   const [activeApprovalRequests, setActiveApprovalRequests] = useState([]);
   const [recentEntries, setRecentEntries] = useState([]);
+  const [teamAccess, setTeamAccess] = useState({ canCreateBacklogItems: false });
+  const [isAddingBacklog, setIsAddingBacklog] = useState(false);
+  const [backlogForm, setBacklogForm] = useState(EMPTY_BACKLOG_FORM);
+  const [isSavingBacklog, setIsSavingBacklog] = useState(false);
+  const [backlogError, setBacklogError] = useState(null);
   const [busyItemId, setBusyItemId] = useState(null);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [claimErrors, setClaimErrors] = useState({});
@@ -105,6 +115,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       const nextTeam = workState.team || (workState.teams || []).find(candidate => candidate.id === teamId) || null;
       const fetchedOpenItems = workState.openBacklogItems || [];
       setTeam(nextTeam);
+      setTeamAccess(workState.teamAccess || { canCreateBacklogItems: false });
       setInProgressItems(workState.inProgressItems || []);
       setOpenBacklogItems(previousOpenItems => {
         const fetchedIds = new Set(fetchedOpenItems.map(item => item.id));
@@ -167,6 +178,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
 
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
+  const canCreateBacklogItems = Boolean(teamAccess?.canCreateBacklogItems);
   const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
 
   const editTeam = () => {
@@ -228,6 +240,27 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       setError(err.message || 'Could not update Approval Request');
     } finally {
       setBusyApprovalId(null);
+    }
+  };
+
+  const saveBacklogItem = async (event) => {
+    event.preventDefault();
+    if (!team?.id) return;
+    setIsSavingBacklog(true);
+    setBacklogError(null);
+    try {
+      await apiService.createTeamBacklogItem({
+        teamId: team.id,
+        description: backlogForm.description,
+        points: pointsEnabled ? backlogForm.points : null,
+      });
+      setBacklogForm(EMPTY_BACKLOG_FORM);
+      setIsAddingBacklog(false);
+      await loadTeamState({ showLoading: false });
+    } catch (err) {
+      setBacklogError(err.message || 'Could not add Backlog Item');
+    } finally {
+      setIsSavingBacklog(false);
     }
   };
 
@@ -325,10 +358,79 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
             </section>
 
             <section>
-              <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
-                <h2 className="text-sm font-semibold text-gray-900">Open Backlog</h2>
-                <span className="text-xs text-gray-400">{openBacklogItems.length}</span>
+              <div className="flex items-center justify-between gap-3 border-b border-gray-200 pb-2">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <h2 className="text-sm font-semibold text-gray-900">Open Backlog</h2>
+                  <span className="text-xs text-gray-400">{openBacklogItems.length}</span>
+                </div>
+                {canCreateBacklogItems && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingBacklog(open => !open);
+                      setBacklogError(null);
+                    }}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-300 text-lg leading-none text-gray-700 hover:bg-gray-50"
+                    title="Add Backlog Item"
+                    aria-label="Add Backlog Item"
+                  >
+                    +
+                  </button>
+                )}
               </div>
+              {isAddingBacklog && (
+                <form onSubmit={saveBacklogItem} className="mt-3 rounded border border-gray-200 px-3 py-3 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                      Backlog Item
+                    </label>
+                    <textarea
+                      value={backlogForm.description}
+                      onChange={(event) => setBacklogForm(prev => ({ ...prev, description: event.target.value }))}
+                      rows={3}
+                      className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                      placeholder={`What should ${team?.name || 'this Team'} do?`}
+                    />
+                    {backlogError && (
+                      <p className="mt-2 text-xs font-medium text-red-700">{backlogError}</p>
+                    )}
+                  </div>
+                  {pointsEnabled && (
+                    <label className="block">
+                      <span className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Points</span>
+                      <select
+                        value={backlogForm.points}
+                        onChange={(event) => setBacklogForm(prev => ({ ...prev, points: Number(event.target.value) }))}
+                        className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+                      >
+                        {pointsOptions().map(points => (
+                          <option key={points} value={points}>{points}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBacklogForm(EMPTY_BACKLOG_FORM);
+                        setBacklogError(null);
+                        setIsAddingBacklog(false);
+                      }}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingBacklog || !backlogForm.description.trim()}
+                      className="px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {isSavingBacklog ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
+                </form>
+              )}
               {openBacklogItems.length === 0 ? (
                 <p className="py-5 text-sm text-gray-400">No open Backlog Items.</p>
               ) : (

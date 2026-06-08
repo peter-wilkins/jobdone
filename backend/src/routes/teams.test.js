@@ -287,7 +287,7 @@ describe('Team setup routes', () => {
     const app = await buildApp({
       createBacklogItem: async (input, context) => {
         savedInput = input;
-        assert.deepEqual(context, { ownerEmail: 'owner@example.com', teamId: null });
+        assert.deepEqual(context, { userEmail: 'owner@example.com', teamId: null });
         return { id: 'item-1', description: input.description.trim(), points: input.points, status: 'open' };
       },
     });

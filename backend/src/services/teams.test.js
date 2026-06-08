@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getMyWorkState, presentTeamInvite } from './teams.js';
+import { createBacklogItem, getMyWorkState, presentTeamInvite } from './teams.js';
 
 test('team invite default URL uses canonical production app', () => {
   const previousFrontendUrl = process.env.FRONTEND_URL;
@@ -66,4 +66,81 @@ test('Team Work state filters signed-in work to the selected Team', async () => 
   assert.deepEqual(backlogTeamFilter, ['team-2']);
   assert.equal(state.team.id, 'team-2');
   assert.deepEqual(state.openBacklogItems.map(item => item.description), ['Beta job']);
+});
+
+function createBacklogDb({ team, queryError = null } = {}) {
+  let insertedRow = null;
+  return {
+    schema: 'jobdone',
+    insertedRows: () => insertedRow,
+    query: async () => ({ data: team ? [team] : [], error: queryError }),
+    from: (table) => {
+      assert.equal(table, 'backlog_items');
+      const chain = {
+        insert: (rows) => {
+          insertedRow = rows[0];
+          return chain;
+        },
+        select: () => chain,
+        single: async () => ({
+          data: {
+            id: 'item-1',
+            created_at: '2026-01-01T00:00:00Z',
+            updated_at: insertedRow.updated_at,
+            ...insertedRow,
+          },
+          error: null,
+        }),
+      };
+      return chain;
+    },
+  };
+}
+
+test('worker with Team permission can create an open Backlog Item', async () => {
+  const db = createBacklogDb({
+    team: {
+      id: 'team-1',
+      name: 'High Trust Team',
+      template: 'high_trust',
+      points_enabled: false,
+      approval_mode: 'auto',
+      workers_can_create_backlog_items: true,
+      member_role: 'worker',
+      joined_by_invite: true,
+    },
+  });
+
+  const item = await createBacklogItem(
+    { description: '  Add mulch  ', points: null },
+    { db, userEmail: 'worker@example.com', teamId: 'team-1' },
+  );
+
+  assert.equal(item.description, 'Add mulch');
+  assert.equal(item.status, 'open');
+  assert.equal(item.team.name, 'High Trust Team');
+  assert.equal(db.insertedRows().team_id, 'team-1');
+});
+
+test('worker without Team permission cannot create an open Backlog Item', async () => {
+  const db = createBacklogDb({
+    team: {
+      id: 'team-1',
+      name: 'Family Team',
+      template: 'family',
+      points_enabled: true,
+      approval_mode: 'manual',
+      workers_can_create_backlog_items: false,
+      member_role: 'worker',
+      joined_by_invite: true,
+    },
+  });
+
+  await assert.rejects(
+    () => createBacklogItem(
+      { description: 'Add secret item', points: 3 },
+      { db, userEmail: 'worker@example.com', teamId: 'team-1' },
+    ),
+    /only allows the Team Owner/,
+  );
 });
