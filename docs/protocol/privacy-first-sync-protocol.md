@@ -173,6 +173,22 @@ Optional/opt-in:
 - server-side AI features
 - server-side search indexes
 - depersonalised compute jobs
+- server-readable Team Recall for large self-hosted or enterprise-controlled teams
+
+## E2EE Design Lessons
+
+The protocol should steal proven ideas from existing encrypted sync systems without copying their whole product shape:
+
+- Scope-first encryption: one Data Key per owner scope, with sharing implemented by granting key access rather than re-encrypting every object.
+- Encrypted type or partition tokens can help fetch coarse buckets without revealing plaintext names, but they still leak equality and should not represent contacts, locations, tasks, or private graph edges by default.
+- Keep a global correctness cursor such as Server T, but allow scoped/partition coverage so restore can be efficient.
+- Treat coverage as product-critical: local search must know whether it has all searchable data before returning an empty result.
+- Keep the private relationship graph encrypted/local by default. Opaque IDs are not enough because repeated IDs leak usage patterns.
+- Treat group key epochs, key rotation, forward secrecy, and post-compromise recovery as serious later design work. Use established cryptographic standards and libraries rather than inventing crypto.
+- Be honest about revocation: it stops future access, but it cannot erase data already decrypted on another device.
+- Keep auth and encrypted-data unlock separate so the protocol is not locked to passwords, magic links, OAuth, or passkeys.
+- Envelope every encrypted payload with boring migration metadata: `schemaVersion`, `codec`, `encryptionMode`, `keyId`, `algorithm`, `nonce`, and `payloadHash`.
+- Local-first does not forbid server-readable modes, but they must be explicit opt-ins.
 
 ## Coverage Rules
 
@@ -183,6 +199,8 @@ Local queries should expose coverage state:
 - `partialFiltered`: user/team/query settings intentionally excluded some partitions.
 
 The important failure to avoid is false completeness: returning "no results" when the local device has not restored enough data to know.
+
+Large Team datasets are the most likely case where complete local restore/search may become too heavy for ordinary devices. The later escape hatch is not silent backend search over encrypted user data. It is an explicit Server-Readable Team Recall mode where a Team chooses self-hosted or enterprise-controlled readable storage/indexing so central Recall can operate over that Team's payloads.
 
 ## Implementation Independence
 
@@ -207,4 +225,3 @@ The protocol boundary is not SQL. It is Client IDs, Sync Intents, Server T, Sync
 ## Research Pointers
 
 Close prior art exists. Any public write-up should be explicit that this is a small protocol shape, not a world-first claim. See [prior-art-survey.md](./prior-art-survey.md).
-
