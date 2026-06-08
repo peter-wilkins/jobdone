@@ -8,6 +8,7 @@ import { LoginScreen } from './LoginScreen';
 import { ShareTargetScreen } from './ShareTargetScreen';
 import { TeamSetupScreen } from './TeamSetupScreen';
 import { TeamReviewScreen } from './TeamReviewScreen';
+import { TeamPageScreen } from './TeamPageScreen';
 import { MyWorkScreen } from './MyWorkScreen';
 import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
@@ -24,6 +25,7 @@ import {
   API_ERROR_DETAIL_EVENT,
   setApiErrorDetailsEnabled,
 } from './services/requestDiagnosticsService';
+import { mergeReadableTeams, teamIdFromScreen } from './services/teamNavigationService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -31,6 +33,7 @@ function screenFromLocation() {
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
+  if (hash.startsWith('team/')) return hash;
   return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
 }
 
@@ -50,6 +53,7 @@ function App() {
   const [syncNotice, setSyncNotice] = useState(null);
   const [apiDebugDetail, setApiDebugDetail] = useState(null);
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
+  const [readableTeams, setReadableTeams] = useState([]);
 
   function applySyncResultNotice(result) {
     if (result?.ok) {
@@ -95,6 +99,30 @@ function App() {
     const enabled = debugApiDetailsEnabledForUser(user);
     setApiErrorDetailsEnabled(enabled);
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      queueMicrotask(() => {
+        if (!cancelled) setReadableTeams([]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    apiService.getTeamSetupState()
+      .then(state => {
+        if (!cancelled) {
+          setReadableTeams(mergeReadableTeams(state.ownedTeams || [], state.memberTeams || []));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReadableTeams([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey, screen, user]);
 
   useEffect(() => {
     const onApiErrorDetail = (event) => {
@@ -172,9 +200,11 @@ function App() {
     if (newScreen === 'home') {
       setRecordRequestId(0);
     }
-    if (newScreen !== 'home' && screen === 'home') {
-      // Push state when leaving home
-      window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
+    if (newScreen !== 'home') {
+      const targetHash = `#${newScreen}`;
+      if (window.location.hash !== targetHash) {
+        window.history.pushState({ screen: newScreen }, '', targetHash);
+      }
     } else if (newScreen === 'home' && screen !== 'home') {
       // Going back to home - replace state
       window.history.replaceState({}, '', '/');
@@ -292,7 +322,7 @@ function App() {
   ) : null;
   const globalMenu = screen === 'home'
     ? null
-    : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} />;
+    : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} teams={readableTeams} />;
 
   if (screen === 'feedback') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
@@ -330,6 +360,10 @@ function App() {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
+  if (teamIdFromScreen(screen)) {
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamPageScreen teamId={teamIdFromScreen(screen)} onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+  }
+
   if (screen === 'my-work' || screen === 'team-work') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
   }
@@ -351,6 +385,7 @@ function App() {
         recordRequestId={recordRequestId}
         onRecordRequestHandled={handleRecordRequestHandled}
         onSyncResult={applySyncResultNotice}
+        readableTeams={readableTeams}
       />
     </>
   );

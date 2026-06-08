@@ -209,6 +209,32 @@ test('recall rejects empty queries before fetch', async () => {
   }
 });
 
+test('Team Work state requests selected Team ID', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return new Response(JSON.stringify({
+      team: { id: 'team-2', name: 'Foo Team' },
+      teams: [{ id: 'team-2', name: 'Foo Team' }],
+      inProgressItems: [],
+      openBacklogItems: [],
+      approvedItems: [],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const state = await new APIService().getTeamWorkState('team-2');
+    assert.equal(state.team.id, 'team-2');
+    assert.match(requestedUrl, /\/api\/teams\/work\?team_id=team-2$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('recall failed responses preserve server status and message', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Authentication required' }), {

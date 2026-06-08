@@ -260,6 +260,7 @@ export function HomeScreen({
   recordRequestId = 0,
   onRecordRequestHandled,
   onSyncResult,
+  readableTeams = [],
 }) {
   const processingIdsRef = useRef(new Set());
   const handledRecordRequestRef = useRef(0);
@@ -3195,6 +3196,7 @@ export function HomeScreen({
           currentScreen="home"
           onNavigate={onNavigate}
           user={user}
+          teams={readableTeams}
         />
       </div>
 

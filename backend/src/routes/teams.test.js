@@ -216,6 +216,29 @@ describe('Team setup routes', () => {
     assert.deepEqual(JSON.parse(res.body).openBacklogItems, []);
   });
 
+  test('passes selected Team ID into Team Work route', async () => {
+    let workContext;
+    const app = await buildApp({
+      optionalAuth: async () => ({ email: 'worker@example.com' }),
+      getMyWorkState: async (context) => {
+        workContext = context;
+        return {
+          team: { id: context.teamId, name: 'Foo Team', template: 'high_trust', points_enabled: false },
+          teams: [{ id: context.teamId, name: 'Foo Team' }],
+          inProgressItems: [],
+          openBacklogItems: [{ id: 'open-1', team_id: context.teamId, status: 'open', description: 'Feed fish' }],
+          approvedItems: [],
+        };
+      },
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/api/teams/work?team_id=team-2' });
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(workContext, { userEmail: 'worker@example.com', teamId: 'team-2' });
+    assert.equal(JSON.parse(res.body).team.id, 'team-2');
+  });
+
   test('returns Team Review state for the authenticated owner', async () => {
     let reviewContext;
     const app = await buildApp({

@@ -577,6 +577,18 @@ export class APIService {
     return response.json();
   }
 
+  async getTeamWorkState(teamId) {
+    const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    const response = await apiFetch(`${API_BASE_URL}/api/teams/work${query}`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Team Work`);
+    }
+    return response.json();
+  }
+
   async createTeamBacklogItem({ teamId, description, points }) {
     const response = await apiFetch(`${API_BASE_URL}/api/teams/backlog-items`, {
       method: 'POST',

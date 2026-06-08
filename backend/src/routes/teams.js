@@ -101,7 +101,7 @@ export async function registerTeamRoutes(fastify, deps = {}) {
     try {
       const user = await maybeAuth(request, reply);
       if (reply.sent) return reply;
-      return await getWorkState({ userEmail: user?.email || null });
+      return await getWorkState({ userEmail: user?.email || null, teamId: teamIdFromRequest(request) });
     } catch (error) {
       return errorReply(reply, error);
     }

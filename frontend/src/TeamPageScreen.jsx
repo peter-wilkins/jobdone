@@ -1,16 +1,78 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
+import { selectTeamTimelineEntries } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
-export function MyWorkScreen({ onBack }) {
+const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
+
+function approvalStatusText(status) {
+  if (status === 'needs_more_evidence') return 'Needs more evidence';
+  if (status === 'submitted') return 'Submitted';
+  return status || 'Submitted';
+}
+
+function ReviewRequestRow({ request, busy, onDecision }) {
+  const item = request.backlog_item || {};
+  const isSubmitted = request.status === 'submitted';
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <p className="text-sm font-medium text-gray-900 leading-5">{item.description || 'Submitted work'}</p>
+      <p className="mt-1 text-xs text-gray-500">{approvalStatusText(request.status)}</p>
+      {request.evidence_text && (
+        <p className="mt-2 text-sm leading-5 text-gray-700">{request.evidence_text}</p>
+      )}
+      {isSubmitted ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDecision(request, 'needs_more_evidence')}
+            className="px-3 py-2 text-sm font-medium text-amber-800 border border-amber-200 rounded hover:bg-amber-50 disabled:opacity-50"
+          >
+            Needs more evidence
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onDecision(request, 'approved')}
+            className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+          >
+            Approve
+          </button>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-gray-400">Waiting for more evidence.</p>
+      )}
+    </div>
+  );
+}
+
+function entryText(entry) {
+  return entry?.text || entry?.transcript || entry?.summary || entry?.cleanedText || 'Entry';
+}
+
+function TimelineItem({ entry }) {
+  return (
+    <div className="py-3 border-b border-gray-100 last:border-b-0">
+      <p className="text-sm text-gray-800 leading-5 max-h-16 overflow-hidden">{entryText(entry)}</p>
+      <p className="mt-1 text-xs text-gray-400">
+        {entry.createdAt || entry.created_at || ''}
+      </p>
+    </div>
+  );
+}
+
+export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [team, setTeam] = useState(null);
   const [inProgressItems, setInProgressItems] = useState([]);
   const [openBacklogItems, setOpenBacklogItems] = useState([]);
   const [approvedItems, setApprovedItems] = useState([]);
+  const [activeApprovalRequests, setActiveApprovalRequests] = useState([]);
   const [recentEntries, setRecentEntries] = useState([]);
   const [busyItemId, setBusyItemId] = useState(null);
+  const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [claimErrors, setClaimErrors] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -18,7 +80,17 @@ export function MyWorkScreen({ onBack }) {
   const [staleError, setStaleError] = useState(null);
   const claimErrorsRef = useRef({});
 
-  const loadWorkState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
+  const loadRecentEntries = useCallback(async () => {
+    try {
+      const entries = await dbService.getEntries('confirmed');
+      setRecentEntries(entries.slice(0, 50));
+    } catch {
+      setRecentEntries([]);
+    }
+  }, []);
+
+  const loadTeamState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
+    if (!teamId) return;
     if (showLoading) {
       setIsLoading(true);
     } else if (showRefreshing) {
@@ -26,10 +98,14 @@ export function MyWorkScreen({ onBack }) {
     }
     setStaleError(null);
     try {
-      const state = await apiService.getMyWorkState();
-      const fetchedOpenItems = state.openBacklogItems || [];
-      setTeam(state.team || null);
-      setInProgressItems(state.inProgressItems || []);
+      const [workState, reviewState] = await Promise.all([
+        apiService.getTeamWorkState(teamId),
+        apiService.getTeamReviewState().catch(() => ({ activeApprovalRequests: [], ownedTeams: [] })),
+      ]);
+      const nextTeam = workState.team || (workState.teams || []).find(candidate => candidate.id === teamId) || null;
+      const fetchedOpenItems = workState.openBacklogItems || [];
+      setTeam(nextTeam);
+      setInProgressItems(workState.inProgressItems || []);
       setOpenBacklogItems(previousOpenItems => {
         const fetchedIds = new Set(fetchedOpenItems.map(item => item.id));
         const now = Date.now();
@@ -39,7 +115,8 @@ export function MyWorkScreen({ onBack }) {
         });
         return [...fetchedOpenItems, ...staleRaceItems];
       });
-      setApprovedItems(state.approvedItems || []);
+      setApprovedItems(workState.approvedItems || []);
+      setActiveApprovalRequests((reviewState.activeApprovalRequests || []).filter(request => request.team_id === teamId));
       setClaimErrors(errors => {
         const now = Date.now();
         const next = Object.fromEntries(Object.entries(errors).filter(([, claimError]) => claimError.expiresAt > now));
@@ -47,7 +124,7 @@ export function MyWorkScreen({ onBack }) {
         return next;
       });
     } catch (err) {
-      setStaleError(err.message || 'Could not refresh My Work');
+      setStaleError(err.message || 'Could not refresh Team');
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -55,27 +132,18 @@ export function MyWorkScreen({ onBack }) {
         setIsRefreshing(false);
       }
     }
-  }, []);
-
-  const loadRecentEntries = useCallback(async () => {
-    try {
-      const entries = await dbService.getEntries('confirmed');
-      setRecentEntries(entries.slice(0, 20));
-    } catch {
-      setRecentEntries([]);
-    }
-  }, []);
+  }, [teamId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadWorkState();
+    loadTeamState();
     loadRecentEntries();
-  }, [loadRecentEntries, loadWorkState]);
+  }, [loadRecentEntries, loadTeamState]);
 
   useEffect(() => {
     const refreshIfVisible = () => {
       if (document.visibilityState === 'visible') {
-        loadWorkState({ showLoading: false });
+        loadTeamState({ showLoading: false });
         loadRecentEntries();
       }
     };
@@ -85,20 +153,30 @@ export function MyWorkScreen({ onBack }) {
       window.removeEventListener('focus', refreshIfVisible);
       document.removeEventListener('visibilitychange', refreshIfVisible);
     };
-  }, [loadRecentEntries, loadWorkState]);
+  }, [loadRecentEntries, loadTeamState]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (document.visibilityState === 'visible') {
-        loadWorkState({ showLoading: false, showRefreshing: false });
+        loadTeamState({ showLoading: false, showRefreshing: false });
         loadRecentEntries();
       }
     }, 10000);
     return () => clearInterval(intervalId);
-  }, [loadRecentEntries, loadWorkState]);
+  }, [loadRecentEntries, loadTeamState]);
 
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
+  const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
+
+  const editTeam = () => {
+    try {
+      if (teamId) sessionStorage.setItem(TEAM_EDIT_SELECTED_TEAM_KEY, teamId);
+    } catch {
+      // Team Edit will fall back to the default Team.
+    }
+    onNavigate?.('team-setup');
+  };
 
   const claimItem = async (item) => {
     setBusyItemId(item.id);
@@ -111,7 +189,7 @@ export function MyWorkScreen({ onBack }) {
         claimErrorsRef.current = next;
         return next;
       });
-      await loadWorkState();
+      await loadTeamState();
     } catch (err) {
       const claimError = {
         message: err.message || 'Great news! Someone else just claimed this task.',
@@ -132,11 +210,24 @@ export function MyWorkScreen({ onBack }) {
     setError(null);
     try {
       await apiService.submitTeamBacklogItem(item.id, { evidence_text: evidenceText });
-      await loadWorkState();
+      await loadTeamState();
     } catch (err) {
       setError(err.message || 'Could not submit evidence');
     } finally {
       setBusyItemId(null);
+    }
+  };
+
+  const decideApproval = async (request, decision) => {
+    setBusyApprovalId(request.id);
+    setError(null);
+    try {
+      await apiService.decideTeamApprovalRequest(request.id, decision, teamId);
+      await loadTeamState({ showLoading: false });
+    } catch (err) {
+      setError(err.message || 'Could not update Approval Request');
+    } finally {
+      setBusyApprovalId(null);
     }
   };
 
@@ -153,10 +244,17 @@ export function MyWorkScreen({ onBack }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">My Work</h1>
-          <p className="text-xs text-gray-500">Backlog across your Teams</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Team Context</p>
+          <h1 className="truncate text-xl font-light text-gray-900 leading-6">{team?.name || 'Team'}</h1>
         </div>
+        <button
+          type="button"
+          onClick={editTeam}
+          className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+        >
+          Edit
+        </button>
       </div>
 
       {error && (
@@ -168,12 +266,12 @@ export function MyWorkScreen({ onBack }) {
       {(staleError || isRefreshing) && (
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
           <p className="min-w-0 flex-1 text-xs text-amber-800">
-            {isRefreshing ? 'Refreshing My Work...' : 'My Work may be out of date.'}
+            {isRefreshing ? 'Refreshing Team...' : 'Team may be out of date.'}
           </p>
           {!isRefreshing && (
             <button
               type="button"
-              onClick={() => loadWorkState({ showLoading: false })}
+              onClick={() => loadTeamState({ showLoading: false })}
               className="shrink-0 text-xs font-medium text-amber-900 hover:text-amber-700"
             >
               Retry
@@ -185,6 +283,23 @@ export function MyWorkScreen({ onBack }) {
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {isLoading ? (
           <div className="py-8 text-center text-sm text-gray-400">Loading...</div>
+        ) : !user ? (
+          <section className="py-8">
+            <h2 className="text-sm font-semibold text-gray-900">Log in to open this Team</h2>
+            <p className="mt-2 text-sm leading-5 text-gray-500">JobDone uses your email to find Teams you can read.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('login')}
+              className="mt-4 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800"
+            >
+              Log in
+            </button>
+          </section>
+        ) : !team ? (
+          <section className="py-8">
+            <h2 className="text-sm font-semibold text-gray-900">Team not found</h2>
+            <p className="mt-2 text-sm leading-5 text-gray-500">This Team is not available to this account.</p>
+          </section>
         ) : (
           <>
             <section>
@@ -193,7 +308,7 @@ export function MyWorkScreen({ onBack }) {
                 <span className="text-xs text-gray-400">{inProgressItems.length}</span>
               </div>
               {inProgressItems.length === 0 ? (
-                <p className="py-5 text-sm text-gray-400">Nothing claimed.</p>
+                <p className="py-5 text-sm text-gray-400">Nothing claimed in this Team.</p>
               ) : (
                 inProgressItems.map(item => (
                   <WorkItem
@@ -230,6 +345,23 @@ export function MyWorkScreen({ onBack }) {
               )}
             </section>
 
+            {activeApprovalRequests.length > 0 && (
+              <section>
+                <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
+                  <h2 className="text-sm font-semibold text-gray-900">Needs Review</h2>
+                  <span className="text-xs text-gray-400">{activeApprovalRequests.length}</span>
+                </div>
+                {activeApprovalRequests.map(request => (
+                  <ReviewRequestRow
+                    key={request.id}
+                    request={request}
+                    busy={busyApprovalId === request.id}
+                    onDecision={decideApproval}
+                  />
+                ))}
+              </section>
+            )}
+
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
                 <h2 className="text-sm font-semibold text-gray-900">
@@ -248,6 +380,20 @@ export function MyWorkScreen({ onBack }) {
                     item={item}
                     pointsEnabled={pointsEnabled}
                   />
+                ))
+              )}
+            </section>
+
+            <section>
+              <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
+                <h2 className="text-sm font-semibold text-gray-900">Team Timeline</h2>
+                <span className="text-xs text-gray-400">{teamTimelineEntries.length}</span>
+              </div>
+              {teamTimelineEntries.length === 0 ? (
+                <p className="py-5 text-sm text-gray-400">No confirmed entries linked to this Team yet.</p>
+              ) : (
+                teamTimelineEntries.map(entry => (
+                  <TimelineItem key={entry.id} entry={entry} />
                 ))
               )}
             </section>

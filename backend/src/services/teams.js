@@ -550,14 +550,16 @@ export function isBacklogItemClaimedByEmail(row = {}, userEmail = null) {
   return normalizedEmail(row.claimed_by_email) === email;
 }
 
-export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID, userEmail = null } = {}) {
-  if (!db) return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
+export async function getMyWorkState({ db = jobdoneDb, teamId = null, userEmail = null } = {}) {
+  if (!db) return { team: null, teams: [], inProgressItems: [], openBacklogItems: [], approvedItems: [] };
   const teams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
-  const visibleTeams = teams.length ? teams : [];
+  const visibleTeams = teamId
+    ? (teams || []).filter(team => team.id === teamId)
+    : (teams || []);
   const teamIds = visibleTeams.map(team => team.id);
   const teamByIdMap = new Map(visibleTeams.map(team => [team.id, team]));
   if (!teamIds.length) {
-    return { team: null, inProgressItems: [], openBacklogItems: [], approvedItems: [] };
+    return { team: null, teams: [], inProgressItems: [], openBacklogItems: [], approvedItems: [] };
   }
 
   const query = db
@@ -568,7 +570,7 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID,
   if (userEmail) {
     query.in('team_id', teamIds);
   } else {
-    query.eq('team_id', teamId);
+    query.eq('team_id', teamIds[0]);
   }
   const { data: rows, error } = await query;
   if (error) throw error;
@@ -582,7 +584,7 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = DOGFOOD_TEAM_ID,
     isBacklogItemClaimedByEmail(row, userEmail)
   );
   const requestBacklogIds = [...inProgressRows, ...approvedRows].map(row => row.id);
-  const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, userEmail ? teamIds : teamId, requestBacklogIds);
+  const approvalByBacklogId = await latestApprovalRequestsByBacklogId(db, userEmail ? teamIds : teamIds[0], requestBacklogIds);
   const teamForRow = row => teamByIdMap.get(row.team_id) || visibleTeams[0] || null;
 
   return {

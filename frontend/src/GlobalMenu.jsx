@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useOutsideDismiss } from './services/outsideDismissService';
+import { teamScreenId } from './services/teamNavigationService';
 
 const MENU_ITEMS = [
   { screen: 'home', label: 'Home' },
@@ -7,8 +8,9 @@ const MENU_ITEMS = [
   { screen: 'inbox', label: 'Inbox' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
-  { screen: 'team-review', label: 'Team' },
+  { screen: 'team-review', label: 'Reviews' },
   { screen: 'my-work', label: 'My Work' },
+  { screen: 'team-setup', label: 'Edit Teams' },
   { screen: 'feedback', label: 'Share idea' },
 ];
 
@@ -16,6 +18,7 @@ export function GlobalMenu({
   currentScreen,
   onNavigate,
   user,
+  teams = [],
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
@@ -39,11 +42,33 @@ export function GlobalMenu({
         <span className="w-5 h-px bg-current" />
       </button>
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+        <div className="absolute right-0 z-50 mt-2 w-56 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
           {user && (
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-xs text-gray-400">Signed in as</p>
               <p className="text-xs text-gray-700 truncate">{user.email}</p>
+            </div>
+          )}
+          {teams.length > 0 && (
+            <div className="border-b border-gray-100 py-1">
+              <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Teams</p>
+              {teams.map(team => {
+                const screen = teamScreenId(team.id);
+                return (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => goTo(screen)}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition ${
+                      currentScreen === screen
+                        ? 'bg-gray-100 text-gray-900 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="block truncate">{team.name || 'Team'}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
           {MENU_ITEMS.map(item => (
