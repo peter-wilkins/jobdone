@@ -5,7 +5,6 @@ import { selectTeamTimelineEntries } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
-const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
 const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
 
 function pointsOptions() {
@@ -183,12 +182,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
 
   const editTeam = () => {
-    try {
-      if (teamId) sessionStorage.setItem(TEAM_EDIT_SELECTED_TEAM_KEY, teamId);
-    } catch {
-      // Team form will fall back to its default state.
-    }
-    onNavigate?.('team-setup');
+    onNavigate?.(`team-setup?team_id=${encodeURIComponent(teamId)}`);
   };
 
   const claimItem = async (item) => {
@@ -286,7 +280,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           <button
             type="button"
             onClick={editTeam}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+            className="mr-12 shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
           >
             Edit
           </button>

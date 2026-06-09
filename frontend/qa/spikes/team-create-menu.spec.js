@@ -116,4 +116,11 @@ test('Create Team page updates burger Team links after create without reload', a
 
   await page.getByTitle('Menu').click();
   await expect(page.getByRole('button', { name: 'Garden Crew' })).toBeVisible();
+  await page.getByTitle('Menu').click();
+
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.locator('h1', { hasText: 'Edit Team' })).toBeVisible();
+  await page.getByTitle('Back').click();
+  await expect(page).toHaveURL(/#team\/team-new$/);
+  await expect(page.getByRole('heading', { name: 'Garden Crew' })).toBeVisible();
 });

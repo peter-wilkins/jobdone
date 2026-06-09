@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
 import { teamScreenId } from './services/teamNavigationService';
 
@@ -17,6 +17,13 @@ function pointsOptions() {
 }
 
 function consumeRequestedTeamId() {
+  try {
+    const [, query = ''] = window.location.hash.replace(/^#/, '').split('?');
+    const teamId = new URLSearchParams(query).get('team_id');
+    if (teamId) return teamId;
+  } catch {
+    // Fall through to legacy session storage handoff.
+  }
   try {
     const teamId = sessionStorage.getItem(TEAM_EDIT_SELECTED_TEAM_KEY);
     sessionStorage.removeItem(TEAM_EDIT_SELECTED_TEAM_KEY);
@@ -109,6 +116,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
   const [ownedTeams, setOwnedTeams] = useState([]);
   const [memberTeams, setMemberTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const returnTeamIdRef = useRef(null);
   const [isCreatingNewTeam, setIsCreatingNewTeam] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -165,6 +173,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
   useEffect(() => {
     // Initial screen load is the synchronization point for Team backlog state.
     const requestedTeamId = consumeRequestedTeamId();
+    returnTeamIdRef.current = requestedTeamId;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTeamState(requestedTeamId, { createMode: !requestedTeamId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,6 +187,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
   const startCreateTeam = () => {
     setTeam(DEFAULT_TEAM);
     setSelectedTeamId(null);
+    returnTeamIdRef.current = null;
     setIsCreatingNewTeam(true);
     setPendingTeamInvites([]);
     setTeamMembers([]);
@@ -185,6 +195,14 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
     resetForm();
     setError(null);
     setInviteError(null);
+  };
+
+  const goBack = () => {
+    if (returnTeamIdRef.current && !isCreatingNewTeam) {
+      onNavigate?.(teamScreenId(returnTeamIdRef.current));
+      return;
+    }
+    onBack?.();
   };
 
   const saveTeam = async (event) => {
@@ -357,7 +375,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
       <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-3">
         <button
           type="button"
-          onClick={onBack}
+          onClick={goBack}
           className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700"
           title="Back"
         >

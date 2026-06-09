@@ -205,20 +205,21 @@ function App() {
 
   // Navigate with history support
   const navigateTo = (newScreen) => {
-    diagnosticService.record('screen_open', { screen: newScreen, source: 'app_navigation' });
-    if (newScreen === 'home') {
+    const screenKey = String(newScreen || 'home').split('?')[0];
+    diagnosticService.record('screen_open', { screen: screenKey, source: 'app_navigation' });
+    if (screenKey === 'home') {
       setRecordRequestId(0);
     }
-    if (newScreen !== 'home') {
+    if (screenKey !== 'home') {
       const targetHash = `#${newScreen}`;
       if (window.location.hash !== targetHash) {
         window.history.pushState({ screen: newScreen }, '', targetHash);
       }
-    } else if (newScreen === 'home' && screen !== 'home') {
+    } else if (screenKey === 'home' && screen !== 'home') {
       // Going back to home - replace state
       window.history.replaceState({}, '', '/');
     }
-    setScreen(newScreen);
+    setScreen(screenKey);
   };
 
   const handleRecordRequestHandled = () => {
@@ -257,12 +258,12 @@ function App() {
   };
 
   const crashStatusBar = crashNotice ? (
-    <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white shadow-sm">
+    <div className="pointer-events-none fixed top-0 inset-x-0 z-50 bg-red-600 text-white shadow-sm">
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-3">
         <span className="text-sm font-medium flex-1">{crashNotice.message}</span>
         <button
           type="button"
-          className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
+          className="pointer-events-auto text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
           onClick={() => setCrashNotice(null)}
         >
           Dismiss
@@ -282,13 +283,13 @@ function App() {
   const activeNotice = authNotice || syncNoticeWithDebug || debugApiNotice;
   const activeDebugDetail = activeNotice?.debugDetail || null;
   const authStatusBar = activeNotice ? (
-    <div className={`fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>
+    <div className={`pointer-events-none fixed ${deploymentEnvironment ? 'top-7' : 'top-0'} inset-x-0 z-50 bg-red-600 text-white shadow-sm`}>
       <div className="max-w-3xl mx-auto px-4 py-2">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium flex-1">{activeNotice.message}</span>
           <button
             type="button"
-            className="text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
+            className="pointer-events-auto text-xs font-semibold uppercase tracking-wide text-white/90 hover:text-white"
             onClick={() => {
               setAuthNotice(null);
               setSyncNotice(null);
@@ -299,7 +300,7 @@ function App() {
           </button>
         </div>
         {activeDebugDetail && (
-          <details className="mt-2 rounded border border-white/30 bg-black/20 px-2 py-1 text-xs">
+          <details className="pointer-events-auto mt-2 rounded border border-white/30 bg-black/20 px-2 py-1 text-xs">
             <summary className="cursor-pointer font-semibold">Debug details</summary>
             <div className="mt-2 flex items-center gap-2">
               <button
