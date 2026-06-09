@@ -10,6 +10,7 @@ import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
 import { captureContextService } from './services/captureContextService';
 import { recallCoverageFromReplicaState, recallLocalEntriesWithCoverage } from './services/localRecallService';
+import { selectPrivateTimelineEntries } from './services/teamPageService';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -1785,45 +1786,22 @@ export function HomeScreen({
       setRecentQueries(await queryHistoryService.getRecent());
     };
 
-    const runLocalRecall = async () => {
+    const runPrivateTimelineRecall = async () => {
       const coverage = user
         ? recallCoverageFromReplicaState(await dbService.getLocalReplicaState())
         : null;
-      const result = recallLocalEntriesWithCoverage(trimmedText, entries, { coverage });
+      const result = recallLocalEntriesWithCoverage(trimmedText, selectPrivateTimelineEntries(entries), { coverage });
       await publishResults(result.entries, result.coverage);
     };
 
     setIsRecalling(true);
     try {
-      if (!user || isOffline()) {
-        await runLocalRecall();
-        return;
-      }
-
-      const results = await apiService.recall(trimmedText);
-      const localEntriesByRemoteId = new Map(
-        entries
-          .filter(entry => entry.remoteId)
-          .map(entry => [entry.remoteId, entry])
-      );
-      const enrichedResults = results.map(result => {
-        const localEntry = localEntriesByRemoteId.get(result.remoteId || result.id);
-        if (!localEntry) return result;
-
-        return {
-          ...result,
-          locations: result.locations || localEntry.locations,
-          contacts: result.contacts || localEntry.contacts,
-          tags: result.tags || localEntry.tags,
-          syncStatus: result.syncStatus || localEntry.syncStatus,
-        };
-      });
-      await publishResults(enrichedResults, { status: 'complete', message: '' });
+      await runPrivateTimelineRecall();
     } catch (err) {
       if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
-        await runLocalRecall();
+        await runPrivateTimelineRecall();
       } else if (err?.status === 401 || err?.status === 403) {
-        await runLocalRecall();
+        await runPrivateTimelineRecall();
       } else if (err?.status === 400) {
         setError(err?.message || 'Type a search query first.');
       } else {
@@ -2104,9 +2082,9 @@ export function HomeScreen({
               value={queryInputText}
               onChange={(event) => setQueryInputText(event.target.value)}
               onFocus={() => setQueryDropdownOpen(true)}
-              placeholder="Search your entries"
+              placeholder="Search private Timeline"
               className="h-9 w-full rounded-full border border-gray-200 bg-gray-50 pl-9 pr-12 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
-              aria-label="Search entries"
+              aria-label="Search private Timeline"
             />
             <button
               type="submit"
@@ -3277,7 +3255,8 @@ export function HomeScreen({
               </div>
             ) : queryResults.length === 0 ? (
               <div className="py-12 text-center text-gray-400">
-                <p className="text-sm">Nothing found — try rephrasing.</p>
+                <p className="text-sm">Nothing found in private Timeline.</p>
+                <p className="mt-2 text-xs leading-5 text-gray-400">Try the relevant Team, Contacts, or Locations page.</p>
               </div>
             ) : (
               <div className="space-y-3">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
-import { selectTeamTimelineEntries } from './services/teamPageService';
+import { searchTeamContext, selectTeamTimelineEntries } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
@@ -83,6 +83,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [busyItemId, setBusyItemId] = useState(null);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [claimErrors, setClaimErrors] = useState({});
+  const [teamSearchText, setTeamSearchText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -180,6 +181,19 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const canCreateBacklogItems = Boolean(teamAccess?.canCreateBacklogItems);
   const canEditTeam = Boolean(teamAccess?.canEditTeam);
   const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
+  const trimmedTeamSearchText = teamSearchText.trim();
+  const teamSearchResults = trimmedTeamSearchText
+    ? searchTeamContext({
+        query: trimmedTeamSearchText,
+        team,
+        teamId,
+        entries: recentEntries,
+        openBacklogItems,
+        inProgressItems,
+        approvedItems,
+        activeApprovalRequests,
+      })
+    : null;
 
   const editTeam = () => {
     onNavigate?.(`team-setup?team_id=${encodeURIComponent(teamId)}`);
@@ -259,6 +273,57 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
     }
   };
 
+  const renderTeamSearchResults = () => {
+    if (!teamSearchResults) return null;
+
+    return (
+      <section className="rounded border border-gray-200 px-3 py-3">
+        <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
+          <h2 className="text-sm font-semibold text-gray-900">Search Results</h2>
+          <span className="text-xs text-gray-400">{trimmedTeamSearchText}</span>
+        </div>
+        {!teamSearchResults.hasResults ? (
+          <div className="py-5 text-sm text-gray-400">
+            <p>No Team matches.</p>
+            <p className="mt-2 text-xs leading-5">Try Home for private notes, or Contacts/Locations for clues.</p>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-3">
+            {teamSearchResults.backlogItems.length > 0 && (
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Backlog</h3>
+                  <span className="text-xs text-gray-400">{teamSearchResults.backlogItems.length}</span>
+                </div>
+                <div>
+                  {teamSearchResults.backlogItems.map(item => (
+                    <div key={item.id} className="py-2 border-b border-gray-100 last:border-b-0">
+                      <p className="text-sm font-medium text-gray-900 leading-5">{item.description || item.title || 'Backlog Item'}</p>
+                      <p className="mt-1 text-xs text-gray-500">{item.status || 'backlog'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {teamSearchResults.entries.length > 0 && (
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Entries</h3>
+                  <span className="text-xs text-gray-400">{teamSearchResults.entries.length}</span>
+                </div>
+                <div>
+                  {teamSearchResults.entries.map(entry => (
+                    <TimelineItem key={entry.id} entry={entry} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <div className="border-b border-gray-200 px-4 py-3 flex items-center gap-3">
@@ -332,6 +397,19 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           </section>
         ) : (
           <>
+            <section>
+              <input
+                type="search"
+                value={teamSearchText}
+                onChange={(event) => setTeamSearchText(event.target.value)}
+                placeholder={`Search ${team?.name || 'this Team'}`}
+                aria-label="Search this Team"
+                className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+              />
+            </section>
+
+            {renderTeamSearchResults()}
+
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
                 <h2 className="text-sm font-semibold text-gray-900">Claimed / In Progress</h2>

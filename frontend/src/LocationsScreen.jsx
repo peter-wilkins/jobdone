@@ -405,6 +405,9 @@ export function LocationsScreen({ onBack, onRecord }) {
         ) : visibleLocations.length === 0 ? (
           <div className="py-12 text-center text-gray-400">
             <p className="text-sm">{query ? 'No matching locations' : 'No locations yet'}</p>
+            {query && (
+              <p className="mt-2 text-xs leading-5">Try Home or the relevant Team if you are looking for work history.</p>
+            )}
           </div>
         ) : (
           <div className="py-2">

@@ -268,6 +268,9 @@ export function ContactsScreen({ onBack, onRecord }) {
         ) : filteredContacts.length === 0 ? (
           <div className="py-12 text-center text-gray-400">
             <p className="text-sm">{query ? 'No matching contacts' : 'No contacts yet'}</p>
+            {query && (
+              <p className="mt-2 text-xs leading-5">Try Home or the relevant Team if you are looking for work history.</p>
+            )}
           </div>
         ) : (
           <div className="py-2">
