@@ -34,6 +34,25 @@ export function selectTeamTimelineEntries(entries = [], teamId = null, teamName 
   });
 }
 
+export function canLoadTeamPageState({ teamId = null, user = null } = {}) {
+  return Boolean(teamId && user?.id);
+}
+
+export function teamContextSnapshot(team = {}) {
+  const teamId = team?.id || null;
+  const teamName = String(team?.name || 'Team').trim();
+  if (!teamId) return null;
+  return {
+    id: `team:${teamId}`,
+    type: 'team',
+    label: teamName,
+    description: teamName,
+    teamId,
+    teamName,
+    status: 'team',
+  };
+}
+
 export function hasWorkContext(entry = {}) {
   if (Array.isArray(entry.workContextIds) && entry.workContextIds.length > 0) return true;
   return Array.isArray(entry.workContexts) && entry.workContexts.some(context => Boolean(

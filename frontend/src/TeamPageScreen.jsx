@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CaptureComposer } from './CaptureComposer';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
-import { searchTeamContext, selectTeamTimelineEntries } from './services/teamPageService';
+import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
+import {
+  canLoadTeamPageState,
+  searchTeamContext,
+  selectTeamTimelineEntries,
+  teamContextSnapshot,
+} from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
@@ -79,6 +86,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [isAddingBacklog, setIsAddingBacklog] = useState(false);
   const [backlogForm, setBacklogForm] = useState(EMPTY_BACKLOG_FORM);
   const [isSavingBacklog, setIsSavingBacklog] = useState(false);
+  const [isSavingTeamCapture, setIsSavingTeamCapture] = useState(false);
   const [backlogError, setBacklogError] = useState(null);
   const [busyItemId, setBusyItemId] = useState(null);
   const [busyApprovalId, setBusyApprovalId] = useState(null);
@@ -101,6 +109,10 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
 
   const loadTeamState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
     if (!teamId) return;
+    if (!canLoadTeamPageState({ teamId, user })) {
+      if (showLoading) setIsLoading(false);
+      return;
+    }
     if (showLoading) {
       setIsLoading(true);
     } else if (showRefreshing) {
@@ -143,7 +155,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         setIsRefreshing(false);
       }
     }
-  }, [teamId]);
+  }, [teamId, user]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -270,6 +282,50 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       setBacklogError(err.message || 'Could not add Backlog Item');
     } finally {
       setIsSavingBacklog(false);
+    }
+  };
+
+  const saveTeamCapture = async ({ text }) => {
+    const teamSnapshot = teamContextSnapshot(team);
+    if (!teamSnapshot) throw new Error('Team is not ready yet.');
+
+    setIsSavingTeamCapture(true);
+    try {
+      const entryText = String(text || '').trim();
+      const entryId = await dbService.createTextEntry({
+        source: 'team_page',
+        intent: 'NOTE',
+        text: entryText,
+      });
+      let entry = await dbService.updateEntry(entryId, {
+        summary: entryText,
+        transcript: entryText,
+        intent: 'NOTE',
+      });
+      const confirmedEntry = await dbService.confirmEntry(entryId, {
+        workContexts: [teamSnapshot],
+      });
+      entry = { ...entry, ...confirmedEntry };
+
+      try {
+        const syncOutcome = await syncConfirmedEntryAfterReview({
+          entryId,
+          entry,
+          user,
+          reason: 'team_page_capture',
+        });
+        if (syncOutcome.entry) entry = syncOutcome.entry;
+      } catch (syncErr) {
+        console.warn('[Team] Team Entry sync failed, entry saved locally:', syncErr);
+      }
+
+      setRecentEntries(previous => [entry, ...previous.filter(item => item.id !== entry.id)].slice(0, 50));
+      await loadRecentEntries();
+      return entry;
+    } catch (err) {
+      throw new Error(err?.message || 'Could not save Team entry', { cause: err });
+    } finally {
+      setIsSavingTeamCapture(false);
     }
   };
 
@@ -409,6 +465,24 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
             </section>
 
             {renderTeamSearchResults()}
+
+            <section className="rounded border border-gray-200 px-3 py-3">
+              <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
+                <h2 className="text-sm font-semibold text-gray-900">Team Entry</h2>
+                <span className="text-xs text-gray-400">Timeline</span>
+              </div>
+              <CaptureComposer
+                draftKey={`team-capture:${team.id}`}
+                label={`Entry for ${team.name}`}
+                placeholder={`Capture an update for ${team.name}.`}
+                helperText="Saved to this Team Timeline."
+                submitLabel="Save to Team"
+                discardLabel="Clear"
+                busy={isSavingTeamCapture}
+                rows={3}
+                onSubmit={saveTeamCapture}
+              />
+            </section>
 
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">

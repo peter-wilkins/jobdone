@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  canLoadTeamPageState,
   searchTeamContext,
   selectPrivateTimelineEntries,
   selectTeamTimelineEntries,
+  teamContextSnapshot,
 } from './teamPageService.js';
 
 test('Team Timeline selects entries linked to the current Team context', () => {
@@ -30,6 +32,35 @@ test('Private Timeline excludes entries linked to Team work contexts', () => {
   assert.deepEqual(
     selectPrivateTimelineEntries(entries).map(entry => entry.id),
     ['private-entry'],
+  );
+});
+
+test('Team page waits for restored user before loading remote Team state', () => {
+  assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: null }), false);
+  assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: {} }), false);
+  assert.equal(canLoadTeamPageState({ teamId: '', user: { id: 'user-1' } }), false);
+  assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: { id: 'user-1' } }), true);
+});
+
+test('Team context snapshots link general Team Entries to Team Timeline', () => {
+  const snapshot = teamContextSnapshot({ id: 'team-1', name: 'Foo' });
+  const entries = [
+    { id: 'entry-1', workContexts: [snapshot] },
+    { id: 'entry-2', workContexts: [] },
+  ];
+
+  assert.deepEqual(snapshot, {
+    id: 'team:team-1',
+    type: 'team',
+    label: 'Foo',
+    description: 'Foo',
+    teamId: 'team-1',
+    teamName: 'Foo',
+    status: 'team',
+  });
+  assert.deepEqual(
+    selectTeamTimelineEntries(entries, 'team-1', 'Foo').map(entry => entry.id),
+    ['entry-1'],
   );
 });
 

@@ -5,6 +5,7 @@ import { createMemoryLocalReplicaStore } from './localReplicaSyncAdapter.js';
 import {
   entryFromLocalReplicaObject,
   entryToLocalReplicaPayload,
+  mergeReplicaAttachments,
   syncEntryReplica,
 } from './localReplicaEntryService.js';
 
@@ -130,6 +131,67 @@ test('Entry Local Replica object materializes into current Entry store shape', (
   assert.equal(entry.remoteId, null);
   assert.equal(entry.captureId, null);
   assert.deepEqual(entry.locations, [{ id: 'location-1', displayName: 'Yard' }]);
+});
+
+test('Entry Local Replica materialization preserves local Photo blobs', () => {
+  const localBlob = new Blob(['photo-bytes'], { type: 'image/jpeg' });
+  const entry = entryFromLocalReplicaObject({
+    id: 'entry-1',
+    ownerKind: 'user',
+    ownerId: ACTOR_USER_ID,
+    collection: 'entries',
+    createdT: 1,
+    changedT: 2,
+    deletedT: null,
+    createdAt: '2026-06-06T13:31:00.000Z',
+    changedAt: '2026-06-06T13:32:00.000Z',
+    payloadJson: {
+      text: 'Photo evidence',
+      createdAt: '2026-06-06T13:31:00.000Z',
+      attachments: [{
+        id: 'attachment-1',
+        kind: 'photo',
+        status: 'ready',
+        filename: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        size: 11,
+      }],
+      locations: [],
+      contacts: [],
+      workContexts: [],
+    },
+  }, {
+    attachments: [{
+      id: 'attachment-1',
+      kind: 'photo',
+      status: 'ready',
+      originalName: 'local-photo.jpg',
+      blob: localBlob,
+      compressionStatus: 'compressed',
+    }],
+  });
+
+  assert.equal(entry.attachments[0].blob, localBlob);
+  assert.equal(entry.attachments[0].filename, 'photo.jpg');
+  assert.equal(entry.attachments[0].originalName, 'local-photo.jpg');
+  assert.equal(entry.attachments[0].compressionStatus, 'compressed');
+});
+
+test('Entry Local Replica attachment merge keeps replica metadata for remote-only attachments', () => {
+  assert.deepEqual(
+    mergeReplicaAttachments([], [{
+      id: 'attachment-remote',
+      kind: 'photo',
+      status: 'ready',
+      filename: 'remote.jpg',
+    }]),
+    [{
+      id: 'attachment-remote',
+      kind: 'photo',
+      status: 'ready',
+      filename: 'remote.jpg',
+    }],
+  );
 });
 
 test('Entry Local Replica sync queues confirmed Entries and materializes accepted objects', async () => {

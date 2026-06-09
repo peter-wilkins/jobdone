@@ -17,6 +17,23 @@ function entryText(entry = {}) {
   return String(entry.text || entry.summary || entry.transcript || '').trim();
 }
 
+export function mergeReplicaAttachments(existingAttachments = [], replicaAttachments = []) {
+  const existingById = new Map(compactArray(existingAttachments).map(attachment => [attachment.id, attachment]));
+  return compactArray(replicaAttachments).map(replicaAttachment => {
+    const existing = existingById.get(replicaAttachment.id);
+    if (!existing) return replicaAttachment;
+    return {
+      ...existing,
+      ...replicaAttachment,
+      blob: existing.blob || replicaAttachment.blob || null,
+      originalBlob: existing.originalBlob || replicaAttachment.originalBlob || null,
+      originalName: existing.originalName || replicaAttachment.originalName || replicaAttachment.filename || '',
+      compressionStatus: existing.compressionStatus || replicaAttachment.compressionStatus || null,
+      compressionError: existing.compressionError || replicaAttachment.compressionError || null,
+    };
+  });
+}
+
 export function entryToLocalReplicaPayload(entry = {}) {
   return {
     id: entry.id,
@@ -40,6 +57,7 @@ export function entryFromLocalReplicaObject(object = {}, existing = null) {
   const payload = object.payloadJson || {};
   const text = String(payload.text || '').trim();
   const status = object.deletedT == null ? 'confirmed' : 'deleted';
+  const attachments = mergeReplicaAttachments(existing?.attachments, compactArray(payload.attachments));
   return {
     ...(existing || {}),
     id: object.id,
@@ -59,7 +77,7 @@ export function entryFromLocalReplicaObject(object = {}, existing = null) {
     locations: compactArray(payload.locations),
     contacts: compactArray(payload.contacts),
     tags: compactArray(payload.tags),
-    attachments: compactArray(payload.attachments),
+    attachments,
     workContexts: compactArray(payload.workContexts),
   };
 }
