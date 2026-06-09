@@ -42,8 +42,14 @@ export function selectTeamTimelineEntries(entries = [], teamId = null, teamName 
   });
 }
 
-export function canLoadTeamPageState({ teamId = null, user = null } = {}) {
-  return Boolean(teamId && user?.id);
+export function resolveTeamPageUser({ user = null, authUser = null } = {}) {
+  if (user?.id) return user;
+  if (authUser?.id) return authUser;
+  return null;
+}
+
+export function canLoadTeamPageState({ teamId = null, user = null, authUser = null } = {}) {
+  return Boolean(teamId && resolveTeamPageUser({ user, authUser })?.id);
 }
 
 export function teamContextSnapshot(team = {}) {

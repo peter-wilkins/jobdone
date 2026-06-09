@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
 import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { apiService } from './services/apiService';
+import { authService } from './services/authService';
 import { dbService } from './services/dbService';
 import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
 import { usePhotoAttachments } from './services/photoAttachmentHooks';
@@ -103,8 +104,35 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [staleError, setStaleError] = useState(null);
+  const [restoredUser, setRestoredUser] = useState(() => user || authService.getUser());
+  const [isAuthChecking, setIsAuthChecking] = useState(() => !user?.id && !authService.getUser()?.id);
   const claimErrorsRef = useRef({});
   const hasInitialCacheRef = useRef(Boolean(initialCache));
+  const effectiveUser = user?.id ? user : restoredUser?.id ? restoredUser : authService.getUser();
+
+  useEffect(() => {
+    let cancelled = false;
+    const applyUser = (nextUser) => {
+      if (cancelled) return;
+      setRestoredUser(nextUser || null);
+      setIsAuthChecking(false);
+    };
+
+    const unsubscribe = authService.onChange((_event, session) => {
+      applyUser(session?.user || null);
+    });
+
+    if (!user?.id && !authService.getUser()?.id) {
+      authService.init()
+        .then(session => applyUser(session?.user || null))
+        .catch(() => applyUser(null));
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user]);
 
   const loadRecentEntries = useCallback(async () => {
     try {
@@ -117,7 +145,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
 
   const loadTeamState = useCallback(async ({ showLoading = true, showRefreshing = true } = {}) => {
     if (!teamId) return;
-    if (!canLoadTeamPageState({ teamId, user })) {
+    if (!canLoadTeamPageState({ teamId, user: effectiveUser })) {
       if (showLoading) setIsLoading(false);
       return;
     }
@@ -175,7 +203,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         setIsRefreshing(false);
       }
     }
-  }, [teamId, user]);
+  }, [teamId, effectiveUser]);
 
   useEffect(() => {
     loadTeamState({ showLoading: !hasInitialCacheRef.current });
@@ -279,7 +307,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           const syncOutcome = await syncConfirmedEntryAfterReview({
             entryId,
             entry,
-            user,
+            user: effectiveUser,
             reason: 'team_backlog_evidence',
           });
           if (syncOutcome.entry) entry = syncOutcome.entry;
@@ -358,7 +386,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         const syncOutcome = await syncConfirmedEntryAfterReview({
           entryId,
           entry,
-          user,
+          user: effectiveUser,
           reason: 'team_page_capture',
         });
         if (syncOutcome.entry) entry = syncOutcome.entry;
@@ -482,7 +510,9 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {isLoading ? (
           <div className="py-8 text-center text-sm text-gray-400">Loading...</div>
-        ) : !user ? (
+        ) : isAuthChecking && !effectiveUser ? (
+          <div className="py-8 text-center text-sm text-gray-400">Checking sign-in...</div>
+        ) : !effectiveUser ? (
           <section className="py-8">
             <h2 className="text-sm font-semibold text-gray-900">Log in to open this Team</h2>
             <p className="mt-2 text-sm leading-5 text-gray-500">JobDone uses your email to find Teams you can read.</p>

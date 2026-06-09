@@ -5,6 +5,7 @@ import {
   loadCachedTeamPageState,
   saveCachedTeamPageState,
   backlogItemContextSnapshot,
+  resolveTeamPageUser,
   searchTeamContext,
   selectPrivateTimelineEntries,
   selectTeamTimelineEntries,
@@ -51,6 +52,13 @@ test('Team page waits for restored user before loading remote Team state', () =>
   assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: {} }), false);
   assert.equal(canLoadTeamPageState({ teamId: '', user: { id: 'user-1' } }), false);
   assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: { id: 'user-1' } }), true);
+});
+
+test('Team page can use restored auth user when parent user prop is stale', () => {
+  const authUser = { id: 'user-1', email: 'peter@example.com' };
+
+  assert.equal(resolveTeamPageUser({ user: null, authUser }), authUser);
+  assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: null, authUser }), true);
 });
 
 test('Team context snapshots link general Team Entries to Team Timeline', () => {
