@@ -73,10 +73,12 @@ Before promotion, run the smallest useful checks for the change:
 ```bash
 npm run deploy:check:staging
 npm run qa:staging
+npm run qa:phone
 ```
 
 For frontend-visible changes, also do a focused manual check on staging. Keep it
-small and specific to the current change.
+small and specific to the current change. Run the dev-phone check before asking
+Peter to do that manual check.
 
 ## Promote
 

@@ -42,6 +42,9 @@ QA runs are text-first: assertions, request payloads, logs, and feedback records
 Screenshots, videos, traces, and HTML reports are disabled by default because
 they create noisy artifacts that are unlikely to be reviewed during MVP.
 
+For Android-device regression checks before asking Peter for manual phone
+testing, use [Dev Phone QA](./PHONE_QA.md).
+
 QA tests enable `jobdone-debug-logs` before app load and should assert the happy
 path emitted the expected `[JobDone debug]` console logs. Normal production
 sessions stay quiet unless that debug flag is explicitly set. Local smoke tests

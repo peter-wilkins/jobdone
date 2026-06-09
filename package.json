@@ -19,6 +19,7 @@
     "deploy:check:staging": "bash scripts/check-deploy.sh staging",
     "deploy:check:production": "bash scripts/check-deploy.sh production",
     "qa:staging": "QA_BASE_URL=https://jobdone-staging.vercel.app npm --prefix frontend run qa:smoke",
+    "qa:phone": "bash scripts/qa-dev-phone.sh",
     "smoke:local-replica:entry": "node scripts/smoke-local-replica-entry.js",
     "deploy:release": "npm run deploy:staging && npm run deploy:check:staging && npm run qa:staging && npm run deploy:promote && npm run deploy:check:production",
     "logs:backend": "bash scripts/tail-backend-prod-logs.sh",
