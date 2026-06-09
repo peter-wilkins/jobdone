@@ -34,11 +34,11 @@ npm run preview
 
 ## Deployment
 
-Frontend deploys through Vercel from `frontend/`. From repo root:
+Frontend deploys must inject the production Supabase/Auth environment at build
+time. From repo root:
 
 ```bash
-vercel --cwd frontend build --prod
-vercel --cwd frontend deploy --prod --prebuilt --yes
+npm run deploy:frontend
 ```
 
-Then verify the live build id at `https://jobdone-frontend-production.vercel.app/`.
+Then verify the live build id at `https://jobdone.continuumkit.org/`.
