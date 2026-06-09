@@ -233,7 +233,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       await apiService.submitTeamBacklogItem(item.id, { evidence_text: evidenceText });
       await loadTeamState();
     } catch (err) {
-      setError(err.message || 'Could not submit evidence');
+      throw new Error(err.message || 'Could not submit evidence', { cause: err });
     } finally {
       setBusyItemId(null);
     }
