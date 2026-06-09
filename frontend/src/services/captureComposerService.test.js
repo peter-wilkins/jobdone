@@ -74,7 +74,12 @@ test('Capture Composer keeps draft when submit adapter fails', async () => {
 test('Capture Composer submit is disabled for empty required text and pending attachments', () => {
   assert.equal(shouldEnableComposerSubmit({ text: '', requireText: true }), false);
   assert.equal(shouldEnableComposerSubmit({ text: 'Evidence', requireText: true }), true);
-  assert.equal(shouldEnableComposerSubmit({ text: '', requireText: false }), true);
+  assert.equal(shouldEnableComposerSubmit({ text: '', requireText: false }), false);
+  assert.equal(shouldEnableComposerSubmit({
+    text: '',
+    requireText: false,
+    attachments: [{ kind: 'photo', status: 'ready' }],
+  }), true);
   assert.equal(shouldEnableComposerSubmit({
     text: 'Evidence',
     attachments: [{ status: 'pending_compression' }],

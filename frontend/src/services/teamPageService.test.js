@@ -2,11 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canLoadTeamPageState,
+  loadCachedTeamPageState,
+  saveCachedTeamPageState,
+  backlogItemContextSnapshot,
   searchTeamContext,
   selectPrivateTimelineEntries,
   selectTeamTimelineEntries,
   teamContextSnapshot,
 } from './teamPageService.js';
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+  };
+}
 
 test('Team Timeline selects entries linked to the current Team context', () => {
   const entries = [
@@ -62,6 +73,40 @@ test('Team context snapshots link general Team Entries to Team Timeline', () => 
     selectTeamTimelineEntries(entries, 'team-1', 'Foo').map(entry => entry.id),
     ['entry-1'],
   );
+});
+
+test('Backlog Item context snapshots link evidence to one item', () => {
+  assert.deepEqual(
+    backlogItemContextSnapshot({
+      id: 'backlog-1',
+      description: 'Study farm pond sites',
+      team: { id: 'team-1', name: 'Farm' },
+      status: 'claimed',
+    }),
+    {
+      id: 'backlog-1',
+      type: 'backlog_item',
+      label: 'Study farm pond sites',
+      description: 'Study farm pond sites',
+      teamId: 'team-1',
+      teamName: 'Farm',
+      status: 'claimed',
+    },
+  );
+});
+
+test('Team page cache restores last read model for instant render', () => {
+  const storage = memoryStorage();
+  saveCachedTeamPageState('team-1', {
+    team: { id: 'team-1', name: 'Farm' },
+    openBacklogItems: [{ id: 'backlog-1' }],
+  }, { storage });
+
+  const cached = loadCachedTeamPageState('team-1', { storage });
+
+  assert.equal(cached.team.name, 'Farm');
+  assert.deepEqual(cached.openBacklogItems, [{ id: 'backlog-1' }]);
+  assert.equal(typeof cached.cachedAt, 'string');
 });
 
 test('Team search returns scoped Backlog and Entry groups', () => {

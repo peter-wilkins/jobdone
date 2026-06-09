@@ -485,7 +485,7 @@ export class DBService {
       locations: [],
       contacts: [],
       tags: [],
-      attachments: [],
+      attachments: Array.isArray(entryData.attachments) ? entryData.attachments : [],
       workContexts: [],
     };
 

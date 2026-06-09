@@ -25,7 +25,12 @@ import {
   API_ERROR_DETAIL_EVENT,
   setApiErrorDetailsEnabled,
 } from './services/requestDiagnosticsService';
-import { mergeReadableTeams, teamIdFromScreen } from './services/teamNavigationService';
+import {
+  loadCachedReadableTeams,
+  mergeReadableTeams,
+  saveCachedReadableTeams,
+  teamIdFromScreen,
+} from './services/teamNavigationService';
 
 function screenFromLocation() {
   const hash = window.location.hash.replace('#', '').split('?')[0];
@@ -53,7 +58,7 @@ function App() {
   const [syncNotice, setSyncNotice] = useState(null);
   const [apiDebugDetail, setApiDebugDetail] = useState(null);
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
-  const [readableTeams, setReadableTeams] = useState([]);
+  const [readableTeams, setReadableTeams] = useState(() => loadCachedReadableTeams());
   const teamNavRequestRef = useRef(0);
 
   function applySyncResultNotice(result) {
@@ -97,13 +102,11 @@ function App() {
       const teams = mergeReadableTeams(state.ownedTeams || [], state.memberTeams || []);
       if (teamNavRequestRef.current === requestId) {
         setReadableTeams(teams);
+        saveCachedReadableTeams(teams);
       }
       return teams;
     } catch {
-      if (teamNavRequestRef.current === requestId) {
-        setReadableTeams([]);
-      }
-      return [];
+      return loadCachedReadableTeams();
     }
   }, []);
 

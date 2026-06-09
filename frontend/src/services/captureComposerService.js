@@ -54,8 +54,10 @@ export function shouldEnableComposerSubmit({
   if ((attachments || []).some(attachment => attachment?.status === 'pending_compression' || attachment?.status === 'failed')) {
     return false;
   }
-  if (!requireText) return true;
-  return String(text || '').trim().length > 0;
+  const hasText = String(text || '').trim().length > 0;
+  const hasAttachments = (attachments || []).some(attachment => attachment?.kind === 'photo' && attachment.status === 'ready');
+  if (!requireText) return hasText || hasAttachments;
+  return hasText;
 }
 
 export function appendComposerText(currentText = '', nextText = '') {

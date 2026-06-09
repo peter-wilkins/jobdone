@@ -3,14 +3,13 @@ import { useOutsideDismiss } from './services/outsideDismissService';
 import { teamScreenId } from './services/teamNavigationService';
 
 const MENU_ITEMS = [
-  { screen: 'home', label: 'Home' },
-  { screen: 'onboarding', label: 'Onboarding' },
-  { screen: 'inbox', label: 'Inbox' },
+  { screen: 'team-setup', label: 'Create Team' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
+  { screen: 'onboarding', label: 'Onboarding' },
+  { screen: 'inbox', label: 'Inbox' },
   { screen: 'team-review', label: 'Reviews' },
   { screen: 'my-work', label: 'My Work' },
-  { screen: 'team-setup', label: 'Create Team' },
   { screen: 'feedback', label: 'Share idea' },
 ];
 
@@ -49,6 +48,17 @@ export function GlobalMenu({
               <p className="text-xs text-gray-700 truncate">{user.email}</p>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => goTo('home')}
+            className={`w-full text-left px-4 py-3 text-sm transition ${
+              currentScreen === 'home'
+                ? 'bg-gray-100 text-gray-900 font-medium'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <span>Personal</span>
+          </button>
           {teams.length > 0 && (
             <div className="border-b border-gray-100 py-1">
               <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Teams</p>
@@ -71,20 +81,22 @@ export function GlobalMenu({
               })}
             </div>
           )}
-          {MENU_ITEMS.map(item => (
-            <button
-              key={item.screen}
-              type="button"
-              onClick={() => goTo(item.screen)}
-              className={`w-full text-left px-4 py-3 text-sm transition ${
-                currentScreen === item.screen
-                  ? 'bg-gray-100 text-gray-900 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <span>{item.label}</span>
-            </button>
-          ))}
+          <div className="border-t border-gray-200">
+            {MENU_ITEMS.map(item => (
+              <button
+                key={item.screen}
+                type="button"
+                onClick={() => goTo(item.screen)}
+                className={`w-full text-left px-4 py-3 text-sm transition ${
+                  currentScreen === item.screen
+                    ? 'bg-gray-100 text-gray-900 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => goTo('login')}

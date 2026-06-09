@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { audioService } from './services/audioService';
-import { dbService, validateTagLabel } from './services/dbService';
+import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncOrchestratorService } from './services/syncOrchestratorService';
 import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
@@ -23,13 +23,11 @@ import { predictionSourcePresentation } from './services/predictionSourceService
 import { runPreExtraction } from './services/preExtractionService';
 import { classify } from './services/classifyService';
 import { setAppUpdateGuard } from './services/appUpdateGuardService';
+import { PhotoAttachmentControls, PhotoAttachmentThumb } from './PhotoAttachmentControls';
 import {
-  canAddMorePhotos,
   createPendingPhotoAttachmentsFromFiles,
-  formatAttachmentBytes,
   hasFailedPhotoAttachments,
   hasPendingPhotoAttachments,
-  MAX_PHOTOS_PER_CAPTURE,
   preparePhotoAttachment,
 } from './services/photoAttachmentService';
 import {
@@ -90,32 +88,6 @@ function transcriptionSourceLabel(source) {
   if (source === 'backend') return 'Backend';
   if (source === 'local') return 'Local';
   return source || 'Unknown';
-}
-
-function PhotoAttachmentThumb({ attachment }) {
-  const blob = attachment?.blob || attachment?.originalBlob;
-  const url = useMemo(() => blob ? URL.createObjectURL(blob) : '', [blob]);
-
-  useEffect(() => {
-    if (!url) return undefined;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
-
-  if (!url) {
-    return (
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-gray-200 bg-gray-50 text-xs text-gray-400">
-        Photo
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt={attachment.originalName || 'Photo attachment'}
-      className="h-16 w-16 shrink-0 rounded border border-gray-200 object-cover"
-    />
-  );
 }
 
 function containsContactName(entry, contact) {
@@ -241,18 +213,6 @@ function workContextTeamLabel(item) {
   return item?.team?.name || item?.teamName || 'Team';
 }
 
-function workContextSnapshot(item) {
-  return {
-    id: item.id,
-    type: 'backlog_item',
-    label: workContextLabel(item),
-    description: item.description || item.title || '',
-    teamId: item.team?.id || item.team_id || null,
-    teamName: workContextTeamLabel(item),
-    status: item.status || null,
-  };
-}
-
 export function HomeScreen({
   onNavigate,
   user,
@@ -287,13 +247,13 @@ export function HomeScreen({
   const [reviewSelectedTags, setReviewSelectedTags] = useState({});
   const [reviewWorkContextPanels, setReviewWorkContextPanels] = useState({});
   const [reviewSelectedWorkContexts, setReviewSelectedWorkContexts] = useState({});
-  const [reviewWorkContextErrors, setReviewWorkContextErrors] = useState({});
+  const [, setReviewWorkContextErrors] = useState({});
   const [reviewAttachmentErrors, setReviewAttachmentErrors] = useState({});
   const [reviewNewWorkDescriptions, setReviewNewWorkDescriptions] = useState({});
-  const [reviewNewWorkTeamIds, setReviewNewWorkTeamIds] = useState({});
+  const [, setReviewNewWorkTeamIds] = useState({});
   const [reviewTextDrafts, setReviewTextDrafts] = useState({});
   const [debouncedReviewTextDrafts, setDebouncedReviewTextDrafts] = useState({});
-  const [reviewIntentOverrides, setReviewIntentOverrides] = useState({});
+  const [, setReviewIntentOverrides] = useState({});
   const [focusEntryId, setFocusEntryId] = useState(null);
   const [busyWorkContextIds, setBusyWorkContextIds] = useState(new Set());
   const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
@@ -318,7 +278,6 @@ export function HomeScreen({
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
   const textAreaRefs = useRef(new Map());
-  const photoInputRefs = useRef(new Map());
   const textDraftSaveTimersRef = useRef(new Map());
   const compressingAttachmentIdsRef = useRef(new Set());
 
@@ -1242,8 +1201,6 @@ export function HomeScreen({
     }
   };
 
-  const isOffline = () => !navigator.onLine || !backendAvailable;
-
   const handleConfirm = async (id) => {
     if (confirmingIdsRef.current.has(id)) return;
     confirmingIdsRef.current.add(id);
@@ -1262,11 +1219,7 @@ export function HomeScreen({
       }
       const hasReviewDraft = Object.prototype.hasOwnProperty.call(reviewTextDrafts, id);
       const reviewText = String(hasReviewDraft ? reviewTextDrafts[id] : (entry.summary || entry.transcript || '')).trim();
-      const nextIntent = reviewIntentOverrides[id] || classify(reviewText);
-      if (nextIntent === 'QUERY' && !reviewText) {
-        setError('Type a search query first.');
-        return;
-      }
+      const nextIntent = 'NOTE';
       if (reviewText && reviewText !== (entry.summary || entry.transcript || '').trim()) {
         entry = await dbService.updateEntry(id, {
           transcript: entry.transcript || reviewText,
@@ -1279,27 +1232,13 @@ export function HomeScreen({
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       }
 
-      // Handle QUERY intent
-      if (nextIntent === 'QUERY') {
-        // Offline: show message, keep entry for later retry
-        if (isOffline()) {
-          setError('Recall isn\'t available right now. Your recording has been saved locally.');
-          return;
-        }
-        await dbService.rejectEntry(id);
-        setEntries(prev => prev.filter(e => e.id !== id));
-        await executeQuery(reviewText);
-        return;
-      }
-
-      // Handle NOTE intent - save to entries, proceed as before
-      // Delete audio and move to confirmed locally
+      // Delete audio and move to confirmed locally.
       const locationText = (reviewLocations[id] || '').trim();
       const selectedLocationDraft = reviewLocationDrafts[id];
       const locations = locationText
         ? [{ ...(selectedLocationDraft || {}), displayName: locationText, placeText: selectedLocationDraft?.placeText || locationText }]
         : [];
-      const { contact, tags: selectedPredictedTags } = selectedPredictionCandidates(id);
+      const { contact } = selectedPredictionCandidates(id);
       const contacts = contact ? [{
         id: contact.id,
         displayName: contact.label,
@@ -1310,31 +1249,7 @@ export function HomeScreen({
         normalizedPhones: contact.normalizedPhones || [],
         normalizedEmails: contact.normalizedEmails || [],
       }] : [];
-      const tagDrafts = [
-        ...selectedPredictedTags.map(tag => ({ label: tag.label, categoryName: tag.categoryName || 'General' })),
-        ...(reviewTags[id] || '').split(',').map(label => ({ label, categoryName: 'General' })),
-      ]
-        .map(tag => ({ ...tag, label: tag.label.trim() }))
-        .filter(tag => tag.label)
-        .reduce((map, tag) => map.set(tag.label.toLowerCase(), tag), new Map());
-      const tagValidations = Array.from(tagDrafts.values()).map(tag => ({
-        ...validateTagLabel(tag.label),
-        categoryName: tag.categoryName,
-      }));
-      const invalidTag = tagValidations.find(result => !result.valid);
-      if (invalidTag) {
-        setError(invalidTag.error);
-        return;
-      }
-      const tags = tagValidations.map(result => ({ label: result.label, categoryName: result.categoryName || 'General' }));
-      const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[id] || []);
-      const workContexts = [
-        ...(teamWorkContext.claimedItems || []),
-        ...(teamWorkContext.openBacklogItems || []),
-      ]
-        .filter(item => selectedWorkContextIds.has(item.id))
-        .map(workContextSnapshot);
-      const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags, workContexts });
+      const confirmedEntry = await dbService.confirmEntry(id, { locations, contacts, tags: [], workContexts: [] });
       let timelineEntry = { ...entry, ...confirmedEntry };
 
       // Try to sync to cloud (optional - don't block if it fails)
@@ -2222,7 +2137,7 @@ export function HomeScreen({
     }
 
     if (entry.status === 'ready_for_review') {
-      const { structure, candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
+      const { candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
       const selectedLocationDraft = reviewLocationDrafts[entry.id];
       const locationPanelOpen = Boolean(reviewLocationPanels[entry.id]);
@@ -2235,37 +2150,12 @@ export function HomeScreen({
       const contactSearch = reviewContactSearch[entry.id] || '';
       const manualContact = reviewManualContacts[entry.id] || { displayName: '', phone: '', email: '' };
       const isConfirming = confirmingIds.has(entry.id);
-      const tagCandidates = candidateSet.tags || [];
-      const selectedTagIds = new Set(reviewSelectedTags[entry.id] || []);
-      const tagGroups = tagCandidates.reduce((groups, tag) => {
-        const category = tag.categoryName || 'General';
-        groups[category] = groups[category] || [];
-        groups[category].push(tag);
-        return groups;
-      }, {});
-      const workContextItems = teamWorkContext.claimedItems || [];
-      const openWorkContextItems = teamWorkContext.openBacklogItems || [];
-      const allWorkContextItems = [...workContextItems, ...openWorkContextItems];
-      const creatableTeams = (teamWorkContext.teams || []).filter(team => team.workers_can_create_backlog_items);
-      const selectedCreateTeamId = reviewNewWorkTeamIds[entry.id] || creatableTeams[0]?.id || '';
-      const selectedWorkContextIds = new Set(reviewSelectedWorkContexts[entry.id] || []);
-      const selectedWorkContextItems = allWorkContextItems.filter(item => selectedWorkContextIds.has(item.id));
-      const workContextPanelOpen = Boolean(reviewWorkContextPanels[entry.id]);
-      const workContextPanelError = reviewWorkContextErrors[entry.id];
       const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
       const transcriptionFailed = entry.errorMessage === 'empty_transcription';
       const reviewEntryText = entry.summary || entry.transcript || '';
       const editableReviewText = Object.prototype.hasOwnProperty.call(reviewTextDrafts, entry.id)
         ? reviewTextDrafts[entry.id]
         : reviewEntryText;
-      const isQuery = (reviewIntentOverrides[entry.id] || classify(editableReviewText)) === 'QUERY';
-      const shouldShowWorkContext = teamWorkContext.hasTeams && !isQuery;
-      const toggleIntent = async () => {
-        const newIntent = isQuery ? 'NOTE' : 'QUERY';
-        await dbService.updateEntry(entry.id, { intent: newIntent });
-        setReviewIntentOverrides(prev => ({ ...prev, [entry.id]: newIntent }));
-        setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, intent: newIntent } : e));
-      };
       const updateReviewText = (text) => {
         setReviewTextDrafts(prev => ({ ...prev, [entry.id]: text }));
         const existingTimer = textDraftSaveTimersRef.current.get(entry.id);
@@ -2276,7 +2166,7 @@ export function HomeScreen({
             await dbService.updateEntry(entry.id, {
               summary: text,
               transcript: entry.transcript || text,
-              intent: reviewIntentOverrides[entry.id] || classify(text),
+              intent: 'NOTE',
             });
           } catch (err) {
             console.warn('[Capture] Draft save failed:', err);
@@ -2294,7 +2184,7 @@ export function HomeScreen({
           await dbService.updateEntry(entry.id, {
             summary: editableReviewText,
             transcript: entry.transcript || editableReviewText,
-            intent: reviewIntentOverrides[entry.id] || classify(editableReviewText),
+            intent: 'NOTE',
           });
         } catch (err) {
           console.warn('[Capture] Draft save failed:', err);
@@ -2304,55 +2194,27 @@ export function HomeScreen({
       const transcriptionCandidates = entry.transcriptionCandidates || [];
       const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
       const attachments = entry.attachments || [];
-      const photoAttachments = attachments.filter(attachment => attachment.kind === 'photo');
       const attachmentError = reviewAttachmentErrors[entry.id];
       const photosPending = hasPendingPhotoAttachments(attachments);
       const photosFailed = hasFailedPhotoAttachments(attachments);
-      const canAddPhotos = canAddMorePhotos(attachments);
-      const queryTextEmpty = isQuery && editableReviewText.trim().length === 0;
+      const canConfirm = Boolean(editableReviewText.trim() || attachments.some(attachment => attachment.kind === 'photo' && attachment.status === 'ready'));
+      const shouldShowWorkContext = false;
+      const selectedWorkContextItems = [];
+      const workContextPanelOpen = false;
+      const workContextPanelError = null;
+      const workContextItems = [];
+      const openWorkContextItems = [];
+      const creatableTeams = [];
+      const selectedCreateTeamId = '';
+      const selectedWorkContextIds = new Set();
+      const showTags = false;
+      const structure = {};
+      const tagGroups = {};
+      const selectedTagIds = new Set();
 
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
-          <div className="flex items-start gap-2 mb-3">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-              Review
-            </span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-              {isQuery ? 'Search' : 'Note'}
-            </span>
-            {transcriptionPending && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
-                Transcribing...
-              </span>
-            )}
-            {transcriptionFailed && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                No speech detected
-              </span>
-            )}
-          </div>
-          
-          {isQuery ? (
-            // QUERY layout
-            <div className="mb-4">
-              <p className="text-sm text-gray-500 mb-1">Searching for:</p>
-              <textarea
-                ref={(node) => {
-                  if (node) textAreaRefs.current.set(entry.id, node);
-                  else textAreaRefs.current.delete(entry.id);
-                }}
-                value={editableReviewText}
-                onChange={(event) => updateReviewText(event.target.value)}
-                onBlur={saveReviewTextNow}
-                rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
-                placeholder="Type a question to search your Timeline."
-                className="w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-          ) : (
-            // NOTE layout
-            <div className="mb-4">
-              <p className="text-sm text-gray-500 mb-1">Saving entry:</p>
+          <div className="mb-4">
               {transcriptionCandidates.length > 0 && (
                 <div className="mb-3 grid gap-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -2406,9 +2268,9 @@ export function HomeScreen({
                 value={editableReviewText}
                 onChange={(event) => updateReviewText(event.target.value)}
                 onBlur={saveReviewTextNow}
-                rows={Math.max(3, Math.min(8, editableReviewText.split('\n').length + 2))}
+                rows={Math.max(5, Math.min(18, editableReviewText.split('\n').length + Math.ceil(editableReviewText.length / 44) + 2))}
                 placeholder="Type here or use keyboard dictation."
-                className="mb-2 w-full rounded border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="mb-3 min-h-32 w-full resize-y rounded border border-gray-200 px-3 py-2 text-sm leading-6 text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
               {!reviewEntryText && transcriptionPending && (
                 <p className="mb-2 text-xs text-gray-500">Audio is transcribing. You can add context or type while it runs.</p>
@@ -2427,64 +2289,13 @@ export function HomeScreen({
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               )}
 
-              <div className="mb-3">
-                <input
-                  ref={(node) => {
-                    if (node) photoInputRefs.current.set(entry.id, node);
-                    else photoInputRefs.current.delete(entry.id);
-                  }}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    void handleAddPhotoAttachments(entry.id, event.target.files);
-                    event.target.value = '';
-                  }}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => photoInputRefs.current.get(entry.id)?.click()}
-                    disabled={!canAddPhotos}
-                    className="inline-flex items-center rounded border border-dashed border-gray-300 px-2.5 py-1 text-sm text-gray-700 disabled:border-gray-200 disabled:text-gray-400"
-                  >
-                    + Photos
-                  </button>
-                  <span className="text-xs text-gray-400">
-                    {photoAttachments.length}/{MAX_PHOTOS_PER_CAPTURE}
-                  </span>
-                </div>
-                {photoAttachments.length > 0 && (
-                  <div className="mt-2 grid gap-2">
-                    {photoAttachments.map(attachment => (
-                      <div key={attachment.id} className="flex items-center gap-3 rounded border border-gray-200 bg-white px-3 py-2">
-                        <PhotoAttachmentThumb attachment={attachment} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-900">{attachment.originalName || 'Photo'}</p>
-                          <p className="text-xs text-gray-500">
-                            {attachment.status === 'pending_compression'
-                              ? 'Preparing Photo...'
-                              : attachment.status === 'failed'
-                                ? (attachment.errorMessage || 'Compression failed')
-                                : `${attachment.width || '?'}x${attachment.height || '?'} · ${formatAttachmentBytes(attachment.size)}`}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removePhotoAttachment(entry.id, attachment.id)}
-                          className="shrink-0 text-sm text-gray-500 underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {attachmentError && (
-                  <p className="mt-2 text-sm text-red-700">{attachmentError}</p>
-                )}
-              </div>
+              <PhotoAttachmentControls
+                attachments={attachments}
+                onAddFiles={(files) => handleAddPhotoAttachments(entry.id, files)}
+                onRemove={(attachmentId) => removePhotoAttachment(entry.id, attachmentId)}
+                error={attachmentError}
+                disabled={isConfirming}
+              />
 
               {shouldShowWorkContext && (
                 <div className="mb-3" data-review-dismiss-root="work-context">
@@ -2939,6 +2750,7 @@ export function HomeScreen({
                 </div>
               )}
 
+              {showTags && (
               <div className="mt-3">
                 <span className="text-sm text-gray-500">Tags</span>
                 {structure.error && (
@@ -2980,47 +2792,46 @@ export function HomeScreen({
                   className="mt-2 w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
               </div>
+              )}
             </div>
-          )}
-          
-          {/* Intent toggle */}
-          <button
-            onClick={toggleIntent}
-            disabled={isConfirming}
-            className="text-sm text-blue-600 underline mb-4 hover:text-blue-800 transition disabled:text-gray-400 disabled:no-underline"
-          >
-            {isQuery ? 'Save as note instead' : 'Search instead'}
-          </button>
           
           {isConfirming && (
             <div className="mb-3 flex items-center gap-2 rounded bg-blue-50 px-3 py-2 text-sm text-blue-700">
               <span className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-              <span>{isQuery ? 'Starting search...' : user ? 'Saving and syncing...' : 'Saving locally...'}</span>
+              <span>{user ? 'Saving and syncing...' : 'Saving locally...'}</span>
             </div>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex justify-end gap-2">
             <button
-              onClick={() => handleConfirm(entry.id)}
-              disabled={isConfirming || photosPending || photosFailed || queryTextEmpty}
-              title={queryTextEmpty ? 'Type a search query first' : undefined}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition disabled:cursor-not-allowed disabled:bg-blue-300"
+              type="button"
+              onClick={() => {
+                if (window.confirm('Discard this capture?')) handleReject(entry.id);
+              }}
+              disabled={isConfirming}
+              className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              title="Discard"
+              aria-label="Discard"
             >
-              {isConfirming ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  {isQuery ? 'Searching...' : 'Confirming...'}
-                </span>
-              ) : (
-                isQuery ? 'Search' : 'Confirm'
-              )}
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+              </svg>
             </button>
             <button
-              onClick={() => handleReject(entry.id)}
-              disabled={isConfirming}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              type="button"
+              onClick={() => handleConfirm(entry.id)}
+              disabled={isConfirming || photosPending || photosFailed || !canConfirm}
+              className="flex h-9 w-9 items-center justify-center rounded bg-gray-900 text-white hover:bg-gray-800 transition disabled:cursor-not-allowed disabled:bg-gray-300"
+              title="Confirm"
+              aria-label="Confirm"
             >
-              Reject
+              {isConfirming ? (
+                <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

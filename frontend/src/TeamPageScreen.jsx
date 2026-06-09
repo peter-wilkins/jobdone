@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
+import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { apiService } from './services/apiService';
 import { dbService } from './services/dbService';
 import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
+import { usePhotoAttachments } from './services/photoAttachmentHooks';
 import {
+  backlogItemContextSnapshot,
   canLoadTeamPageState,
+  loadCachedTeamPageState,
   searchTeamContext,
   selectTeamTimelineEntries,
+  saveCachedTeamPageState,
   teamContextSnapshot,
 } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
@@ -76,13 +81,14 @@ function TimelineItem({ entry }) {
 }
 
 export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
-  const [team, setTeam] = useState(null);
-  const [inProgressItems, setInProgressItems] = useState([]);
-  const [openBacklogItems, setOpenBacklogItems] = useState([]);
-  const [approvedItems, setApprovedItems] = useState([]);
-  const [activeApprovalRequests, setActiveApprovalRequests] = useState([]);
+  const initialCache = loadCachedTeamPageState(teamId);
+  const [team, setTeam] = useState(() => initialCache?.team || null);
+  const [inProgressItems, setInProgressItems] = useState(() => initialCache?.inProgressItems || []);
+  const [openBacklogItems, setOpenBacklogItems] = useState(() => initialCache?.openBacklogItems || []);
+  const [approvedItems, setApprovedItems] = useState(() => initialCache?.approvedItems || []);
+  const [activeApprovalRequests, setActiveApprovalRequests] = useState(() => initialCache?.activeApprovalRequests || []);
   const [recentEntries, setRecentEntries] = useState([]);
-  const [teamAccess, setTeamAccess] = useState({ canCreateBacklogItems: false, canEditTeam: false });
+  const [teamAccess, setTeamAccess] = useState(() => initialCache?.teamAccess || { canCreateBacklogItems: false, canEditTeam: false, canCreateTimelineEntries: false });
   const [isAddingBacklog, setIsAddingBacklog] = useState(false);
   const [backlogForm, setBacklogForm] = useState(EMPTY_BACKLOG_FORM);
   const [isSavingBacklog, setIsSavingBacklog] = useState(false);
@@ -92,11 +98,13 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [claimErrors, setClaimErrors] = useState({});
   const [teamSearchText, setTeamSearchText] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const teamCapturePhotos = usePhotoAttachments();
+  const [isLoading, setIsLoading] = useState(() => !initialCache);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [staleError, setStaleError] = useState(null);
   const claimErrorsRef = useRef({});
+  const hasInitialCacheRef = useRef(Boolean(initialCache));
 
   const loadRecentEntries = useCallback(async () => {
     try {
@@ -126,9 +134,13 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       ]);
       const nextTeam = workState.team || (workState.teams || []).find(candidate => candidate.id === teamId) || null;
       const fetchedOpenItems = workState.openBacklogItems || [];
+      const nextTeamAccess = workState.teamAccess || { canCreateBacklogItems: false, canEditTeam: false };
+      const nextInProgressItems = workState.inProgressItems || [];
+      const nextApprovedItems = workState.approvedItems || [];
+      const nextActiveApprovalRequests = (reviewState.activeApprovalRequests || []).filter(request => request.team_id === teamId);
       setTeam(nextTeam);
-      setTeamAccess(workState.teamAccess || { canCreateBacklogItems: false, canEditTeam: false });
-      setInProgressItems(workState.inProgressItems || []);
+      setTeamAccess(nextTeamAccess);
+      setInProgressItems(nextInProgressItems);
       setOpenBacklogItems(previousOpenItems => {
         const fetchedIds = new Set(fetchedOpenItems.map(item => item.id));
         const now = Date.now();
@@ -138,8 +150,16 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         });
         return [...fetchedOpenItems, ...staleRaceItems];
       });
-      setApprovedItems(workState.approvedItems || []);
-      setActiveApprovalRequests((reviewState.activeApprovalRequests || []).filter(request => request.team_id === teamId));
+      setApprovedItems(nextApprovedItems);
+      setActiveApprovalRequests(nextActiveApprovalRequests);
+      saveCachedTeamPageState(teamId, {
+        team: nextTeam,
+        teamAccess: nextTeamAccess,
+        inProgressItems: nextInProgressItems,
+        openBacklogItems: fetchedOpenItems,
+        approvedItems: nextApprovedItems,
+        activeApprovalRequests: nextActiveApprovalRequests,
+      });
       setClaimErrors(errors => {
         const now = Date.now();
         const next = Object.fromEntries(Object.entries(errors).filter(([, claimError]) => claimError.expiresAt > now));
@@ -158,8 +178,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   }, [teamId, user]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadTeamState();
+    loadTeamState({ showLoading: !hasInitialCacheRef.current });
     loadRecentEntries();
   }, [loadRecentEntries, loadTeamState]);
 
@@ -192,6 +211,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const usesManualApproval = team?.approval_mode === 'manual';
   const canCreateBacklogItems = Boolean(teamAccess?.canCreateBacklogItems);
   const canEditTeam = Boolean(teamAccess?.canEditTeam);
+  const canCreateTimelineEntries = Boolean(teamAccess?.canCreateTimelineEntries || canCreateBacklogItems || canEditTeam);
   const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
   const trimmedTeamSearchText = teamSearchText.trim();
   const teamSearchResults = trimmedTeamSearchText
@@ -238,11 +258,37 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
     }
   };
 
-  const submitItem = async (item, evidenceText) => {
+  const submitItem = async (item, evidenceText, attachments = []) => {
     setBusyItemId(item.id);
     setError(null);
     try {
-      await apiService.submitTeamBacklogItem(item.id, { evidence_text: evidenceText });
+      const trimmedEvidenceText = String(evidenceText || '').trim();
+      const entryText = trimmedEvidenceText || 'Photo evidence attached.';
+      const contextSnapshot = backlogItemContextSnapshot(item);
+      if (entryText || attachments.length) {
+        const entryId = await dbService.createTextEntry({
+          source: 'team_backlog_evidence',
+          intent: 'NOTE',
+          text: entryText,
+          attachments,
+        });
+        let entry = await dbService.confirmEntry(entryId, {
+          workContexts: contextSnapshot ? [contextSnapshot] : [],
+        });
+        try {
+          const syncOutcome = await syncConfirmedEntryAfterReview({
+            entryId,
+            entry,
+            user,
+            reason: 'team_backlog_evidence',
+          });
+          if (syncOutcome.entry) entry = syncOutcome.entry;
+        } catch (syncErr) {
+          console.warn('[Team] Evidence Entry sync failed, entry saved locally:', syncErr);
+        }
+        setRecentEntries(previous => [entry, ...previous.filter(existing => existing.id !== entry.id)].slice(0, 50));
+      }
+      await apiService.submitTeamBacklogItem(item.id, { evidence_text: entryText });
       await loadTeamState();
     } catch (err) {
       throw new Error(err.message || 'Could not submit evidence', { cause: err });
@@ -285,7 +331,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
     }
   };
 
-  const saveTeamCapture = async ({ text }) => {
+  const saveTeamCapture = async ({ text, attachments = [] }) => {
     const teamSnapshot = teamContextSnapshot(team);
     if (!teamSnapshot) throw new Error('Team is not ready yet.');
 
@@ -296,6 +342,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         source: 'team_page',
         intent: 'NOTE',
         text: entryText,
+        attachments,
       });
       let entry = await dbService.updateEntry(entryId, {
         summary: entryText,
@@ -321,6 +368,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
 
       setRecentEntries(previous => [entry, ...previous.filter(item => item.id !== entry.id)].slice(0, 50));
       await loadRecentEntries();
+      teamCapturePhotos.reset();
       return entry;
     } catch (err) {
       throw new Error(err?.message || 'Could not save Team entry', { cause: err });
@@ -466,23 +514,44 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
 
             {renderTeamSearchResults()}
 
-            <section className="rounded border border-gray-200 px-3 py-3">
-              <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
-                <h2 className="text-sm font-semibold text-gray-900">Team Entry</h2>
-                <span className="text-xs text-gray-400">Timeline</span>
-              </div>
-              <CaptureComposer
-                draftKey={`team-capture:${team.id}`}
-                label={`Entry for ${team.name}`}
-                placeholder={`Capture an update for ${team.name}.`}
-                helperText="Saved to this Team Timeline."
-                submitLabel="Save to Team"
-                discardLabel="Clear"
-                busy={isSavingTeamCapture}
-                rows={3}
-                onSubmit={saveTeamCapture}
-              />
-            </section>
+            {canCreateTimelineEntries ? (
+              <section className="rounded border border-gray-200 px-3 py-3">
+                <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
+                  <h2 className="text-sm font-semibold text-gray-900">Team Entry</h2>
+                  <span className="text-xs text-gray-400">Timeline</span>
+                </div>
+                <CaptureComposer
+                  draftKey={`team-capture:${team.id}`}
+                  label={`Entry for ${team.name}`}
+                  placeholder={`Capture an update for ${team.name}.`}
+                  helperText="Saved to this Team Timeline."
+                  submitLabel="Save to Team"
+                  discardLabel="Clear"
+                  busy={isSavingTeamCapture}
+                  requireText={false}
+                  attachments={teamCapturePhotos.attachments}
+                  rows={4}
+                  attachmentSlot={(
+                    <PhotoAttachmentControls
+                      attachments={teamCapturePhotos.attachments}
+                      onAddFiles={teamCapturePhotos.addFiles}
+                      onRemove={teamCapturePhotos.removeAttachment}
+                      error={teamCapturePhotos.error}
+                      disabled={isSavingTeamCapture}
+                    />
+                  )}
+                  onSubmit={saveTeamCapture}
+                  onDiscard={teamCapturePhotos.reset}
+                />
+              </section>
+            ) : (
+              <section className="rounded border border-gray-200 px-3 py-3">
+                <h2 className="text-sm font-semibold text-gray-900">Team Timeline</h2>
+                <p className="mt-2 text-sm leading-5 text-gray-500">
+                  This Team Timeline is owner guidance. Add evidence from your claimed Backlog Items.
+                </p>
+              </section>
+            )}
 
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">

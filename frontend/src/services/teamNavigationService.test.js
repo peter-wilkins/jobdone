@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mergeReadableTeams, teamIdFromScreen, teamScreenId } from './teamNavigationService.js';
+import {
+  loadCachedReadableTeams,
+  mergeReadableTeams,
+  saveCachedReadableTeams,
+  teamIdFromScreen,
+  teamScreenId,
+} from './teamNavigationService.js';
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+  };
+}
 
 test('Team navigation encodes readable Team links', () => {
   const teamId = 'team/slash and space';
@@ -24,3 +38,12 @@ test('Team menu merges owned and member Teams without duplicates', () => {
   ]);
 });
 
+test('Team menu cache restores stable readable Teams before live refresh', () => {
+  const storage = memoryStorage();
+  saveCachedReadableTeams([
+    { id: 'team-2', name: 'Worker Team', created_at: '2026-01-02T00:00:00Z' },
+    { id: 'team-1', name: 'Owner Team', created_at: '2026-01-01T00:00:00Z' },
+  ], { storage });
+
+  assert.deepEqual(loadCachedReadableTeams({ storage }).map(team => team.id), ['team-1', 'team-2']);
+});

@@ -1,5 +1,7 @@
 import { CaptureComposer } from './CaptureComposer';
+import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { evidenceTextForEntry, suggestEvidenceEntries } from './services/evidenceSuggestionService';
+import { usePhotoAttachments } from './services/photoAttachmentHooks';
 import {
   itemPointsEnabled,
   itemUsesManualApproval,
@@ -17,6 +19,7 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
     id: entry.id,
     text: evidenceTextForEntry(entry),
   }));
+  const evidencePhotos = usePhotoAttachments();
 
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
@@ -40,10 +43,22 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
           submitLabel="Submit evidence"
           discardLabel="Clear"
           busy={busy}
-          rows={2}
+          requireText={false}
+          attachments={evidencePhotos.attachments}
+          rows={4}
           suggestions={composerSuggestions}
           suggestionLabel="Possible evidence"
-          onSubmit={({ text }) => onSubmit(item, text)}
+          attachmentSlot={(
+            <PhotoAttachmentControls
+              attachments={evidencePhotos.attachments}
+              onAddFiles={evidencePhotos.addFiles}
+              onRemove={evidencePhotos.removeAttachment}
+              error={evidencePhotos.error}
+              disabled={busy}
+            />
+          )}
+          onSubmit={({ text, attachments }) => onSubmit(item, text, attachments).then(() => evidencePhotos.reset())}
+          onDiscard={evidencePhotos.reset}
         />
       )}
     </div>

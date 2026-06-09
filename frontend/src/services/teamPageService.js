@@ -1,5 +1,13 @@
 import { recallLocalEntries } from './localRecallService.js';
 
+const TEAM_PAGE_CACHE_PREFIX = 'jobdone.teamPage.v1.';
+
+function resolveStorage(storage) {
+  if (storage) return storage;
+  if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+  return null;
+}
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -51,6 +59,52 @@ export function teamContextSnapshot(team = {}) {
     teamName,
     status: 'team',
   };
+}
+
+export function backlogItemContextSnapshot(item = {}) {
+  const id = item?.id || null;
+  const label = String(item?.description || item?.title || 'Backlog Item').trim();
+  if (!id) return null;
+  return {
+    id,
+    type: 'backlog_item',
+    label,
+    description: item.description || item.title || '',
+    teamId: item.team?.id || item.team_id || item.teamId || null,
+    teamName: item.team?.name || item.teamName || item.team_name || 'Team',
+    status: item.status || null,
+  };
+}
+
+export function teamPageCacheKey(teamId) {
+  const id = String(teamId || '').trim();
+  return id ? `${TEAM_PAGE_CACHE_PREFIX}${id}` : null;
+}
+
+export function loadCachedTeamPageState(teamId, { storage } = {}) {
+  const key = teamPageCacheKey(teamId);
+  const resolvedStorage = resolveStorage(storage);
+  if (!key || !resolvedStorage) return null;
+  try {
+    const parsed = JSON.parse(resolvedStorage.getItem(key) || 'null');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCachedTeamPageState(teamId, state = {}, { storage } = {}) {
+  const key = teamPageCacheKey(teamId);
+  const resolvedStorage = resolveStorage(storage);
+  if (!key || !resolvedStorage) return;
+  try {
+    resolvedStorage.setItem(key, JSON.stringify({
+      ...state,
+      cachedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // Cache is best effort; live Team state remains authoritative.
+  }
 }
 
 export function hasWorkContext(entry = {}) {

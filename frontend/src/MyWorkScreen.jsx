@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
+import { authService } from './services/authService';
 import { dbService } from './services/dbService';
+import { syncConfirmedEntryAfterReview } from './services/entryConfirmSyncService';
+import { backlogItemContextSnapshot } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
 
@@ -127,11 +130,36 @@ export function MyWorkScreen({ onBack }) {
     }
   };
 
-  const submitItem = async (item, evidenceText) => {
+  const submitItem = async (item, evidenceText, attachments = []) => {
     setBusyItemId(item.id);
     setError(null);
     try {
-      await apiService.submitTeamBacklogItem(item.id, { evidence_text: evidenceText });
+      const trimmedEvidenceText = String(evidenceText || '').trim();
+      const entryText = trimmedEvidenceText || 'Photo evidence attached.';
+      const contextSnapshot = backlogItemContextSnapshot(item);
+      if (entryText || attachments.length) {
+        const entryId = await dbService.createTextEntry({
+          source: 'my_work_evidence',
+          intent: 'NOTE',
+          text: entryText,
+          attachments,
+        });
+        let entry = await dbService.confirmEntry(entryId, {
+          workContexts: contextSnapshot ? [contextSnapshot] : [],
+        });
+        try {
+          const syncOutcome = await syncConfirmedEntryAfterReview({
+            entryId,
+            entry,
+            user: authService.getUser(),
+            reason: 'my_work_evidence',
+          });
+          if (syncOutcome.entry) entry = syncOutcome.entry;
+        } catch (syncErr) {
+          console.warn('[MyWork] Evidence Entry sync failed, entry saved locally:', syncErr);
+        }
+      }
+      await apiService.submitTeamBacklogItem(item.id, { evidence_text: entryText });
       await loadWorkState();
     } catch (err) {
       throw new Error(err.message || 'Could not submit evidence', { cause: err });

@@ -7,8 +7,12 @@ JobDone is the product surface. Teams, Backlogs, Claims, Share Packs, and Approv
 ## Language
 
 **Capture**:
-Raw inbound material awaiting review — voice, text, shared contact, photo, or link — that may become an Entry, Contact update, or both after Confirmation.
+Raw inbound material awaiting review — voice, text, shared contact, photo, or link — that may become an Entry, Contact update, or both after Confirmation. Opening a Capture Composer should create a local Capture immediately so typed text, photo-only captures, and platform shares have durable local working state before Confirmation.
 _Avoid_: Draft, Item, Import, Upload
+
+**Capture Composer**:
+The reusable input surface for creating a Capture before Confirmation. The same Capture Composer should appear on personal and Team surfaces with the same core affordances: growing text, Photos, Location, Contact, Confirm, and Reject. Text autosaves into the local Capture while the user types, and Photos attach to the Capture immediately after picker selection. Reject discards only unconfirmed Capture work; after Confirmation, the Entry is immutable. Surface context may prefill the destination, such as Private Context, Team Context, or a specific Backlog Item, but the composer should not ask users to solve ambiguous routing when they started from a clear surface.
+_Avoid_: Note Box, Evidence Form, Search Box, Team-Specific Capture UI
 
 **Entry**:
 A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Its durable user-visible body is `text`; voice-era `summary`/`transcript` distinctions belong to Capture, transcription, or evaluation layers, not the final Entry contract. Corrections are made by submitting a new Entry.
@@ -39,7 +43,7 @@ Bounded, user-controlled context that helps JobDone summarize, extract, and pred
 _Avoid_: Prompt, Prompt Injection, Product Mode
 
 **Tag**:
-A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are a provisional MVP structure and may be reduced or replaced by more precise User-Defined Context Clues if they prove too vague.
+A user-visible label attached to Entries for filtering, recall, and future prediction. Tags are a provisional MVP structure and may be reduced or replaced by more precise User-Defined Context Clues if they prove too vague. Tags should not be part of the primary Capture Composer while dogfooding shows users do not use them.
 _Avoid_: Label, Chip, Metadata
 
 **Tag Category**:
@@ -306,6 +310,10 @@ _Avoid_: To-do List, Task List, Job List
 One requested or intended piece of work on a Backlog. A Backlog Item can later be satisfied by one or more confirmed Entries and reviewed through an Approval Request, but it is not itself evidence that work happened.
 _Avoid_: Task, Job, Ticket
 
+**Backlog Evidence**:
+One or more confirmed Entries attached to a specific Backlog Item to show what happened. Adding Backlog Evidence does not by itself mark the Backlog Item done or send it for approval; completion/submission is a separate explicit user action.
+_Avoid_: Auto-Complete, Hidden Approval, Evidence Object
+
 **Claim**:
 A Team Member's temporary responsibility for a Backlog Item they have chosen to do. A Claim prevents accidental duplicate work but does not prove work happened; evidence still comes from confirmed Entries. Approval clears or completes the Claim.
 _Avoid_: Ownership, Assignment, Reservation
@@ -351,8 +359,12 @@ A Team setting where submitted work is approved immediately by policy instead of
 _Avoid_: No Approval, Skipping Evidence, Silent Completion
 
 **Team Trust Mode**:
-The Team-level write policy for shared Team data. High Trust Teams allow Team Members to edit Team data collaboratively. Low Trust Teams restrict Team data editing to the Team Owner. Trust Mode is separate from Auto-Approval: one controls editing shared data, the other controls review decisions.
+The Team-level write policy for shared Team data. High Trust Teams allow Team Members to edit Team data collaboratively, including adding Team Timeline Entries and creating Backlog Items. Low Trust and Family-style Teams restrict shared Team data creation/editing to the Team Owner unless a specific flow such as Backlog Evidence submission allows the Team Member to contribute evidence for their own claimed work. Trust Mode is separate from Auto-Approval: one controls editing shared data, the other controls review decisions.
 _Avoid_: Permission Matrix, Product Mode, Role Explosion
+
+**Team Timeline**:
+The confirmed Entry stream for a Team Context. In High Trust Teams, the Team Timeline is shared operational memory that any Team Member may contribute to when the information could help the Team later. In Low Trust and Family-style Teams, the Team Timeline is primarily owner-published guidance, instructions, and context for workers; Team Members contribute through Backlog Evidence rather than freeform Timeline Entries.
+_Avoid_: Chat, Feed, Worker Drafts, Approval Queue
 
 **Team Template**:
 A suggested starting configuration for a new Team, such as High Trust Team, Low Trust Team, or Family Team. Templates set initial Team settings without creating separate product modes.
@@ -570,6 +582,7 @@ _Avoid_: Search bar, Input field, Record button
 - The Teams area should default to Team Edit only when the user owns no Teams yet. Once a user owns at least one Team, the Teams area should default to Team Home because day-to-day owner work includes review, quick Backlog creation, and occasional Team editing.
 - Team Review's active queue shows submitted Approval Requests and needs-more-evidence items oldest first. Closed decisions can appear below as lazy-loaded recent history, but they should not compete with active review work.
 - The burger/menu label for the owner-facing Teams area should be **Team**. Inside Team Home, the main section is **Needs Review**, with obvious secondary actions for **Add Backlog Item** and **Edit Teams**. These owner actions should not rely only on the burger menu or awkward floating controls.
+- The burger menu should label the user's private/default area as **Personal**, then list Teams as peer work contexts, then use a strong divider before setup/tools such as Create Team, Contacts, Locations, Settings, and Feedback. **Personal** is UI language for Private Context; the data model remains the personal User Owner Scope.
 - Team Home should support quick inline Backlog creation. **Add Backlog Item** expands a compact form in place, saves the new item, then collapses while keeping the owner on Team Home. Team Edit remains the slower configuration surface, not the normal path for day-to-day Backlog capture.
 - Team Home should keep Team context visible. If the owner has multiple Teams, a compact Team selector appears near the top. Inline Backlog creation uses the selected Team; Edit Teams opens configuration for the selected Team. The selector should default to the Team related to the current review item when there is one, otherwise the most recently used or first owned Team.
 - Team Home's Needs Review list should aggregate submitted work across all owned Teams by default, oldest first. Each review item carries a small Team label, matching My Work's team labels, so urgent work is not hidden behind a filter. Filtering by Team can follow later if the list gets noisy.
@@ -583,8 +596,8 @@ _Avoid_: Search bar, Input field, Record button
 - Team evidence is user-written text plus encouraged Photos. Photos remain attachments on Captures/Entries; text explains what was done. Photo evidence is not required because some valuable work is abstract or hard to photograph. Approval Requests review those Entries through a Share Pack rather than introducing a Team-specific evidence object.
 - Teams do not require objective proof before approval. Trust is between the Team Member and Approver; the app records the submitted Entry evidence and approval decision, while "needs more evidence" gives the Approver a lightweight way to ask for more.
 - My Work can suggest recent personal Timeline Entries as possible evidence inside the submit box for a claimed Backlog Item. Suggestions are optional picks based on the Backlog Item title/description and recent Entries; JobDone must not auto-submit evidence without the Team Member choosing it.
-- Capture review stays personal and frictionless by default. When the user is attaching evidence to Team work, JobDone can first ask for the Team if there is more than one relevant Team, then show that Team's claimed Backlog Items so the user can pick one or more Work Context values. If there is only one relevant Team or one strong claimed Backlog Item candidate, the UI should skip or preselect that step.
-- Entry review is the main place to link evidence to claimed Backlog Items. My Work can still offer submit-evidence shortcuts, but the normal Capture path should let the user confirm content and attach it to Team Work Context before the Entry is committed.
+- Capture review stays personal and frictionless by default. Team Timeline Entries should be created from a Team surface, and Backlog Evidence should be created from the relevant Backlog Item surface. JobDone should avoid a generic "which Team/Backlog Item is this about?" picker in the main Capture Composer until real use proves the routing problem is worth the extra UI.
+- Backlog Item evidence capture is the main place to link evidence to claimed Backlog Items. My Work and Team pages can offer shortcuts into that specific Backlog Item composer, but the user should not have to pick a Backlog Item inside the generic personal Capture Composer.
 - If the user has no Teams and belongs to no Teams, Entry review should hide Team Work Context controls completely.
 - If the user belongs to Teams but has no claimed Backlog Items, Entry review can show a compact Work Context doorway. Opening it should promote claiming an existing open Backlog Item first, because planned Team work should stay intentional. A secondary create-and-claim path should remain easy where Team settings allow self-started work, because users may only realise during review that the work was not already on the Backlog.
 - Create-and-claim from Entry review should not require a separate pre-approval step in V1. If Team settings allow self-started work, the new Backlog Item is created, claimed, and linked to the current Entry; the normal Approval Request later decides whether the work counts and whether Points are granted. If Team settings disallow self-started work, the create-and-claim option is hidden or disabled so the Team Member talks to the Team Owner instead.

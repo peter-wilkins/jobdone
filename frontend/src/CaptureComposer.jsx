@@ -20,6 +20,7 @@ export function CaptureComposer({
   requireText = true,
   attachments = [],
   attachmentSlot = null,
+  toolSlot = null,
   suggestions = [],
   suggestionLabel = 'Suggestions',
   rows = 2,
@@ -61,6 +62,8 @@ export function CaptureComposer({
   };
 
   const discard = () => {
+    const hasWork = text.trim() || (attachments || []).length > 0;
+    if (hasWork && !window.confirm('Discard this capture?')) return;
     setText('');
     setError('');
     clearComposerDraft(draftKey);
@@ -71,14 +74,14 @@ export function CaptureComposer({
   const canSubmit = shouldEnableComposerSubmit({ text, attachments, requireText, busy });
 
   return (
-    <form onSubmit={submit} className="mt-3 space-y-2">
+    <form onSubmit={submit} className="mt-3 space-y-3">
       <label htmlFor={textareaId} className="sr-only">{label}</label>
       <textarea
         id={textareaId}
         value={text}
         onChange={(event) => updateText(event.target.value)}
-        rows={rows}
-        className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:outline-none"
+        rows={Math.max(rows, Math.min(16, text.split('\n').length + Math.ceil(text.length / 44)))}
+        className="min-h-28 w-full resize-y rounded border border-gray-300 px-3 py-2 text-sm leading-6 text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:outline-none"
         placeholder={placeholder}
       />
       {helperText && (
@@ -99,27 +102,44 @@ export function CaptureComposer({
           ))}
         </div>
       )}
-      {attachmentSlot}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          {toolSlot}
+          {attachmentSlot}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            disabled={busy || (!text.trim() && !(attachments || []).length)}
+            onClick={discard}
+            className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            title={discardLabel}
+            aria-label={discardLabel}
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="flex h-9 w-9 items-center justify-center rounded bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+            title={busy ? 'Saving...' : submitLabel}
+            aria-label={busy ? 'Saving...' : submitLabel}
+          >
+            {busy ? (
+              <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+            ) : (
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
       {error && (
         <p className="text-xs font-medium text-red-700">{error}</p>
       )}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 disabled:opacity-50"
-        >
-          {busy ? 'Saving...' : submitLabel}
-        </button>
-        <button
-          type="button"
-          disabled={busy || !text.trim()}
-          onClick={discard}
-          className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 disabled:opacity-50"
-        >
-          {discardLabel}
-        </button>
-      </div>
     </form>
   );
 }
