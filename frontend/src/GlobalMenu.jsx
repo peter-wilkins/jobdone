@@ -10,7 +10,7 @@ const MENU_ITEMS = [
   { screen: 'locations', label: 'Locations' },
   { screen: 'team-review', label: 'Reviews' },
   { screen: 'my-work', label: 'My Work' },
-  { screen: 'team-setup', label: 'Edit Teams' },
+  { screen: 'team-setup', label: 'Create Team' },
   { screen: 'feedback', label: 'Share idea' },
 ];
 

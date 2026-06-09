@@ -76,7 +76,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [approvedItems, setApprovedItems] = useState([]);
   const [activeApprovalRequests, setActiveApprovalRequests] = useState([]);
   const [recentEntries, setRecentEntries] = useState([]);
-  const [teamAccess, setTeamAccess] = useState({ canCreateBacklogItems: false });
+  const [teamAccess, setTeamAccess] = useState({ canCreateBacklogItems: false, canEditTeam: false });
   const [isAddingBacklog, setIsAddingBacklog] = useState(false);
   const [backlogForm, setBacklogForm] = useState(EMPTY_BACKLOG_FORM);
   const [isSavingBacklog, setIsSavingBacklog] = useState(false);
@@ -115,7 +115,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       const nextTeam = workState.team || (workState.teams || []).find(candidate => candidate.id === teamId) || null;
       const fetchedOpenItems = workState.openBacklogItems || [];
       setTeam(nextTeam);
-      setTeamAccess(workState.teamAccess || { canCreateBacklogItems: false });
+      setTeamAccess(workState.teamAccess || { canCreateBacklogItems: false, canEditTeam: false });
       setInProgressItems(workState.inProgressItems || []);
       setOpenBacklogItems(previousOpenItems => {
         const fetchedIds = new Set(fetchedOpenItems.map(item => item.id));
@@ -179,13 +179,14 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const pointsEnabled = Boolean(team?.points_enabled);
   const usesManualApproval = team?.approval_mode === 'manual';
   const canCreateBacklogItems = Boolean(teamAccess?.canCreateBacklogItems);
+  const canEditTeam = Boolean(teamAccess?.canEditTeam);
   const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
 
   const editTeam = () => {
     try {
       if (teamId) sessionStorage.setItem(TEAM_EDIT_SELECTED_TEAM_KEY, teamId);
     } catch {
-      // Team Edit will fall back to the default Team.
+      // Team form will fall back to its default state.
     }
     onNavigate?.('team-setup');
   };
@@ -281,13 +282,15 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Team Context</p>
           <h1 className="truncate text-xl font-light text-gray-900 leading-6">{team?.name || 'Team'}</h1>
         </div>
-        <button
-          type="button"
-          onClick={editTeam}
-          className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
-        >
-          Edit
-        </button>
+        {canEditTeam && (
+          <button
+            type="button"
+            onClick={editTeam}
+            className="shrink-0 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Edit
+          </button>
+        )}
       </div>
 
       {error && (

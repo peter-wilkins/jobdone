@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { HomeScreen } from './HomeScreen';
 import { FeedbackScreen } from './FeedbackScreen';
 import { InboxScreen } from './InboxScreen';
@@ -54,6 +54,7 @@ function App() {
   const [apiDebugDetail, setApiDebugDetail] = useState(null);
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
   const [readableTeams, setReadableTeams] = useState([]);
+  const teamNavRequestRef = useRef(0);
 
   function applySyncResultNotice(result) {
     if (result?.ok) {
@@ -84,6 +85,28 @@ function App() {
     }
   }
 
+  const refreshReadableTeams = useCallback(async () => {
+    const requestId = teamNavRequestRef.current + 1;
+    teamNavRequestRef.current = requestId;
+    if (!authService.getUser()) {
+      setReadableTeams([]);
+      return [];
+    }
+    try {
+      const state = await apiService.getTeamSetupState();
+      const teams = mergeReadableTeams(state.ownedTeams || [], state.memberTeams || []);
+      if (teamNavRequestRef.current === requestId) {
+        setReadableTeams(teams);
+      }
+      return teams;
+    } catch {
+      if (teamNavRequestRef.current === requestId) {
+        setReadableTeams([]);
+      }
+      return [];
+    }
+  }, []);
+
   useEffect(() => {
     const previousPaddingTop = document.body.style.paddingTop;
     if (deploymentEnvironment) {
@@ -102,27 +125,13 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!user) {
-      queueMicrotask(() => {
-        if (!cancelled) setReadableTeams([]);
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-    apiService.getTeamSetupState()
-      .then(state => {
-        if (!cancelled) {
-          setReadableTeams(mergeReadableTeams(state.ownedTeams || [], state.memberTeams || []));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setReadableTeams([]);
-      });
+    queueMicrotask(() => {
+      if (!cancelled) refreshReadableTeams();
+    });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, screen, user]);
+  }, [refreshKey, refreshReadableTeams, screen, user]);
 
   useEffect(() => {
     const onApiErrorDetail = (event) => {
@@ -353,7 +362,7 @@ function App() {
   }
 
   if (screen === 'team-setup') {
-    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamSetupScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} onTeamsChanged={refreshReadableTeams} user={user} /></>;
   }
 
   if (screen === 'team-review') {

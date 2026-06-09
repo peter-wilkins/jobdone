@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
-import { useOutsideDismiss } from './services/outsideDismissService';
+import { teamScreenId } from './services/teamNavigationService';
 
 const EMPTY_FORM = { description: '', points: 3 };
 const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false };
@@ -104,14 +104,12 @@ function TeamMemberRow({ member }) {
   );
 }
 
-export function TeamSetupScreen({ onBack, onNavigate, user }) {
+export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
   const [team, setTeam] = useState(DEFAULT_TEAM);
   const [ownedTeams, setOwnedTeams] = useState([]);
   const [memberTeams, setMemberTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [isCreatingNewTeam, setIsCreatingNewTeam] = useState(false);
-  const [memberTeamsOpen, setMemberTeamsOpen] = useState(false);
-  const memberTeamsRef = useRef(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [inviteEmail, setInviteEmail] = useState('');
   const [pendingTeamInvites, setPendingTeamInvites] = useState([]);
@@ -127,17 +125,32 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const [inviteError, setInviteError] = useState(null);
   const [error, setError] = useState(null);
 
-  async function loadTeamState(teamId = selectedTeamId) {
+  function resetForm() {
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+  }
+
+  async function loadTeamState(teamId = selectedTeamId, { createMode = false } = {}) {
     setIsLoading(true);
     setError(null);
     try {
       const state = await apiService.getTeamSetupState(teamId);
-      setTeam(state.team || DEFAULT_TEAM);
       setOwnedTeams(state.ownedTeams || []);
       setMemberTeams(state.memberTeams || []);
+      setCanManage(Boolean(state.canManage));
+      if (createMode) {
+        setTeam(DEFAULT_TEAM);
+        setSelectedTeamId(null);
+        setIsCreatingNewTeam(true);
+        setPendingTeamInvites([]);
+        setTeamMembers([]);
+        setOpenBacklogItems([]);
+        resetForm();
+        return;
+      }
+      setTeam(state.team || DEFAULT_TEAM);
       setSelectedTeamId(state.team?.id || null);
       setIsCreatingNewTeam(false);
-      setCanManage(Boolean(state.canManage));
       setPendingTeamInvites(state.pendingTeamInvites || []);
       setTeamMembers(state.teamMembers || []);
       setOpenBacklogItems(state.openBacklogItems || []);
@@ -151,8 +164,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
 
   useEffect(() => {
     // Initial screen load is the synchronization point for Team backlog state.
+    const requestedTeamId = consumeRequestedTeamId();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadTeamState(consumeRequestedTeamId());
+    loadTeamState(requestedTeamId, { createMode: !requestedTeamId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.email]);
 
@@ -160,15 +174,6 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
   const hasManagedTeam = Boolean(team.id);
   const selectedOwnedTeamId = hasManagedTeam ? team.id : selectedTeamId;
   const editorTitle = isCreatingNewTeam || !hasManagedTeam ? 'Create Team' : `Edit ${team.name}`;
-
-  useOutsideDismiss(memberTeamsOpen, [memberTeamsRef], () => setMemberTeamsOpen(false));
-
-  const selectOwnedTeam = async (ownedTeam) => {
-    setSelectedTeamId(ownedTeam.id);
-    setIsCreatingNewTeam(false);
-    resetForm();
-    await loadTeamState(ownedTeam.id);
-  };
 
   const startCreateTeam = () => {
     setTeam(DEFAULT_TEAM);
@@ -182,13 +187,9 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setInviteError(null);
   };
 
-  const resetForm = () => {
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-  };
-
   const saveTeam = async (event) => {
     event.preventDefault();
+    const createNewTeam = isCreatingNewTeam || !hasManagedTeam;
     setIsSaving(true);
     setError(null);
     try {
@@ -197,10 +198,15 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         name: team.name,
         template: team.template,
         requireOwnerSelfReview: Boolean(team.require_owner_self_review),
-        createNewTeam: isCreatingNewTeam || !hasManagedTeam,
+        createNewTeam,
       });
       setTeam(result.team || team);
       setSelectedTeamId(result.team?.id || null);
+      await onTeamsChanged?.();
+      if (createNewTeam && result.team?.id) {
+        onNavigate?.(teamScreenId(result.team.id));
+        return;
+      }
       await loadTeamState(result.team?.id || null);
     } catch (err) {
       setError(err.message || 'Could not save Team');
@@ -220,6 +226,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       await apiService.deleteTeam(team.id);
+      await onTeamsChanged?.();
       const remainingOwnedTeams = ownedTeams.filter(ownedTeam => ownedTeam.id !== team.id);
       setOwnedTeams(remainingOwnedTeams);
       if (remainingOwnedTeams.length) {
@@ -294,6 +301,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
       setInviteEmail('');
       setInviteError(null);
       await loadTeamState();
+      await onTeamsChanged?.();
       setInviteCopyMessage(`Invite email sent to ${invitedEmail}`);
     } catch (err) {
       setInviteError(err.message || 'Could not create invite');
@@ -358,8 +366,10 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">Team Edit</h1>
-          <p className="text-xs text-gray-500">{isLoading ? 'Loading...' : (team.name || 'Create Team')}</p>
+          <h1 className="text-xl font-light text-gray-900 leading-5">
+            {isCreatingNewTeam ? 'Create Team' : 'Edit Team'}
+          </h1>
+          <p className="text-xs text-gray-500">{isLoading ? 'Loading...' : (team.name || 'New Team')}</p>
         </div>
       </div>
 
@@ -375,7 +385,7 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
         ) : !canManage ? (
           <section className="py-8">
             <h2 className="text-sm font-semibold text-gray-900">
-              {user ? 'Team Setup is owner-only' : 'Log in to create a Team'}
+              {user ? 'Team changes are owner-only' : 'Log in to create a Team'}
             </h2>
             {user ? (
               <p className="mt-2 text-sm leading-5 text-gray-500">
@@ -398,60 +408,50 @@ export function TeamSetupScreen({ onBack, onNavigate, user }) {
           <>
         <section>
           <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
-            <h2 className="text-sm font-semibold text-gray-900">Teams</h2>
-            <button
-              type="button"
-              onClick={startCreateTeam}
-              className="text-xs font-medium text-gray-700 hover:text-gray-900"
-            >
-              Create new
-            </button>
+            <h2 className="text-sm font-semibold text-gray-900">Existing Teams</h2>
+            {!isCreatingNewTeam && (
+              <button
+                type="button"
+                onClick={startCreateTeam}
+                className="text-xs font-medium text-gray-700 hover:text-gray-900"
+              >
+                Create new
+              </button>
+            )}
           </div>
           {ownedTeams.length === 0 && memberTeams.length === 0 ? (
             <p className="py-3 text-sm text-gray-400">No Teams yet.</p>
           ) : (
             <div className="py-2 space-y-2">
               {ownedTeams.length > 0 && (
-                <label className="block">
-                  <span className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Owned Teams</span>
-                  <select
-                    value={isCreatingNewTeam ? '__new__' : (selectedOwnedTeamId || '')}
-                    onChange={(event) => {
-                      if (event.target.value === '__new__') {
-                        startCreateTeam();
-                        return;
-                      }
-                      const ownedTeam = ownedTeams.find(candidate => candidate.id === event.target.value);
-                      if (ownedTeam) selectOwnedTeam(ownedTeam);
-                    }}
-                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
-                  >
-                    <option value="__new__">Create new Team</option>
-                    {ownedTeams.map(ownedTeam => (
-                      <option key={ownedTeam.id} value={ownedTeam.id}>{ownedTeam.name}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className="space-y-1">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-gray-500">Owned Teams</span>
+                  {ownedTeams.map(ownedTeam => (
+                    <button
+                      key={ownedTeam.id}
+                      type="button"
+                      onClick={() => onNavigate?.(teamScreenId(ownedTeam.id))}
+                      className="w-full rounded border border-gray-200 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="block truncate">{ownedTeam.name}</span>
+                    </button>
+                  ))}
+                </div>
               )}
               {memberTeams.length > 0 && (
-                <div className="rounded border border-gray-100" ref={memberTeamsRef}>
-                  <button
-                    type="button"
-                    onClick={() => setMemberTeamsOpen(open => !open)}
-                    className="w-full px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
-                  >
-                    Member Teams ({memberTeams.length}) {memberTeamsOpen ? 'hide' : 'show'}
-                  </button>
-                  {memberTeamsOpen && (
-                    <div className="border-t border-gray-100">
-                      {memberTeams.map(({ team: memberTeam, role }) => (
-                        <div key={memberTeam.id} className="px-3 py-2 border-b border-gray-50 last:border-b-0">
-                          <span className="block text-sm font-medium text-gray-500">{memberTeam.name}</span>
-                          <span className="block text-xs text-gray-400">{role || 'Member'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="space-y-1">
+                  <span className="block text-xs font-medium uppercase tracking-wide text-gray-500">Member Teams</span>
+                  {memberTeams.map(({ team: memberTeam, role }) => (
+                    <button
+                      key={memberTeam.id}
+                      type="button"
+                      onClick={() => onNavigate?.(teamScreenId(memberTeam.id))}
+                      className="w-full rounded border border-gray-200 px-3 py-2 text-left hover:bg-gray-50"
+                    >
+                      <span className="block truncate text-sm font-medium text-gray-600">{memberTeam.name}</span>
+                      <span className="block text-xs text-gray-400">{role || 'Member'}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

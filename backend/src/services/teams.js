@@ -395,6 +395,10 @@ function canCreateBacklogItemsForTeam(team = {}) {
   return Boolean(isOwner || team.workers_can_create_backlog_items);
 }
 
+function canEditTeamForTeam(team = {}) {
+  return Boolean(team.member_role === 'owner' && !team.joined_by_invite);
+}
+
 async function requireBacklogCreateTeam(db, userEmail, selectedTeamId = null) {
   const email = validateEmail(userEmail);
   if (!selectedTeamId) {
@@ -645,6 +649,7 @@ export async function getMyWorkState({ db = jobdoneDb, teamId = null, userEmail 
     teams: visibleTeams.map(presentTeam),
     teamAccess: {
       canCreateBacklogItems: visibleTeams.length === 1 && canCreateBacklogItemsForTeam(visibleTeams[0]),
+      canEditTeam: visibleTeams.length === 1 && canEditTeamForTeam(visibleTeams[0]),
     },
     inProgressItems: inProgressRows.map(row => withApprovalRequest(row, approvalByBacklogId, teamForRow(row))),
     openBacklogItems: (rows || []).filter(row => row.status === 'open').map(row => presentBacklogItem(row, teamForRow(row))),

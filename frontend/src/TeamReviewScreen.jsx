@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiService } from './services/apiService';
+import { teamScreenId } from './services/teamNavigationService';
 
 const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
-const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
 
 function approvalStatusText(status) {
   if (status === 'needs_more_evidence') return 'Waiting for more evidence';
@@ -127,15 +127,10 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
   const selectedTeam = ownedTeams.find(team => team.id === selectedTeamId) || ownedTeams[0] || null;
   const selectedTeamPointsEnabled = Boolean(selectedTeam?.points_enabled);
 
-  const editTeams = () => {
+  const openTeam = () => {
     if (selectedTeam?.id) {
-      try {
-        sessionStorage.setItem(TEAM_EDIT_SELECTED_TEAM_KEY, selectedTeam.id);
-      } catch {
-        // Team Edit will fall back to its default Team when session storage is unavailable.
-      }
+      onNavigate?.(teamScreenId(selectedTeam.id));
     }
-    onNavigate?.('team-setup');
   };
 
   const saveBacklogItem = async (event) => {
@@ -267,10 +262,11 @@ export function TeamReviewScreen({ onBack, onNavigate, user }) {
                   </button>
                   <button
                     type="button"
-                    onClick={editTeams}
+                    onClick={openTeam}
+                    disabled={!selectedTeam?.id}
                     className="px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
                   >
-                    Edit Teams
+                    Open Team
                   </button>
                 </div>
 
