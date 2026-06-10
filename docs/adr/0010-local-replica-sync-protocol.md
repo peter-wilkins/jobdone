@@ -162,3 +162,22 @@ Property tests should be split at useful boundaries:
 - later, a full app wake-up sync harness without Playwright button pushing
 
 These tests should prove preservation of IDs, associations, tombstones, transaction ordering, and no cross-user or cross-team leakage.
+
+## Decomplex Review (2026-06-10)
+
+Five complections identified and resolved before implementation. See `docs/sync-schema-proposal.sql` for the revised schema.
+
+**1. payloadMeta envelope replaces flat codec/encryptionMode/schemaVersion columns.**
+These three axes vary independently and encrypted mode needs additional fields (`keyId`, `algorithm`, `nonce`). A single `payloadMeta jsonb` envelope carries all of them. MVP default: `{"codec":"json","encryptionMode":"none","schemaVersion":1}`.
+
+**2. syncTransactions is ordering-only. Actor identity moves to syncTransactionActors.**
+`t` is safety-critical and must never be mutated. Actor fields (`actorUserId`, `actorEmail`, `actorDeviceId`) are diagnostic and subject to GDPR erasure. Separating them means erasure deletes rows from `syncTransactionActors` without touching the ordering record.
+
+**3. SyncIntent wire shape splits into SyncEnvelope and SyncIntent.**
+`SyncEnvelope { id, replicaEpoch, baseT, createdAt }` handles retry/idempotency plumbing. `SyncIntent { action, ownerKind, ownerId, collection, objectId, payloadJson }` carries the business rule. The `syncIntents` ledger stores only the envelope id and an `intentHash` — not the full parsed action. Policy tests construct bare SyncIntent objects without envelope noise.
+
+**4. syncOwnerAccess is capability-grant rows, not a single "has access" record.**
+`capability` is one of `pull | push | readable_access`. Personal scope gets `pull` + `push` auto-created on account creation. Team `readable_access` is a separate grant added when Keybag is set up. Revocation sets `revokedAt`; rows are never deleted. GDPR erasure deletes all rows for a `userId` without touching Team data.
+
+**5. replicaEpoch removed from syncObjects rows.**
+`replicaEpoch` is a client-envelope concept for cold-restore detection. It belongs only in request/response envelopes and a server-side `replicaState` record. Pull response carries `resetRequired: true` when the server epoch has changed. Individual stored objects carry only `createdT` and `changedT`.
