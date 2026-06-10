@@ -112,6 +112,26 @@ class AuthService {
     if (error) throw error;
   }
 
+  /** Sign in with Google OAuth via Supabase. Redirects to Google then back. */
+  async signInWithGoogle() {
+    if (!supabase) throw new Error('Auth not configured');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: authRedirectUrl(),
+      },
+    });
+    if (error) throw error;
+  }
+
+  /**
+   * Returns key material for E2EE Data Key derivation.
+   * Currently null — will be populated when passkey/WebAuthn PRF is implemented.
+   */
+  getDataKeyMaterial() {
+    return null;
+  }
+
   async signOut() {
     if (!supabase) return;
     await supabase.auth.signOut();
