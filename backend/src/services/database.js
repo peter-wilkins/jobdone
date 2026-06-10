@@ -1067,7 +1067,7 @@ export async function saveLocationForReplica(userId, input = {}) {
 
   const { data, error } = await jobdoneDb
     .from('locations')
-    .upsert([{ userId, ...location }], { onConflict: 'id,"userId"', ignoreDuplicates: false })
+    .upsert([{ userId, ...location }], { onConflict: 'id', ignoreDuplicates: false })
     .select()
     .single();
   if (error) throw error;
