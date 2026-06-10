@@ -472,6 +472,78 @@ AS $$
   LIMIT p_match_count;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Local Replica sync tables
+-- See docs/adr/0010-local-replica-sync-protocol.md and decomplex review.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE jobdone.syncTransactions (
+  t             bigint      PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  source        text        NOT NULL CHECK (source IN ('syncPush','system','import','repair')),
+  createdAt     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE jobdone.syncTransactionActors (
+  t             bigint      PRIMARY KEY REFERENCES jobdone.syncTransactions(t) ON DELETE CASCADE,
+  actorUserId   uuid,
+  actorEmail    text,
+  actorDeviceId text
+);
+
+CREATE TABLE jobdone.syncObjects (
+  id              uuid        NOT NULL,
+  ownerKind       text        NOT NULL CHECK (ownerKind IN ('user','team')),
+  ownerId         uuid        NOT NULL,
+  collection      text        NOT NULL,
+  createdT        bigint      NOT NULL REFERENCES jobdone.syncTransactions(t),
+  changedT        bigint      NOT NULL REFERENCES jobdone.syncTransactions(t),
+  deletedT        bigint               REFERENCES jobdone.syncTransactions(t),
+  createdAt       timestamptz NOT NULL DEFAULT now(),
+  changedAt       timestamptz NOT NULL DEFAULT now(),
+  deletedAt       timestamptz,
+  payloadMeta     jsonb       NOT NULL DEFAULT '{"codec":"json","encryptionMode":"none","schemaVersion":1}',
+  payloadJson     jsonb,
+  payloadBytes    bytea,
+  payloadHash     text,
+  PRIMARY KEY (id, ownerKind, ownerId)
+);
+
+CREATE UNIQUE INDEX syncObjects_owner_collection_id_uidx
+  ON jobdone.syncObjects (ownerKind, ownerId, collection, id);
+CREATE INDEX syncObjects_owner_changedT_idx
+  ON jobdone.syncObjects (ownerKind, ownerId, changedT DESC)
+  WHERE deletedT IS NULL;
+
+CREATE TABLE jobdone.syncOwnerAccess (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  userId      uuid        NOT NULL,
+  ownerKind   text        NOT NULL CHECK (ownerKind IN ('user','team')),
+  ownerId     uuid        NOT NULL,
+  capability  text        NOT NULL CHECK (capability IN ('pull','push','readable_access')),
+  grantedAt   timestamptz NOT NULL DEFAULT now(),
+  revokedAt   timestamptz
+);
+
+CREATE UNIQUE INDEX syncOwnerAccess_active_uidx
+  ON jobdone.syncOwnerAccess (userId, ownerKind, ownerId, capability)
+  WHERE revokedAt IS NULL;
+CREATE INDEX syncOwnerAccess_owner_idx
+  ON jobdone.syncOwnerAccess (ownerKind, ownerId)
+  WHERE revokedAt IS NULL;
+
+CREATE TABLE jobdone.syncIntents (
+  id              uuid        PRIMARY KEY,
+  actorUserId     uuid        NOT NULL,
+  intentHash      text        NOT NULL,
+  status          text        NOT NULL CHECK (status IN ('accepted','rejected','conflict')),
+  resultT         bigint      REFERENCES jobdone.syncTransactions(t),
+  createdAt       timestamptz NOT NULL DEFAULT now(),
+  resolvedAt      timestamptz
+);
+
+CREATE INDEX syncIntents_actor_created_idx
+  ON jobdone.syncIntents (actorUserId, createdAt DESC);
+
 DO $$
 DECLARE
   table_record RECORD;
