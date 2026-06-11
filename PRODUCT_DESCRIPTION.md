@@ -2,11 +2,11 @@
 
 ## Core Product
 
-A mobile-first voice job log for self-employed plumbers that helps them unload operational memory immediately after jobs.
+A mobile-first work log for self-employed plumbers that helps them unload operational memory immediately after jobs.
 
 Surface value:
 
-voice-to-job-log
+fast-capture-to-job-log
 
 Deeper value:
 
@@ -26,7 +26,7 @@ high admin burden
 van/mobile workflow
 frequent forgotten follow-ups
 low tolerance for complex software
-already use voice notes informally
+already use quick notes and phone dictation informally
 Core Behavioural Loop
 Trigger moment
 
@@ -37,7 +37,7 @@ Loop:
 Finish job
 Sit in van
 Open app
-Record naturally
+Capture naturally
 Review summary
 Save
 Mental closure
@@ -396,4 +396,3 @@ Publicly:
 Privately/strategically:
 
 external business memory
-

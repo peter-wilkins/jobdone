@@ -1,7 +1,7 @@
 # JobDone Backend
 
-Fastify API for JobDone audio processing, cloud sync, Recall, query history,
-feedback, structure prediction, and location lookup.
+Fastify API for JobDone cloud sync, Recall, query history, feedback, structure
+prediction, and location lookup.
 
 ## Source Of Truth
 
@@ -30,8 +30,6 @@ calls.
 ## Environment
 
 ```text
-DEEPGRAM_API_KEY
-ANTHROPIC_API_KEY
 VOYAGE_API_KEY
 SUPABASE_URL
 SUPABASE_KEY
@@ -54,8 +52,6 @@ npm test
 ## Key Endpoints
 
 - `GET /health`
-- `POST /api/transcribe`
-- `POST /api/summarize`
 - `POST /api/sync/save`
 - `GET /api/sync/entries`
 - `POST /api/recall`

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncOrchestratorService } from './services/syncOrchestratorService';
@@ -8,7 +7,6 @@ import { queryHistoryService } from './services/queryHistoryService';
 import { preferencesService } from './services/preferencesService';
 import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
-import { captureContextService } from './services/captureContextService';
 import { recallCoverageFromReplicaState, recallLocalEntriesWithCoverage } from './services/localRecallService';
 import { selectPrivateTimelineEntries } from './services/teamPageService';
 import {
@@ -36,10 +34,7 @@ import { formatTime } from './mockData';
 // Dev toggle for query-active state testing
 const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
-const MIN_STOP_AFTER_MS = 1000;
-const MIN_RECORDING_SECONDS = 1;
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
-const ENABLE_TRANSCRIPTION_CAPTURE = import.meta.env.VITE_ENABLE_TRANSCRIPTION_CAPTURE === 'true';
 let fastCaptureAttemptedThisRun = false;
 
 function reviewText(entry) {
@@ -184,14 +179,8 @@ export function HomeScreen({
   onSyncResult,
   readableTeams = [],
 }) {
-  const processingIdsRef = useRef(new Set());
   const handledRecordRequestRef = useRef(0);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [isStartingRecording, setIsStartingRecording] = useState(false);
-  const [isStoppingRecording, setIsStoppingRecording] = useState(false);
-  const [recordingFlashActive, setRecordingFlashActive] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
   const [entries, setEntries] = useState([]);
   const [reviewLocations, setReviewLocations] = useState({});
   const [reviewLocationErrors, setReviewLocationErrors] = useState({});
@@ -220,12 +209,10 @@ export function HomeScreen({
   const [teamWorkContext, setTeamWorkContext] = useState({ hasTeams: false, teams: [], claimedItems: [], openBacklogItems: [] });
   const [reviewExplanationKeys, setReviewExplanationKeys] = useState({});
   const [confirmingIds, setConfirmingIds] = useState(new Set());
-  const [processingIds, setProcessingIds] = useState(new Set());
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
-  const [captureContext] = useState(() => captureContextService.get());
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
@@ -574,17 +561,6 @@ export function HomeScreen({
     };
   }, [reviewContactPanels, reviewLocationPanels, reviewWorkContextPanels]);
 
-  /**
-   * Classify a raw fetch/API error into a user-friendly kind token
-   */
-  const friendlyError = (err) => {
-    const msg = err?.message || '';
-    if (err?.code === 'empty_transcription') return 'empty_transcription';
-    if (err?.name === 'AbortError' || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network'))
-      return 'offline';
-    return 'server';
-  };
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedReviewTextDrafts(reviewTextDrafts);
@@ -778,82 +754,6 @@ export function HomeScreen({
     reviewSelectedWorkContexts,
   ]);
 
-  /**
-   * Process a recording: transcribe and classify
-   */
-  const processRecording = async (jobId) => {
-    if (processingIdsRef.current.has(jobId)) return;
-
-    try {
-      processingIdsRef.current.add(jobId);
-      setProcessingIds(prev => new Set([...prev, jobId]));
-
-      // Get the entry with audio blob
-      const entry = await dbService.getEntry(jobId);
-      if (!entry || !entry.audioBlob) {
-        throw new Error('Recording not found');
-      }
-
-      const result = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
-
-      // Update entry with raw transcription data and intent (goes to ready_for_review).
-      const updated = await dbService.updateEntryWithTranscription(jobId, {
-        transcript: result.transcript,
-        summary: result.summary || result.transcript,
-        intent: result.intent || 'NOTE',
-        transcriptionSource: 'backend',
-        transcriptionCandidates: [],
-      });
-
-      // Update UI
-      setEntries(prev =>
-        prev.map(e => (e.id === jobId ? updated : e))
-      );
-      setBackendAvailable(true);
-    } catch (err) {
-      console.error('Recording processing error:', err);
-      const kind = friendlyError(err);
-      if (kind === 'offline') setBackendAvailable(false);
-      try {
-        if (kind === 'offline') {
-          const queued = await dbService.updateEntry(jobId, {
-            errorMessage: 'offline',
-          });
-          setEntries(prev => prev.map(e =>
-            e.id === jobId ? queued : e
-          ));
-          return;
-        }
-        if (kind === 'empty_transcription') {
-          const updated = await dbService.updateEntry(jobId, {
-            status: 'ready_for_review',
-            intent: 'NOTE',
-            errorMessage: kind,
-            transcriptionPending: false,
-          });
-          setEntries(prev => prev.map(e =>
-            e.id === jobId ? { ...e, ...updated } : e
-          ));
-          return;
-        }
-        await dbService.markEntryFailed(jobId, kind);
-        setEntries(prev => prev.map(e =>
-          e.id === jobId ? { ...e, status: 'failed', errorMessage: kind } : e
-        ));
-      } catch (dbErr) {
-        console.error('Failed to mark recording failed:', dbErr);
-        setError('Recording processing failed');
-      }
-    } finally {
-      processingIdsRef.current.delete(jobId);
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    }
-  };
-
   const startTextCapture = async () => {
     try {
       setError(null);
@@ -888,53 +788,30 @@ export function HomeScreen({
     return () => window.clearTimeout(timer);
   }, [focusEntryId, entries]);
 
-  const startRecording = async ({ flash = false } = {}) => {
-    if (isStartingRecording || isStoppingRecording) return;
-
-    try {
-      setError(null);
-      setIsStartingRecording(true);
-      await audioService.startRecording();
-      setIsRecording(true);
-      setRecordingTime(0);
-      setRecordingFlashActive(flash);
-    } catch (err) {
-      console.error('Recording start error:', err);
-      setError(err.message);
-      setIsRecording(false);
-      setRecordingFlashActive(false);
-      audioService.cancelRecording();
-    } finally {
-      setIsStartingRecording(false);
-    }
-  };
-
   useEffect(() => {
     if (!recordRequestId || handledRecordRequestRef.current === recordRequestId) return;
-    if (isLoading || activeQuery || isRecording || isStartingRecording || isStoppingRecording) return;
+    if (isLoading || activeQuery) return;
     if (document.visibilityState !== 'visible') return;
 
     handledRecordRequestRef.current = recordRequestId;
     const timer = window.setTimeout(() => {
-      if (ENABLE_TRANSCRIPTION_CAPTURE) startRecording({ flash: true });
-      else startTextCapture();
+      startTextCapture();
       onRecordRequestHandled?.();
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordRequestId, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
+  }, [recordRequestId, isLoading, activeQuery]);
 
   useEffect(() => {
     const isForegroundReturn = foregroundReturnCount > handledForegroundReturnRef.current;
     const isInitialAutoStart = foregroundReturnCount === 0;
 
-    if (!ENABLE_TRANSCRIPTION_CAPTURE) return;
     if (!fastCaptureEnabled) return;
     if (isInitialAutoStart && !fastCaptureEnabledAtOpenRef.current) return;
     if (isInitialAutoStart && !canAutoStart) return;
     if (isInitialAutoStart && fastCaptureAttemptedThisRun) return;
     if (!isInitialAutoStart && !isForegroundReturn) return;
-    if (isLoading || activeQuery || isRecording || isStartingRecording || isStoppingRecording) return;
+    if (isLoading || activeQuery) return;
     if (document.visibilityState !== 'visible') return;
 
     if (isForegroundReturn) {
@@ -944,11 +821,10 @@ export function HomeScreen({
     }
 
     const timer = window.setTimeout(() => {
-      startRecording({ flash: true });
+      startTextCapture();
     }, 0);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fastCaptureEnabled, canAutoStart, foregroundReturnCount, isLoading, activeQuery, isRecording, isStartingRecording, isStoppingRecording]);
+  }, [fastCaptureEnabled, canAutoStart, foregroundReturnCount, isLoading, activeQuery]);
 
   const handleApplyUpdate = async () => {
     if (updateRegistration) {
@@ -956,90 +832,6 @@ export function HomeScreen({
       return;
     }
     window.location.reload();
-  };
-
-  const stopRecording = async () => {
-    if (!isRecording || isStoppingRecording) return;
-
-    try {
-      setError(null);
-
-      if (audioService.getStatus().elapsedMs < MIN_STOP_AFTER_MS) {
-        return;
-      }
-
-      setIsStoppingRecording(true);
-      setIsRecording(false);
-      const audioData = await audioService.stopRecording();
-
-      if (!audioData) return;
-
-      if (audioData.duration < MIN_RECORDING_SECONDS || audioData.size === 0) {
-        setError('Recording was too short. Hold the mic a little longer.');
-        return;
-      }
-
-      const jobId = await dbService.createEntry(
-        {
-          duration: audioData.duration,
-          audioDiagnostics: audioData.diagnostics,
-        },
-        audioData.blob
-      );
-
-      try {
-        const locationResult = await locationClueService.captureCurrentLocation({ allowPrompt: false });
-        if (locationResult.ok) {
-          await dbService.createDeviceLocationContextClue({ entryId: jobId, clue: locationResult.clue });
-        }
-      } catch (locationErr) {
-        console.warn('[Location] Capture-time location clue unavailable:', locationErr);
-      }
-
-      // Add to entries list (at the top, as in-progress)
-      const newEntry = await dbService.getEntry(jobId);
-      setEntries(prev => [{
-        ...newEntry,
-        status: 'ready_for_review',
-        intent: 'NOTE',
-        transcriptionPending: true,
-      }, ...prev]);
-
-      // Auto-trigger transcription if backend is available
-      if (backendAvailable) {
-        processRecording(jobId);
-      } else {
-        const queuedEntry = await dbService.updateEntry(jobId, {
-          errorMessage: 'offline',
-        });
-        setEntries(prev => prev.map(e => e.id === jobId ? queuedEntry : e));
-      }
-    } catch (err) {
-      console.error('Recording stop error:', err);
-      setError(err.message);
-      setIsRecording(false);
-      setRecordingFlashActive(false);
-      audioService.cancelRecording();
-    } finally {
-      setIsStoppingRecording(false);
-    }
-  };
-
-  const cancelRecording = () => {
-    if (!isRecording && !isStartingRecording) return;
-
-    try {
-      setError(null);
-      audioService.cancelRecording();
-    } catch (err) {
-      console.error('Recording cancel error:', err);
-    } finally {
-      setIsRecording(false);
-      setIsStartingRecording(false);
-      setIsStoppingRecording(false);
-      setRecordingFlashActive(false);
-      setRecordingTime(0);
-    }
   };
 
   const handleConfirm = async (id) => {
@@ -1073,7 +865,7 @@ export function HomeScreen({
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       }
 
-      // Delete audio and move to confirmed locally.
+      // Move to confirmed locally.
       const locationText = (reviewLocations[id] || '').trim();
       const selectedLocationDraft = reviewLocationDrafts[id];
       const locations = locationText
@@ -1232,20 +1024,6 @@ export function HomeScreen({
     }
   };
 
-  const handleRetry = async (id) => {
-    try {
-      setError(null);
-      await dbService.resetEntryForRetry(id);
-      setEntries(prev => prev.map(e =>
-        e.id === id ? { ...e, status: 'recording', errorMessage: null } : e
-      ));
-      processRecording(id);
-    } catch (err) {
-      console.error('Failed to retry entry:', err);
-      setError('Failed to retry');
-    }
-  };
-
   const handleReject = async (id) => {
     try {
       setError(null);
@@ -1275,32 +1053,9 @@ export function HomeScreen({
     }
   };
 
-  const retryPendingRecordings = async () => {
-    const [recordingEntries, failedEntries] = await Promise.all([
-      dbService.getEntries('recording'),
-      dbService.getEntries('failed'),
-    ]);
-    const retryableFailed = failedEntries.filter(entry =>
-      ['offline', 'Backend unavailable'].includes(entry.errorMessage)
-    );
-
-    for (const entry of [...recordingEntries, ...retryableFailed]) {
-      if (entry.status === 'failed') {
-        await dbService.resetEntryForRetry(entry.id);
-        setEntries(prev => prev.map(e =>
-          e.id === entry.id ? { ...e, status: 'recording', errorMessage: null } : e
-        ));
-      }
-      processRecording(entry.id);
-    }
-  };
-
   const refreshBackendStatus = async () => {
     const isAvailable = await apiService.checkHealth();
     setBackendAvailable(isAvailable);
-    if (isAvailable) {
-      await retryPendingRecordings();
-    }
     return isAvailable;
   };
 
@@ -1542,13 +1297,12 @@ export function HomeScreen({
   useEffect(() => {
     const loadJobs = async () => {
       try {
-        const inProgressEntries = await dbService.getEntries('recording');
         const readyForReviewEntries = await dbService.getEntries('ready_for_review');
         const failedEntries = await dbService.getEntries('failed');
         const confirmedEntries = await dbService.getEntries('confirmed');
 
-        // Merge all entries: in-progress first, then confirmed (newest first)
-        const allInProgress = [...inProgressEntries, ...readyForReviewEntries, ...failedEntries];
+        // Merge all entries: in-review first, then confirmed (newest first)
+        const allInProgress = [...readyForReviewEntries, ...failedEntries];
         const sortedConfirmed = confirmedEntries.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         const loadedEntries = [...allInProgress, ...sortedConfirmed];
         setEntries(loadedEntries);
@@ -1598,19 +1352,7 @@ export function HomeScreen({
           return next;
         });
 
-        // Check backend availability
         const isAvailable = await refreshBackendStatus();
-
-        // Entries left in 'recording' state from a previous session — auto-retry or mark failed
-        for (const entry of inProgressEntries) {
-          if (isAvailable) {
-            processRecording(entry.id);
-          } else {
-            setEntries(prev => prev.map(e =>
-              e.id === entry.id ? { ...e, errorMessage: 'offline' } : e
-            ));
-          }
-        }
 
         // Retry any confirmed entries that never made it to the cloud
         if (isAvailable) {
@@ -1684,28 +1426,7 @@ export function HomeScreen({
       window.removeEventListener('pageshow', handlePageShow);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Update recording time display
-  useEffect(() => {
-    if (!isRecording) return;
-
-    const interval = setInterval(() => {
-      const status = audioService.getStatus();
-      setRecordingTime(status.elapsedSeconds);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
-  useEffect(() => {
-    if (!recordingFlashActive) return;
-    const timer = window.setTimeout(() => {
-      setRecordingFlashActive(false);
-    }, 1600);
-    return () => window.clearTimeout(timer);
-  }, [recordingFlashActive]);
 
   // Capture Bar states
   const renderCaptureBar = () => {
@@ -1716,17 +1437,6 @@ export function HomeScreen({
           <div className="flex items-center gap-2">
             <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
             <span className="text-sm text-gray-600">Searching...</span>
-          </div>
-        </div>
-      );
-    }
-
-    if (isStartingRecording) {
-      return (
-        <div className="flex items-center justify-center px-4 h-12">
-          <div className="flex items-center gap-2">
-            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
-            <span className="text-sm text-gray-600">Starting recording...</span>
           </div>
         </div>
       );
@@ -1774,11 +1484,6 @@ export function HomeScreen({
           </div>
         </div>
       );
-    }
-
-    if (isRecording) {
-      // Timer now shown in header
-      return <div className="h-12" />;
     }
 
     const trimmedQueryInput = queryInputText.trim();
@@ -1853,17 +1558,7 @@ export function HomeScreen({
     );
   };
 
-  // Floating mic button state colors: grey (idle), red (recording), green (has in-progress entries)
-  const getMicColorClass = () => {
-    if (isStartingRecording || isStoppingRecording) return 'bg-blue-500';
-    if (isRecording) return 'bg-red-500';
-    const hasInProgress = entries.some(e => e.status !== 'confirmed');
-    if (hasInProgress) return 'bg-green-500';
-    return 'bg-gray-500';
-  };
-
   const renderEntry = (entry) => {
-    const isProcessing = processingIds.has(entry.id);
     const primaryLocation = Array.isArray(entry.locations) && entry.locations.length > 0
       ? entry.locations[0]
       : null;
@@ -1876,76 +1571,6 @@ export function HomeScreen({
     const entryWorkContexts = Array.isArray(entry.workContexts) && entry.workContexts.length > 0
       ? entry.workContexts
       : [];
-
-    if (entry.status === 'recording') {
-      const isQueued = entry.errorMessage === 'offline';
-      return (
-        <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
-          <div className="flex items-center gap-3">
-            <div
-              className={`h-4 w-4 border-2 rounded-full ${
-                isQueued ? 'border-gray-300 border-t-transparent' : 'animate-spin border-blue-500 border-t-transparent'
-              }`}
-            />
-            <div className="flex-1">
-              <p className="text-sm text-gray-600">
-                {isQueued ? 'There is an issue with Sync right now but carry on.' : 'Processing...'}
-              </p>
-              <p className="text-xs text-gray-400">{entry.audioDuration}s recording</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (entry.status === 'failed') {
-      const isEmptyTranscription = entry.errorMessage === 'empty_transcription';
-      return (
-        <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
-          <div className="flex items-start gap-2 mb-3">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-              Failed
-            </span>
-            <p className="text-xs text-gray-500">{entry.audioDuration}s recording</p>
-          </div>
-          <p className="text-sm text-gray-600 mb-3">
-            {entry.errorMessage === 'offline'
-              ? 'There is an issue with Sync right now but carry on.'
-              : isEmptyTranscription
-                ? 'No speech detected. Try recording again.'
-              : 'Something went wrong while processing this recording.'}
-          </p>
-          {entry.audioDiagnostics && (
-            <div className="mb-3 rounded border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-900">
-              <p>
-                Audio debug: {entry.audioSize || 0} bytes, {entry.audioDiagnostics.chunkCount ?? '?'} chunks
-                {entry.audioDiagnostics.track?.muted ? ', mic muted' : ''}
-                {entry.audioDiagnostics.track?.readyState ? `, track ${entry.audioDiagnostics.track.readyState}` : ''}
-              </p>
-              {entry.audioDiagnostics.track?.lastEvent && (
-                <p className="mt-1">Last mic event: {entry.audioDiagnostics.track.lastEvent}</p>
-              )}
-            </div>
-          )}
-          <div className="flex gap-3">
-            {!isEmptyTranscription && (
-              <button
-                onClick={() => handleRetry(entry.id)}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition"
-              >
-                Retry processing
-              </button>
-            )}
-            <button
-              onClick={() => handleReject(entry.id)}
-              className={`${isEmptyTranscription ? 'w-full' : 'flex-1'} px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition`}
-            >
-              {isEmptyTranscription ? 'Dismiss' : 'Discard'}
-            </button>
-          </div>
-        </div>
-      );
-    }
 
     if (entry.status === 'ready_for_review') {
       const { candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
@@ -1961,8 +1586,6 @@ export function HomeScreen({
       const contactSearch = reviewContactSearch[entry.id] || '';
       const manualContact = reviewManualContacts[entry.id] || { displayName: '', phone: '', email: '' };
       const isConfirming = confirmingIds.has(entry.id);
-      const transcriptionPending = Boolean(entry.transcriptionPending || isProcessing);
-      const transcriptionFailed = entry.errorMessage === 'empty_transcription';
       const reviewEntryText = entry.summary || entry.transcript || '';
       const editableReviewText = Object.prototype.hasOwnProperty.call(reviewTextDrafts, entry.id)
         ? reviewTextDrafts[entry.id]
@@ -2036,19 +1659,6 @@ export function HomeScreen({
                 placeholder="Type here or use keyboard dictation."
                 className="mb-3 min-h-32 w-full resize-y rounded border border-gray-200 px-3 py-2 text-sm leading-6 text-gray-900 placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-              {!reviewEntryText && transcriptionPending && (
-                <p className="mb-2 text-xs text-gray-500">Audio is transcribing. You can add context or type while it runs.</p>
-              )}
-              {transcriptionFailed && (
-                <p className="mb-2 text-xs text-red-700">Transcription did not hear speech. Type here or use keyboard dictation.</p>
-              )}
-              {transcriptionFailed && entry.audioDiagnostics && (
-                <p className="mb-3 rounded border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-900">
-                  Audio debug: {entry.audioSize || 0} bytes, {entry.audioDiagnostics.chunkCount ?? '?'} chunks
-                  {entry.audioDiagnostics.track?.muted ? ', mic muted' : ''}
-                  {entry.audioDiagnostics.track?.readyState ? `, track ${entry.audioDiagnostics.track.readyState}` : ''}
-                </p>
-              )}
               {showSeparateTranscript && (
                 <p className="text-sm text-gray-600 mb-3">{entry.transcript}</p>
               )}
@@ -2716,35 +2326,13 @@ export function HomeScreen({
 
   return (
     <div className="h-screen bg-white flex flex-col">
-      {isRecording && (
-        <div
-          className="fixed inset-0 pointer-events-none z-40 bg-red-500/10"
-          aria-hidden="true"
-          style={recordingFlashActive ? { animation: 'recording-start-flash 1.6s ease-out' } : undefined}
-        />
-      )}
-
       {/* Header */}
       <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-light text-gray-900 leading-5">JobDone</h1>
           <p className="text-[10px] leading-4 text-gray-400 font-mono">build {BUILD_ID}</p>
         </div>
-        
-        {/* Recording timer in header */}
-        {(isRecording || isStartingRecording) && (
-          <div className="flex items-center gap-2">
-            <span className={`${isRecording ? 'bg-red-500' : 'bg-blue-500'} w-2 h-2 rounded-full animate-pulse`} />
-            {isRecording ? (
-              <span className="text-sm font-medium text-gray-900">
-                {Math.floor(recordingTime / 60)}:{String(recordingTime % 60).padStart(2, '0')}
-              </span>
-            ) : (
-              <span className="text-sm font-medium text-gray-900">Starting...</span>
-            )}
-          </div>
-        )}
-        
+
         <GlobalMenu
           currentScreen="home"
           onNavigate={onNavigate}
@@ -2868,61 +2456,17 @@ export function HomeScreen({
         )}
       </div>
 
-      {ENABLE_TRANSCRIPTION_CAPTURE && isRecording ? (
-        <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
-          <button
-            onClick={cancelRecording}
-            className="w-12 h-12 flex items-center justify-center bg-gray-500 text-white rounded-full shadow-lg hover:opacity-90 transition"
-            title="Cancel recording"
-            disabled={isStoppingRecording}
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-          <button
-            onClick={stopRecording}
-            className="w-14 h-14 flex items-center justify-center bg-red-500 text-white rounded-full shadow-lg hover:opacity-90 transition disabled:opacity-70"
-            title="Stop and review"
-            disabled={isStoppingRecording}
-          >
-            {isStoppingRecording ? (
-              <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            )}
-          </button>
-        </div>
-      ) : ENABLE_TRANSCRIPTION_CAPTURE ? (
-        <button
-          onClick={startRecording}
-          className={`fixed bottom-6 right-6 w-14 h-14 flex items-center justify-center ${getMicColorClass()} text-white rounded-full shadow-lg hover:opacity-90 transition z-50`}
-          title={isStartingRecording ? 'Starting recording' : 'Start recording'}
-          disabled={isLoading || isStartingRecording || isStoppingRecording}
-        >
-          {isStartingRecording || isStoppingRecording ? (
-            <span className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
-            </svg>
-          )}
-        </button>
-      ) : (
-        <button
-          onClick={startTextCapture}
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition hover:bg-gray-800 disabled:opacity-70"
-          title="Start entry"
-          aria-label="Start entry"
-          disabled={isLoading}
-        >
-          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
-      )}
+      <button
+        onClick={startTextCapture}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition hover:bg-gray-800 disabled:opacity-70"
+        title="Start entry"
+        aria-label="Start entry"
+        disabled={isLoading}
+      >
+        <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
     </div>
   );
 }

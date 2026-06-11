@@ -1,6 +1,6 @@
 # JobDone
 
-JobDone is a mobile-first, local-first voice log for self-employed tradespeople.
+JobDone is a mobile-first, local-first work log for self-employed tradespeople.
 It captures what happened on a job, turns it into a confirmed Timeline Entry,
 and uses Locations, Contacts, Tags, and Recall to surface operational memory
 when it is needed.
@@ -26,8 +26,8 @@ here only when needed.
 - Backend: Fastify API in [backend](./backend).
 - Local data: IndexedDB is the current-device source of truth.
 - Cloud sync: Supabase is the cross-device sync replica.
-- Audio: Deepgram transcription and Claude summarisation/classification support.
-- Recall: Entry summaries are embedded with Voyage AI and searched through Supabase/pgvector.
+- Capture: text-first, with users free to use their OS keyboard dictation.
+- Recall: local-first deterministic search over confirmed Timeline Entries.
 - Deploy target: Vercel frontend and backend projects.
 
 For the exact domain rules, see [CONTEXT.md](./CONTEXT.md). In particular:
@@ -65,16 +65,14 @@ The frontend defaults to `http://localhost:3000` for the backend. Set
 Backend environment variables for real API usage:
 
 ```text
-DEEPGRAM_API_KEY
-ANTHROPIC_API_KEY
 VOYAGE_API_KEY
 SUPABASE_URL
 SUPABASE_KEY
 SUPABASE_DB_URL
 ```
 
-Use `USE_MOCK_APIS=true` in `backend/.env` for mock transcription,
-summarisation, and embeddings during local development.
+Use `USE_MOCK_APIS=true` in `backend/.env` for mock embeddings during local
+development.
 
 ## Common Commands
 

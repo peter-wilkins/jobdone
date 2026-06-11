@@ -9,7 +9,7 @@ For action and intent language, see `docs/DOMAIN_ACTIONS_AND_INTENTS.md`.
 ## Language
 
 **Capture**:
-Raw inbound material awaiting review — voice, text, shared contact, photo, or link — that may become an Entry, Contact update, or both after Confirmation. Opening a Capture Composer should create a local Capture immediately so typed text, photo-only captures, and platform shares have durable local working state before Confirmation.
+Raw inbound material awaiting review — text, photo, shared contact, or link — that may become an Entry, Contact update, or both after Confirmation. Opening a Capture Composer should create a local Capture immediately so typed text, photo-only captures, and platform shares have durable local working state before Confirmation. Users may use OS-level dictation into the text box, but JobDone no longer owns a browser audio recording/transcription path in MVP.
 _Avoid_: Draft, Item, Import, Upload
 
 **Capture Composer**:
@@ -17,7 +17,7 @@ The reusable input surface for creating a Capture before Confirmation. The same 
 _Avoid_: Note Box, Evidence Form, Search Box, Team-Specific Capture UI
 
 **Entry**:
-A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Its durable user-visible body is `text`; voice-era `summary`/`transcript` distinctions belong to Capture, transcription, or evaluation layers, not the final Entry contract. Corrections are made by submitting a new Entry.
+A confirmed submission to the Timeline, timestamped and fully immutable once confirmed. Its durable user-visible body is `text`; voice-era `summary`/`transcript` distinctions are legacy local-sync compatibility fields, not the final Entry contract. Corrections are made by submitting a new Entry.
 _Avoid_: Event, Job, Note, Recording, Log
 
 **Contact**:
@@ -71,10 +71,6 @@ _Avoid_: Hidden Confirmation, Auto-Save, Final Summary
 **Clean Up Text**:
 An optional review action run after the user has twiddled review context such as Location, Contact, Tags, Work Context, or Backlog Item. Clean Up Text uses the confirmed/reviewed Capture Context to improve the user-visible Entry text, including Markdown formatting, bullet points, deduplication, and clearer wording. It may remove duplication already captured in user-set context, such as repeating a selected Contact in the Entry text. It must not overwrite Context Clues or Work Context values the user has already set.
 _Avoid_: Final Extraction, First Guess, Background Suggestion, Raw Transcript
-
-**Backend Transcription**:
-An optional audio-to-text path behind `VITE_ENABLE_TRANSCRIPTION_CAPTURE`. It is not the default MVP Capture path. The default path is editable text plus OS dictation, because that is simpler, faster, and avoids JobDone owning fragile browser transcription runtime state.
-_Avoid_: Local Whisper, Runtime Evaluation, Required Voice Capture
 
 **API Debug Details**:
 The red diagnostic bar shown after non-200 API responses during beta. Everyone is a beta tester during MVP, so API Debug Details are enabled for all users and anonymous devices. Reports are still sanitized and can be sent through feedback.
@@ -398,13 +394,13 @@ _Avoid_: Search bar, Input field, Record button
 - When a **Query** is active, the Timeline shows matching confirmed local Entries under a "Showing results for" style header; full Timeline is restored on dismiss.
 - Local-first **Recall** works from materialized local data. Backend/server-readable Recall is a later opt-in, not the MVP default.
 - If no local Entries match, an explicit empty state is shown: "Nothing found — try rephrasing."
-- The MVP default Capture path is text-first: pressing the Capture Bar plus action creates a **Capture** in review immediately, focuses an editable text box, and lets the user type or use OS-level dictation. The Capture exists before the first character because attachments-only Captures are valid. JobDone-owned microphone/transcription paths are beta/spike behaviour until proven.
+- The MVP Capture path is text-first: pressing the Capture Bar plus action creates a **Capture** in review immediately, focuses an editable text box, and lets the user type or use OS-level dictation. The Capture exists before the first character because attachments-only Captures are valid. JobDone-owned microphone/transcription paths have been cut from MVP.
 - A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
-- Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every transcription.
-- Deterministic Pre-Extraction should be phone-capable/client-side where possible and may run against the editable Capture text after a short typing pause, such as 300-500ms. This keeps review snappy, supports offline/local mode, avoids backend cost while typing, and avoids making transcription a dependency for beta-user Capture. Online Clean Up Text can happen later when connectivity returns.
+- Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every Capture.
+- Deterministic Pre-Extraction should be phone-capable/client-side where possible and may run against the editable Capture text after a short typing pause, such as 300-500ms. This keeps review snappy, supports offline/local mode, and avoids backend cost while typing. Online Clean Up Text can happen later when connectivity returns.
 - Local Whisper transcription has been cut from the MVP app. Do not reintroduce a browser Whisper runtime, model preloader, race UI, or transcription evaluation harness without a fresh issue and proof that text-first Capture plus OS dictation is not enough.
-- Backend Transcription may remain as an optional feature-flagged path for experiments, but the main Capture surface is text-first.
+- Backend Transcription has been cut from the MVP app. A future speech path should be a fresh spike, probably native/system speech first, not a hidden browser recorder.
 - API Debug Details are on for everyone during MVP because every tester is effectively a beta tester. The UI should make API failures visible, sanitized, and easy to send as feedback.
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
@@ -509,7 +505,7 @@ _Avoid_: Search bar, Input field, Record button
 - Feedback Reports can be submitted without login when protected by server-side abuse controls such as rate limits. Login can attach Supabase `user_id` ownership context, but reporting bugs must not depend on a working login flow.
 - Feedback Report identity is per-device before login and linked to the user's email/Supabase identity after login. Exact edge cases around later identity linking are less important than not losing useful reports.
 - Feedback Reports use a small fixed triage taxonomy: Feedback Kind (`bug`, `data_loss`, `confusing`, `improvement`, `sync_login`, `share_install`, `performance`, `other`), impact (`blocked`, `degraded`, `annoyance`, `unsure`), and data loss (`yes`, `no`, `unsure`)
-- The Feedback Report surface should start with quick triage controls for Feedback Kind, impact, and data loss before optional text or voice detail. Error bars and failed-flow screens can deep-link into Feedback Report creation with kind/surface preselected.
+- The Feedback Report surface should start with quick triage controls for Feedback Kind, impact, and data loss before optional text detail. Error bars and failed-flow screens can deep-link into Feedback Report creation with kind/surface preselected.
 - Data-loss Feedback Reports are high-priority triage artifacts. They should not require extra user detail before sending, but should invite optional "what is missing?" detail, include local DB/sync counts and recent storage/service worker/API errors, avoid mutating local data during reporting, and retain sanitized local diagnostics longer than the normal rolling buffer.
 - Raw Feedback Reports should not automatically create GitHub Issues. They should enter a maintainer/agent triage queue where duplicates can be grouped, private details can be redacted, and actionable reports can be promoted into GitHub Issues deliberately.
 - Agent-facing Feedback Report triage should present a normalized factual record with kind, impact, data loss, build id, route/surface, identity class, created time, recent Request IDs, backend health, sync/local DB counts, recent sanitized events/errors, user description, dedupe signature, and suggested next action. Any AI-written summary or diagnosis must be labelled as a suggestion, not truth.
@@ -518,7 +514,7 @@ _Avoid_: Search bar, Input field, Record button
 - Anonymous Feedback Report and Crash Report rate limits should be server-enforced using abuse keys derived from IP hash, user-agent hash, route type, and optionally build id. A client-side per-device feedback id can group reports diagnostically but must not be trusted as the only limiter key. Data-loss reports can bypass strict client throttles but not server abuse guards.
 - Feedback Report Context Clues exclude private Entry content, transcripts, Contact details, and shared payload bodies by default unless the user explicitly includes them
 - Crash Reports should be self-hosted by default, sent automatically when compact privacy-bounded crash context is available, and surfaced with a small non-blocking error/status bar rather than a permission prompt or modal
-- Crash Reports can include crash id, build id, route, timestamp, error name/message, trimmed stack, known surface/component, recent Request IDs, recent sanitized app events, browser/device/install mode, and online/backend status. They must exclude Entry content, Capture payloads, Feedback text/audio, Contact details, Location labels/addresses, transcripts, auth/session data, raw API bodies, localStorage dumps, and IndexedDB dumps. Crash submission should be rate-limited per device/build/error signature to prevent loops.
+- Crash Reports can include crash id, build id, route, timestamp, error name/message, trimmed stack, known surface/component, recent Request IDs, recent sanitized app events, browser/device/install mode, and online/backend status. They must exclude Entry content, Capture payloads, Feedback text, Contact details, Location labels/addresses, legacy transcripts, auth/session data, raw API bodies, localStorage dumps, and IndexedDB dumps. Crash submission should be rate-limited per device/build/error signature to prevent loops.
 - A Contact-only Confirmation updates Contacts and removes the Capture from the Inbox without creating a Timeline Entry
 - A minimal Contacts surface lists, searches, and displays Contacts; merge and full editing are deferred
 - A Contact with no linked Entries can be deleted; a Contact linked to Entries cannot be deleted while immutable Entry snapshots remain
@@ -552,7 +548,7 @@ _Avoid_: Search bar, Input field, Record button
 - Web Share Target uses one POST endpoint for all inbound shares so text, links, contacts, and files follow the same Capture path
 - Shared Captures open through a dedicated `/share-target` review route
 - The service worker stores raw shared payloads and creates the Capture shell; app code parses and enriches payloads during review
-- A default text-first **Capture** starts at `ready_for_review`; optional/beta audio Capture may still pass through `recording`. A Capture is committed through Confirmation or permanently deleted through Rejection
+- A default text-first **Capture** starts at `ready_for_review`. A Capture is committed through Confirmation or permanently deleted through Rejection.
 - A **Query** runs from the Recall/Search surface, filters the Timeline, and is saved to recent Queries. It does not need the Capture confirmation flow.
 - Recent Queries are stored locally first, deduplicated, most-recent-first, and may sync through Local Replica when the query collection is wired.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
@@ -611,7 +607,7 @@ _Avoid_: Search bar, Input field, Record button
 - Revoked, missing, invalid, or accepted-for-a-different-identity Team Invite links should show the same neutral unavailable message, such as "This invite is no longer available", and should not reveal whether a specific Team or email exists.
 - Team Owners can remove pending Team Invites and resend invite emails. Resend exists for practical email loss/spam cases; it should not create a duplicate pending invite for the same Team and email.
 - Accepted Team Invites should land the invitee in **My Work View**, optionally filtered or highlighted to the invited Team. My Work aggregates actionable Backlog Items across all Teams the user belongs to.
-- First-time Team Workers should see lightweight in-place guidance explaining that they can claim Backlog Items and use JobDone's microphone/capture flow to record thoughts or evidence with minimal friction. This guidance should not block claiming or capture.
+- First-time Team Workers should see lightweight in-place guidance explaining that they can claim Backlog Items and use JobDone's Capture flow to record thoughts or evidence with minimal friction. This guidance should not block claiming or capture.
 - Every User keeps a personal Timeline and can create their own Teams. Team membership adds collaborative Backlogs and Approval flows; it does not replace personal capture.
 - V1 Teams use a simple capability split: the **Team Owner** manages settings, invites, and approval/backlog configuration; **Team Workers** claim work and submit evidence through My Work.
 - A Team Owner is a logged-in User who created or owns a Team. Team Invite creation needs this logged-in owner identity so JobDone can associate the invite with a sender/owner address.
@@ -620,7 +616,7 @@ _Avoid_: Search bar, Input field, Record button
 - My Work may offer a Team filter when the aggregate Backlog becomes noisy, but the default worker experience should show everything actionable across Teams without requiring a Team switch first.
 - The setup surface is now **Team Edit**: it summarizes Teams the user owns and Teams they belong to, lets the user select an owned Team to edit, and lets them create a new Team. Team names are not globally unique in V1; users may create same-named Teams and disambiguate through ownership/membership context.
 - Approval Requests are always created when claimed work is submitted. Team settings decide whether they require manual review or use **Auto-Approval**.
-- Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, voice, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
+- Completing a claimed Backlog Item always requires at least one evidence Entry, such as short text, photo, or an explicitly linked existing Entry. This preserves JobDone's core value: the Team gets an operational record, not just a checked-off task.
 - **Auto-Approval** is Team-level in V1. Per-member auto-approval is deferred because it starts to become a permission matrix.
 - Owner self-review is a separate Team setting: by default, when a Team Owner submits their own claimed work, JobDone creates the Approval Request and auto-closes it as approved so the evidence trail exists without self-approval friction. Teams that want stricter process can require Team Owners to manually approve their own work.
 - Team creation should offer simple **Team Templates**. The default should be **High Trust Team** so friction does not accidentally creep into ordinary collaboration.

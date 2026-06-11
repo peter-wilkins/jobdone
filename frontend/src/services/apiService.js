@@ -37,7 +37,6 @@ export function defaultApiBaseUrl(hostname = globalThis.window?.location?.hostna
 const API_BASE_URL = ENV.VITE_API_URL || defaultApiBaseUrl();
 const BUILD_ID = ENV.VITE_BUILD_ID || 'dev';
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
-const AUDIO_UPLOAD_TIMEOUT_MS = 60000;
 let updateReloadStarted = false;
 const UPDATE_RELOAD_PREFIX = 'jobdone.updateReloadedForBuild.';
 
@@ -119,82 +118,6 @@ export class APIService {
     } catch (error) {
       console.warn('Backend health check failed:', error);
       return false;
-    }
-  }
-
-  /**
-   * Upload audio blob and get transcription + intent
-   * @param {Blob} audioBlob - Audio file blob
-   * @returns {Promise<{transcript: string, intent: string, summary?: string}>}
-   */
-  async transcribeAudio(audioBlob, { captureContext = null } = {}) {
-    try {
-      console.log('[API] Transcribing audio:', {
-        size: audioBlob.size,
-        type: audioBlob.type,
-      });
-
-      if (!audioBlob || audioBlob.size === 0) {
-        throw new Error('Audio blob is empty');
-      }
-
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      if (captureContext) {
-        formData.append('captureContext', JSON.stringify(captureContext));
-      }
-
-      console.log('[API] Sending to backend:', `${API_BASE_URL}/api/transcribe`);
-
-      const response = await apiFetch(`${API_BASE_URL}/api/transcribe`, {
-        method: 'POST',
-        body: formData,
-      }, AUDIO_UPLOAD_TIMEOUT_MS);
-
-      console.log('[API] Response status:', response.status);
-
-      if (!response.ok) {
-        const error = await response.json();
-        const message = error.error || `HTTP ${response.status}: Transcription failed`;
-        const transcriptionError = new Error(message);
-        transcriptionError.code = error.code || null;
-        transcriptionError.status = response.status;
-        throw transcriptionError;
-      }
-
-      const result = await response.json();
-      console.log('[API] Transcription successful');
-      return result;
-    } catch (error) {
-      console.error('Transcription error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Summarize an existing transcript
-   * @param {string} transcript - Transcript text
-   * @returns {Promise<{summary: string}>}
-   */
-  async summarizeTranscript(transcript, { captureContext = null } = {}) {
-    try {
-      const response = await apiFetch(`${API_BASE_URL}/api/summarize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ transcript, captureContext }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Summarization failed');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Summarization error:', error);
-      throw error;
     }
   }
 

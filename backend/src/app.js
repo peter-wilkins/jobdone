@@ -1,8 +1,6 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import multipart from '@fastify/multipart';
-import { registerAudioRoutes } from './routes/audio.js';
 import { registerSyncRoutes } from './routes/sync.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
 import { registerRecallRoutes } from './routes/recall.js';
@@ -27,16 +25,9 @@ export function createApp(options = {}) {
     exposedHeaders: ['x-jobdone-request-id', BUILD_ID_HEADER],
   });
 
-  fastify.register(multipart, {
-    limits: {
-      fileSize: 25 * 1024 * 1024,
-    },
-  });
-
   registerRequestIdHooks(fastify);
   registerBuildInfoHooks(fastify, options.buildInfo);
 
-  fastify.register(registerAudioRoutes);
   fastify.register(registerSyncRoutes);
   fastify.register(registerFeedbackRoutes);
   fastify.register(registerRecallRoutes);
@@ -48,12 +39,10 @@ export function createApp(options = {}) {
 
   fastify.get('/', async () => {
     return {
-      service: 'JobDone Audio Processing',
+      service: 'JobDone Backend',
       version: '1.0.0',
       endpoints: {
         health: 'GET /health',
-        transcribe: 'POST /api/transcribe (multipart form with audio file)',
-        summarize: 'POST /api/summarize (JSON with transcript)',
       },
     };
   });

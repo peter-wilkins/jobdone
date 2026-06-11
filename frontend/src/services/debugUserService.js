@@ -18,6 +18,6 @@ export function isDebugEmail(email) {
   return new Set([...DEFAULT_DEBUG_EMAILS, ...configuredDebugEmails()]).has(normalized);
 }
 
-export function debugApiDetailsEnabledForUser(user) {
+export function debugApiDetailsEnabledForUser() {
   return true;
 }

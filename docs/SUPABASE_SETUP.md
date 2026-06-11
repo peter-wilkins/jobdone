@@ -82,11 +82,10 @@ No error about Postgres means cloud sync is connected.
 ## 7. Wire Frontend to Sync
 
 Once backend is set up, frontend will:
-1. Record audio locally
-2. Get transcript + summary
-3. On Confirmation, queue a Local Replica Sync Intent
-4. Push/pull through `/api/local-replica/*`
-5. Materialize accepted Sync Objects back into IndexedDB
+1. Create a text-first local Capture
+2. On Confirmation, queue a Local Replica Sync Intent
+3. Push/pull through `/api/local-replica/*`
+4. Materialize accepted Sync Objects back into IndexedDB
 
 ## What's Stored
 

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { audioService } from './services/audioService';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { authService } from './services/authService';
@@ -131,8 +130,6 @@ function DiagnosticPreview({ bundle }) {
 }
 
 export function FeedbackScreen({ onBack, onRecord }) {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
   const [submitted, setSubmitted] = useState([]);
   const [pending, setPending] = useState([]);
   const [error, setError] = useState(null);
@@ -146,23 +143,14 @@ export function FeedbackScreen({ onBack, onRecord }) {
     setTriage(current => normalizeFeedbackTriage({ ...current, ...updates }));
   }, []);
 
-  const friendlyError = (err) => {
-    const msg = err?.message || '';
-    if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('network')) {
-      return 'offline';
-    }
-    return 'server';
-  };
-
   const refreshLists = useCallback(async () => {
-    const recording = await dbService.getFeedbackItems('recording');
     const readyForReview = await dbService.getFeedbackItems('ready_for_review');
     const failed = await dbService.getFeedbackItems('failed');
     const confirmed = await dbService.getFeedbackItems('confirmed');
 
-    setPending([...recording, ...readyForReview, ...failed, ...confirmed.filter(item => item.syncStatus === 'pending')]);
+    setPending([...readyForReview, ...failed, ...confirmed.filter(item => item.syncStatus === 'pending')]);
     setSubmitted(confirmed.filter(item => item.syncStatus !== 'pending'));
-    return { recording };
+    return {};
   }, []);
 
   const buildDiagnosticBundle = useCallback(async (triageState = triage) => {
@@ -203,7 +191,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       );
       diagnosticService.record('issue_report_submitted', {
-        source: item.audioDuration ? 'audio' : 'typed',
+        source: 'typed',
         synced: true,
         identity: authService.isLoggedIn() ? 'signed_in' : 'anonymous',
         ...feedbackTriageSummary(item.triage),
@@ -212,7 +200,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
     } catch (syncErr) {
       console.warn('Feedback sync failed:', syncErr);
       diagnosticService.record('issue_report_submitted', {
-        source: item.audioDuration ? 'audio' : 'typed',
+        source: 'typed',
         synced: false,
         identity: authService.isLoggedIn() ? 'signed_in' : 'anonymous',
         ...feedbackTriageSummary(item.triage),
@@ -227,10 +215,6 @@ export function FeedbackScreen({ onBack, onRecord }) {
       setSendStatus('Sending report...');
       let item = pending.find(f => f.id === id) || submitted.find(f => f.id === id);
       if (!item) return;
-      if (item.status === 'recording' && item.audioBlob) {
-        const result = await apiService.transcribeAudio(item.audioBlob);
-        item = await dbService.updateFeedbackWithTranscript(id, result.transcript || 'Voice feedback report');
-      }
       if (item.status !== 'confirmed') {
         await dbService.confirmFeedback(id);
         item = { ...item, status: 'confirmed', syncStatus: 'pending', audioBlob: null };
@@ -265,59 +249,6 @@ export function FeedbackScreen({ onBack, onRecord }) {
     };
     load();
   }, [refreshLists]);
-
-  useEffect(() => {
-    if (!isRecording) return;
-    const interval = setInterval(() => {
-      setRecordingTime(audioService.getStatus().elapsedSeconds);
-    }, 100);
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
-  const handleRecord = async () => {
-    try {
-      setError(null);
-      if (!isRecording) {
-        diagnosticService.record('issue_report_record_start');
-        await audioService.startRecording();
-        setIsRecording(true);
-        setRecordingTime(0);
-      } else {
-        setIsRecording(false);
-        const audioData = await audioService.stopRecording();
-        if (audioData) {
-          const currentTriage = normalizeFeedbackTriage(triage);
-          diagnosticService.record('issue_report_record_stop', {
-            duration: audioData.duration,
-            ...feedbackTriageSummary(currentTriage),
-          });
-          setSendStatus('Transcribing voice detail...');
-          let transcript = 'Voice feedback report';
-          try {
-            const result = await apiService.transcribeAudio(audioData.blob);
-            transcript = result.transcript || transcript;
-            diagnosticService.record('issue_report_transcribed', {
-              duration: audioData.duration,
-              status: 'ready_for_review',
-            });
-          } catch (transcriptionErr) {
-            const kind = friendlyError(transcriptionErr);
-            diagnosticService.record('issue_report_processing_failed', { kind });
-            setError('Could not transcribe the voice report. Type the issue instead.');
-            setSendStatus(null);
-            return;
-          }
-          setTypedReport(transcript);
-          setSendStatus('Review the text, then send report.');
-        }
-      }
-    } catch (err) {
-      console.error('Recording error:', err);
-      setError(err.message);
-      setIsRecording(false);
-      audioService.cancelRecording();
-    }
-  };
 
   const handleTypedSubmit = async () => {
     const trimmed = typedReport.trim();
@@ -457,28 +388,8 @@ export function FeedbackScreen({ onBack, onRecord }) {
             </div>
           )}
           <div className="flex flex-col items-center gap-3 pt-4">
-            <button
-              onClick={handleRecord}
-              className={`
-                w-24 h-24 rounded-full flex flex-col items-center justify-center
-                transition-all duration-200
-                ${isRecording ? 'bg-red-500 shadow-lg scale-105' : 'bg-gray-300'}
-              `}
-              title={isRecording ? 'Stop' : 'Record issue'}
-            >
-              {isRecording ? (
-                <>
-                  <span className="w-3 h-3 bg-white rounded-full animate-pulse mb-2" />
-                  <span className="text-white text-xs font-semibold">{recordingTime}s</span>
-                </>
-              ) : (
-                <span className="text-gray-500 text-xs text-center leading-tight px-2">
-                  Record issue
-                </span>
-              )}
-            </button>
             <p className="text-xs text-gray-400 text-center max-w-xs">
-              Voice or text feedback attaches build, device, status, and recent app events. Private Entry content and Contact details are excluded by default.
+              Feedback attaches build, device, status, and recent app events. Private Entry content and Contact details are excluded by default.
             </p>
             {backendAvailable === false && (
               <p className="text-xs text-amber-700 text-center">
@@ -502,7 +413,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
                 )}
                 {!item.transcript && (
                   <p className="text-sm text-gray-500 mb-4">
-                    {item.audioDuration ? `${item.audioDuration}s voice report` : 'Report saved locally'}
+                    Report saved locally
                   </p>
                 )}
                 <DiagnosticPreview bundle={item.diagnosticBundle} />
@@ -556,7 +467,7 @@ export function FeedbackScreen({ onBack, onRecord }) {
           </div>
         )}
 
-        {pending.length === 0 && submitted.length === 0 && !isRecording && (
+        {pending.length === 0 && submitted.length === 0 && (
           <div className="px-8 py-4 text-center text-gray-400">
             <p className="text-sm">No issue reports sent yet</p>
           </div>

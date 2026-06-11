@@ -14,7 +14,7 @@ import { LOCAL_REPLICA_STATE_ID, localReplicaObjectKey } from './localReplicaSto
 
 /**
  * IndexedDB service for local entry storage
- * Handles persistence of recordings, transcripts, and metadata
+ * Handles persistence of entries, local captures, and metadata
  */
 
 const DB_NAME = 'plumber-job-log';
@@ -460,51 +460,6 @@ export class DBService {
   }
 
   /**
-   * Create a new entry
-   * @param {Object} entryData - Entry metadata
-   * @param {Blob} audioBlob - Audio recording blob
-   * @returns {Promise<string>} Entry ID
-   */
-  async createEntry(entryData, audioBlob) {
-    const db = await this.ensureDb();
-
-    const entry = {
-      id: this.generateId(),
-      ...entryData,
-      audioBlob,
-      audioSize: audioBlob.size,
-      audioDuration: entryData.duration,
-      status: 'recording',
-      syncStatus: 'pending',
-      remoteId: null,
-      createdAt: new Date().toISOString(),
-      syncedAt: null,
-      captureId: null,
-      transcript: null,
-      summary: null,
-      locations: [],
-      contacts: [],
-      tags: [],
-      attachments: Array.isArray(entryData.attachments) ? entryData.attachments : [],
-      workContexts: [],
-    };
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.add(normalizeEntryRecord(entry));
-
-      request.onsuccess = () => {
-        resolve(entry.id);
-      };
-
-      request.onerror = () => {
-        reject(new Error('Failed to create entry'));
-      };
-    });
-  }
-
-  /**
    * Create a text-first entry Capture for review. No audio/transcription required.
    */
   async createTextEntry(entryData = {}) {
@@ -546,58 +501,6 @@ export class DBService {
 
       request.onerror = () => {
         reject(new Error('Failed to create text entry'));
-      };
-    });
-  }
-
-  /**
-   * Update entry with transcription + summary data
-   */
-  async updateEntryWithTranscription(entryId, { transcript, summary, intent, transcriptionSource, transcriptionCandidates }) {
-    const db = await this.ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(entryId);
-
-      getRequest.onsuccess = () => {
-        const entry = normalizeEntryRecord(getRequest.result);
-        if (!entry) {
-          reject(new Error('Entry not found'));
-          return;
-        }
-
-        if (entry.status === 'confirmed') {
-          resolve(entry);
-          return;
-        }
-
-        Object.assign(entry, mergeEntryUpdates(entry, {
-          transcript,
-          summary,
-          intent: intent || entry.intent,
-          transcriptionSource: transcriptionSource || entry.transcriptionSource,
-          transcriptionCandidates: Array.isArray(transcriptionCandidates) ? transcriptionCandidates : entry.transcriptionCandidates,
-          errorMessage: null,
-          status: 'ready_for_review',
-        }));
-
-        const updateRequest = store.put(normalizeEntryRecord(entry));
-
-        updateRequest.onsuccess = () => {
-          this.promoteContextCluesFromCapture(entry.captureId, entry.id)
-            .then(() => resolve(entry))
-            .catch(reject);
-        };
-
-        updateRequest.onerror = () => {
-          reject(new Error('Failed to update entry'));
-        };
-      };
-
-      getRequest.onerror = () => {
-        reject(new Error('Failed to fetch entry'));
       };
     });
   }
@@ -1065,59 +968,6 @@ export class DBService {
     });
   }
 
-  /**
-   * Mark an entry as failed (transcription error)
-   */
-  async markEntryFailed(entryId, errorMessage) {
-    const db = await this.ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(entryId);
-
-      getRequest.onsuccess = () => {
-        const entry = normalizeEntryRecord(getRequest.result);
-        if (!entry) { reject(new Error('Entry not found')); return; }
-
-        entry.status = 'failed';
-        entry.errorMessage = errorMessage || 'Failed to process recording';
-
-        const updateRequest = store.put(normalizeEntryRecord(entry));
-        updateRequest.onsuccess = () => resolve(entry);
-        updateRequest.onerror = () => reject(new Error('Failed to mark entry failed'));
-      };
-
-      getRequest.onerror = () => reject(new Error('Failed to fetch entry'));
-    });
-  }
-
-  /**
-   * Reset a failed entry back to recording status (for retry)
-   */
-  async resetEntryForRetry(entryId) {
-    const db = await this.ensureDb();
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const getRequest = store.get(entryId);
-
-      getRequest.onsuccess = () => {
-        const entry = normalizeEntryRecord(getRequest.result);
-        if (!entry) { reject(new Error('Entry not found')); return; }
-
-        entry.status = 'recording';
-        entry.errorMessage = null;
-
-        const updateRequest = store.put(normalizeEntryRecord(entry));
-        updateRequest.onsuccess = () => resolve(entry);
-        updateRequest.onerror = () => reject(new Error('Failed to reset entry'));
-      };
-
-      getRequest.onerror = () => reject(new Error('Failed to fetch entry'));
-    });
-  }
 
   /**
    * Mark an entry as successfully synced to cloud
@@ -2658,29 +2508,6 @@ export class DBService {
 
   // ─── Feedback ────────────────────────────────────────────────────────────
 
-  async createFeedback(meta, audioBlob) {
-    const db = await this.ensureDb();
-    const item = {
-      id: `fb-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      audioBlob,
-      audioSize: audioBlob.size,
-      audioDuration: meta.duration,
-      diagnosticBundle: meta.diagnosticBundle || null,
-      triage: meta.triage || null,
-      status: 'recording',
-      syncStatus: 'pending',
-      errorMessage: null,
-      transcript: null,
-      created_at: new Date().toISOString(),
-      synced_at: null,
-    };
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction([FEEDBACK_STORE], 'readwrite');
-      tx.objectStore(FEEDBACK_STORE).add(item).onsuccess = () => resolve(item.id);
-      tx.onerror = () => reject(new Error('Failed to create feedback'));
-    });
-  }
-
   async createFeedbackTextReport({ transcript, diagnosticBundle, triage }) {
     const db = await this.ensureDb();
     const item = {
@@ -2724,25 +2551,6 @@ export class DBService {
         resolve(items);
       };
       req.onerror = () => reject(new Error('Failed to fetch feedback items'));
-    });
-  }
-
-  async updateFeedbackWithTranscript(id, transcript) {
-    const db = await this.ensureDb();
-    return new Promise((resolve, reject) => {
-      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
-      const req = store.get(id);
-      req.onsuccess = () => {
-        const item = req.result;
-        if (!item) { reject(new Error('Feedback item not found')); return; }
-        item.transcript = transcript;
-        item.errorMessage = null;
-        item.status = 'ready_for_review';
-        const put = store.put(item);
-        put.onsuccess = () => resolve(item);
-        put.onerror = () => reject(new Error('Failed to update feedback'));
-      };
-      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
     });
   }
 
@@ -2804,42 +2612,6 @@ export class DBService {
         const put = store.put(item);
         put.onsuccess = () => resolve(item);
         put.onerror = () => reject(new Error('Failed to mark feedback synced'));
-      };
-      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
-    });
-  }
-
-  async markFeedbackFailed(id, errorMessage) {
-    const db = await this.ensureDb();
-    return new Promise((resolve, reject) => {
-      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
-      const req = store.get(id);
-      req.onsuccess = () => {
-        const item = req.result;
-        if (!item) { reject(new Error('Feedback item not found')); return; }
-        item.status = 'failed';
-        item.errorMessage = errorMessage;
-        const put = store.put(item);
-        put.onsuccess = () => resolve(item);
-        put.onerror = () => reject(new Error('Failed to mark feedback failed'));
-      };
-      req.onerror = () => reject(new Error('Failed to fetch feedback item'));
-    });
-  }
-
-  async resetFeedbackForRetry(id) {
-    const db = await this.ensureDb();
-    return new Promise((resolve, reject) => {
-      const store = db.transaction([FEEDBACK_STORE], 'readwrite').objectStore(FEEDBACK_STORE);
-      const req = store.get(id);
-      req.onsuccess = () => {
-        const item = req.result;
-        if (!item) { reject(new Error('Feedback item not found')); return; }
-        item.status = 'recording';
-        item.errorMessage = null;
-        const put = store.put(item);
-        put.onsuccess = () => resolve(item);
-        put.onerror = () => reject(new Error('Failed to reset feedback'));
       };
       req.onerror = () => reject(new Error('Failed to fetch feedback item'));
     });
