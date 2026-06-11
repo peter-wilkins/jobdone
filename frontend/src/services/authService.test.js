@@ -5,6 +5,7 @@ import {
   authRedirectUrl,
   consumeAuthErrorFromLocation,
   isJobDoneAuthOrigin,
+  isNativeShellUserAgent,
 } from './authService.js';
 
 test('auth redirect uses current browser origin when no app URL is configured', () => {
@@ -35,6 +36,22 @@ test('auth redirect prefers current installed app origin over canonical build UR
     }),
     'https://jobdone-staging.vercel.app',
   );
+});
+
+test('auth redirect uses native shell callback scheme when running inside shell', () => {
+  assert.equal(
+    authRedirectUrl({
+      configuredAppUrl: 'https://jobdone-staging.vercel.app',
+      location: { origin: 'https://jobdone-staging.vercel.app' },
+      userAgent: 'Mozilla/5.0 JobDoneNativeShell/0.1.0 staging',
+    }),
+    'jobdone-staging://auth-callback',
+  );
+});
+
+test('native shell detection is explicit to JobDone shell marker', () => {
+  assert.equal(isNativeShellUserAgent('Mozilla/5.0 JobDoneNativeShell/0.1.0 staging'), true);
+  assert.equal(isNativeShellUserAgent('Mozilla/5.0'), false);
 });
 
 test('auth redirect does not trust unrelated current origins', () => {

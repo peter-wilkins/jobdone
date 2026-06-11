@@ -14,6 +14,8 @@ It has:
 - JavaScript and DOM storage enabled;
 - no `addJavascriptInterface` bridge;
 - external navigation opened outside the privileged WebView;
+- a `jobdone-staging://auth-callback` auth callback that reopens the staging
+  WebView with the Supabase query/fragment intact;
 - WebView remote debugging only in debug builds.
 
 Build with the Field Relay Gradle wrapper until this repo has its own Android
@@ -43,4 +45,13 @@ Verified on `RF8N6017PKY`:
 
 Still to test manually:
 
-- full login callback path and any WebView/OAuth handoff issue.
+- full login callback path after the Supabase redirect allow-list includes
+  `jobdone-staging://auth-callback`.
+
+Supabase setup needed for auth callback testing:
+
+1. Add `jobdone-staging://auth-callback` to the project's Auth redirect URLs.
+2. Keep staging web redirects too: `https://jobdone-staging.vercel.app/**`.
+3. Magic link and Google OAuth should then return to the shell through the
+   custom scheme, and the shell maps the callback to
+   `https://jobdone-staging.vercel.app/` for Supabase JS session detection.

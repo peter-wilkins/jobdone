@@ -80,11 +80,23 @@ class MainActivity : Activity() {
         })
         setContentView(root)
 
-        if (savedInstanceState == null) {
+        val callbackUrl = AuthCallbackMapper.toWebUrl(intent?.data?.toString())
+        if (callbackUrl != null) {
+            log("Loading auth callback URL: $callbackUrl")
+            webView.loadUrl(callbackUrl)
+        } else if (savedInstanceState == null) {
+            log("Loading start URL: ${JobDoneShellConfig.START_URL}")
             webView.loadUrl(JobDoneShellConfig.START_URL)
         } else {
+            log("Restoring WebView state")
             webView.restoreState(savedInstanceState)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        loadAuthCallbackIfPresent(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -109,6 +121,17 @@ class MainActivity : Activity() {
         settings.userAgentString = "${settings.userAgentString}${JobDoneShellConfig.USER_AGENT_SUFFIX}"
     }
 
+    private fun loadAuthCallbackIfPresent(intent: Intent?) {
+        AuthCallbackMapper.toWebUrl(intent?.data?.toString())?.let { callbackUrl ->
+            log("Loading auth callback URL from new intent: $callbackUrl")
+            webView.post { webView.loadUrl(callbackUrl) }
+        }
+    }
+
+    private fun log(message: String) {
+        if (BuildConfig.DEBUG) android.util.Log.d("JobDoneShell", message)
+    }
+
     private inner class JobDoneWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
             handleNavigation(request?.url?.toString())
@@ -119,6 +142,7 @@ class MainActivity : Activity() {
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             status.text = if (BuildConfig.DEBUG) "JobDone staging shell" else ""
+            log("Page started: $url")
             super.onPageStarted(view, url, favicon)
         }
 

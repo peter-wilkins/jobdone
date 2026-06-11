@@ -40,10 +40,16 @@ export const authClientOptions = {
 export function authRedirectUrl({
   configuredAppUrl = ENV.VITE_APP_URL,
   location = globalThis.window?.location,
+  userAgent = globalThis.navigator?.userAgent,
 } = {}) {
+  if (isNativeShellUserAgent(userAgent)) return 'jobdone-staging://auth-callback';
   const currentOrigin = trimTrailingSlash(location?.origin);
   if (isJobDoneAuthOrigin(currentOrigin)) return currentOrigin;
   return trimTrailingSlash(configuredAppUrl || currentOrigin);
+}
+
+export function isNativeShellUserAgent(userAgent) {
+  return String(userAgent || '').includes('JobDoneNativeShell/0.1.0 staging');
 }
 
 export function consumeAuthErrorFromLocation({
