@@ -229,7 +229,7 @@ A natural-language question that filters or ranks the Timeline to relevant confi
 _Avoid_: Search, Lookup, Query
 
 **Query**:
-The saved text of a Recall question entered via the same input as Capture. Queries are persisted and shown in a recent-queries dropdown so the user can re-run them with one tap, producing the same filtered Timeline.
+The saved text of a Recall question. Queries are stored for convenience so the user can re-run them with one tap, producing the same filtered Timeline. Asking a Query is local UI/search behavior, not a backend Product Action.
 _Avoid_: Search term, Filter
 
 **Share Pack**:
@@ -481,10 +481,10 @@ _Avoid_: Search bar, Input field, Record button
 - Current device location can be captured at capture time as a Location Context Clue when permission exists or is granted in context. JobDone does not require background location history for MVP, and captured location remains review-only until Confirmation
 - **Recall** returns Entries only; linked Contacts, Locations, and Tags can improve matching but are not returned as Timeline results
 - **Recall** correctness is grounded in Entry source IDs and explicit exclusions, not generated answer text
-- SQL-first **Recall** V1 searches Entry summaries and confirmed Contact, Location, and Tag labels; transcripts remain source/debug material rather than matching truth
-- SQL-first **Recall** V1 uses deterministic token/phrase matching before Postgres full-text search or vector reranking
+- Local-first **Recall** V1 searches confirmed local Entries and confirmed Contact, Location, Team, and Work Context labels. Backend SQL/vector Recall is not the default.
+- Local-first **Recall** V1 uses deterministic token/phrase/context matching before any future derived local index or vector reranking.
 - Current **Recall Property Testing** work is focused on the developer feedback loop, not user-facing Recall explanation UI
-- The next **Recall Property Testing** slice uses local Supabase, generated cases, and shrinking against the production SQL-first Recall path
+- The next **Recall Property Testing** slice uses generated cases and shrinking against the local-first Recall path.
 - A **Share Pack** contains only user-selected Recall-returned Entries and optional user-written context
 - An **Approval Request** uses a Share Pack as its evidence portfolio. The Share Pack carries the selected Entry snapshot; the Approval Request adds reviewer intent, state, decision, and outcome.
 - When a claimed Backlog Item is submitted, JobDone auto-creates the Approval Request's Share Pack from Entries linked to that Claim, then shows a quick edit/confirmation step before submission.
@@ -631,8 +631,8 @@ _Avoid_: Search bar, Input field, Record button
 
 ## Example dialogue
 
-> **Dev:** "When a user submits 'What did I do at Mrs Jones last month?' — is that an Entry or a Query?"
-> **Domain expert:** "A Query — it filters the Timeline. But the system shows 'Searching…' for confirmation before acting, same as it shows 'Saving entry…' for a Note. Either can be cancelled."
+> **Dev:** "When a user types 'What did I do at Mrs Jones last month?' — is that an Entry or a Query?"
+> **Domain expert:** "A Query. It filters the local Timeline. It is not confirmed like an Entry and does not need backend acceptance."
 > **Dev:** "And if the plumber taps that same query again from the dropdown next week?"
 > **Domain expert:** "Same filtered Timeline. Deterministic. Any new Entries matching it will appear; nothing else changes."
 

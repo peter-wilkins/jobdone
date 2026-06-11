@@ -22,12 +22,6 @@ Commits the reviewed Capture into one or more durable outcomes, normally an
 Entry plus optional Contact, Location, attachment, and context associations.
 Confirmation is the user saying "this is true enough to enter my Timeline".
 
-**Ask Recall Query**
-
-Runs a local-first search over confirmed local Entries and linked context. A
-Query is not an Entry, not a Team action, and not AI synthesis. It filters or
-ranks existing Timeline evidence.
-
 **Send Feedback Report**
 
 Creates a maintainer-facing diagnostic/report artifact. Feedback is outside the
@@ -93,6 +87,11 @@ and returns changed objects.
 These generic actions are useful for dumb storage and offline retry, but they
 are not enough to express product rules such as "only one user can claim this
 Backlog Item" or "only an owner can approve submitted work".
+
+Recall/Search is deliberately not listed as a backend action here. Current
+Recall is frontend/local behavior over materialized local data. It may persist
+recent Query text, but asking a Query does not need backend acceptance, race
+management, or Product Action policy.
 
 ## Hickey Direction: Product Actions
 
