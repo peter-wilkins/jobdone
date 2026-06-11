@@ -1,5 +1,21 @@
--- JobDone schema rewrite (clean slate — no production data)
--- Run in Supabase SQL Editor.
+-- JobDone disposable MVP schema snapshot.
+--
+-- Apply with psql, not dashboard copy/paste:
+--
+--   . ~/.profile
+--   psql "$JOBDONE_STAGING_SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f docs/schema.sql
+--
+-- Staging/prod data is disposable until JobDone exits MVP mode.
+--
+-- Reality check:
+-- - Local Replica sync tables are the current direction for confirmed Entries
+--   and future generic app data.
+-- - Legacy server-readable tables below still have live callers for Teams,
+--   feedback, contacts/locations, and old Recall paths. Do not treat them as
+--   the desired long-term backend shape.
+-- - The Hickey/decomplex direction is generic storage plus a JobDone policy
+--   layer with first-class Product Actions, stateJson validation, outbox
+--   effects, and ops events.
 
 -- 1. Enable pgvector in extensions; keep JobDone-owned objects in jobdone.
 CREATE SCHEMA IF NOT EXISTS extensions;
@@ -43,7 +59,9 @@ $$;
 GRANT USAGE ON SCHEMA extensions TO jobdone_backend;
 GRANT USAGE ON SCHEMA jobdone TO jobdone_backend;
 
--- 3. entries (1024-dim embeddings from voyage-3-lite)
+-- 3. Legacy entries table.
+-- Superseded for new Entry sync by Local Replica syncObjects. Kept while old
+-- recall/export/delete/team helper paths still have live callers.
 CREATE TABLE entries (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id              TEXT NOT NULL,
@@ -443,7 +461,9 @@ CREATE INDEX approval_requests_submitted_at_idx ON approval_requests(submitted_a
 
 ALTER TABLE approval_requests ENABLE ROW LEVEL SECURITY;
 
--- 19. match_entries RPC — 1024-dim voyage-3-lite embeddings
+-- 19. Legacy match_entries RPC.
+-- Superseded by Local-First Recall for MVP. Kept only while old recall paths
+-- and disposable schema setup still expect it.
 CREATE OR REPLACE FUNCTION match_entries(
   p_user_id          TEXT,
   p_query_embedding  extensions.vector(1024),

@@ -4,6 +4,8 @@ A mobile-first capture log for self-employed tradespeople that externalises oper
 
 JobDone is the product surface. Teams, Backlogs, Claims, Share Packs, and Approval Requests are shared primitives inside JobDone that can support business crews, households, apprentices, customer approvals, and solo use.
 
+For action and intent language, see `docs/DOMAIN_ACTIONS_AND_INTENTS.md`.
+
 ## Language
 
 **Capture**:
@@ -123,8 +125,16 @@ A Local Replica mapping from an old or duplicate Client ID to the canonical Clie
 _Avoid_: Broken Reference Rewrite, Duplicate Object Fork, Server ID Replacement, User-Facing Alias
 
 **Sync Intent**:
-A locally recorded user action that may need backend acceptance before it becomes committed shared state, such as creating a Team offline, claiming a Backlog Item, submitting evidence, or making a Team decision. Sync Intents carry a UUIDv7 idempotency key, actor identity, device identity, base sync position, kind, payload, and createdAt. The backend accepts, rejects, or reports conflicts for Sync Intents and returns the resulting collection changes.
+A locally recorded request for the backend to accept a sync change. Today the Local Replica API supports generic object intents: `createObject`, `updateObject`, and `deleteObject`. Sync Intents carry a UUIDv7 idempotency key, actor identity, device identity, base sync position, action, owner scope, object ID, payload hash, payload, and createdAt. The backend accepts, rejects, or reports conflicts and returns resulting collection changes. Product-specific actions such as claiming a Backlog Item or approving work should move into first-class Product Actions in the JobDone policy layer rather than being hidden inside generic storage payloads.
 _Avoid_: Fire-and-Forget Mutation, Blind Offline Write, UI Event Log
+
+**Product Action**:
+A named JobDone business operation that may need policy validation, race management, and post-commit effects, such as `claimBacklogItem`, `submitClaimedWork`, or `decideApprovalRequest`. Product Actions sit above generic Sync Intents: the JobDone policy layer validates the Product Action and derives allowed state changes, while the generic storage layer commits objects and ordering.
+_Avoid_: Hidden Payload Mutation, UI Click, Generic Object Write
+
+**stateJson**:
+Backend-readable, Zod-validated business state for policy and coordination. `stateJson` can contain non-sensitive facts such as Backlog status, claimant identity, approval status, owner scope, and action kind. It is deliberately separate from private payload content such as Entry text, Contact details, Location labels/addresses, and Photos, so those payloads can later be encrypted.
+_Avoid_: Metadata Bag, Private Payload, Prompt Context
 
 **Sync Transaction**:
 A backend transaction that commits accepted Sync Intents and assigns a single monotonically increasing **Server T**. Sync Transactions are the durable ordering source for Local Replica pulls. Rows record the transaction that created, updated, or deleted them rather than trusting device clocks for sync ordering.
@@ -215,7 +225,7 @@ The chronological stream of all confirmed Entries — the user's full operationa
 _Avoid_: Feed, History, Log
 
 **Recall**:
-A natural-language question submitted through the same Capture input as Entry creation. Intent is classified by heuristics (question words and sentence structure) with a confirmation screen as the safety net for misclassifications. The system detects QUERY intent and filters the Timeline to relevant Entries — deterministically and cacheably. No AI synthesis at query time. A future dedicated `?` affordance may be added after user testing if the shared input is confusing.
+A natural-language question that filters or ranks the Timeline to relevant confirmed Entries. Current MVP Recall is local-first and deterministic over materialized local data; it does not require backend vector search or AI synthesis. Recall is separate from Capture in the UI when that keeps the surface clearer, but it remains part of the same operational memory loop.
 _Avoid_: Search, Lookup, Query
 
 **Query**:
@@ -379,15 +389,15 @@ Permanent deletion of a Capture before it reaches the Timeline. The user can Rej
 _Avoid_: Discard, Cancel
 
 **Capture Bar**:
-A browser-bar-style fixed input at the top of the screen — the single entry point for both capture and recall. In the MVP input-mode pivot it opens a ready-for-review text Capture immediately, focuses the text box, and lets the user's keyboard, OS dictation, or future voice path provide the text. It shows active Query text with a back button when a Query is active and reveals a recent-Queries dropdown (chips, most-recent-first) when tapped.
+A browser-bar-style fixed input at the top of the screen for Recall/search. Capture now starts from the plus action and opens a Capture Composer immediately. The Capture Bar can show active Query text and recent Queries, but it should not pretend that every action in JobDone enters through one mixed intent box if the product surface has moved on.
 _Avoid_: Search bar, Input field, Record button
 
 ## Relationships
 
 - The **Timeline** is an ordered stream of **Entries** displayed chronologically — in-progress Entries (processing, ready-for-review, failed) appear at the top with distinct status styling; confirmed Entries follow below
-- When a **Query** is active, the Timeline shows the top 10 matching Entries (by semantic similarity, above a loose relevance floor) under a "Showing results for: [query]" header — full Timeline restored on dismiss
-- Offline **Recall** can replay cached results for previously run Queries; new Recall requires the backend
-- If no Entries pass the relevance floor, an explicit empty state is shown: "Nothing found — try rephrasing."
+- When a **Query** is active, the Timeline shows matching confirmed local Entries under a "Showing results for" style header; full Timeline is restored on dismiss.
+- Local-first **Recall** works from materialized local data. Backend/server-readable Recall is a later opt-in, not the MVP default.
+- If no local Entries match, an explicit empty state is shown: "Nothing found — try rephrasing."
 - The MVP default Capture path is text-first: pressing the Capture Bar plus action creates a **Capture** in review immediately, focuses an editable text box, and lets the user type or use OS-level dictation. The Capture exists before the first character because attachments-only Captures are valid. JobDone-owned microphone/transcription paths are beta/spike behaviour until proven.
 - A first-run onboarding step should ask what the user will mostly use JobDone for, such as tracking work for customers as a plumber, recording work on vehicles as a mechanic, or gardening at home. This creates the user's default personal **Capture Context** without forcing them into a fake Team.
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
@@ -543,8 +553,8 @@ _Avoid_: Search bar, Input field, Record button
 - Shared Captures open through a dedicated `/share-target` review route
 - The service worker stores raw shared payloads and creates the Capture shell; app code parses and enriches payloads during review
 - A default text-first **Capture** starts at `ready_for_review`; optional/beta audio Capture may still pass through `recording`. A Capture is committed through Confirmation or permanently deleted through Rejection
-- A **Query** moves through: `ready_for_review` (user sees intent label and can confirm or correct) → filters Timeline and is saved to recent Queries
-- The last 50 Queries are stored per user, deduplicated, most-recent-first, synced server-side. Shown as chips in a dropdown when the input is activated.
+- A **Query** runs from the Recall/Search surface, filters the Timeline, and is saved to recent Queries. It does not need the Capture confirmation flow.
+- Recent Queries are stored locally first, deduplicated, most-recent-first, and may sync through Local Replica when the query collection is wired.
 - An **Entry** belongs to no explicit grouping — retrieval is dynamic, not folder-based
 - JobDone is an operational log, not a data-curation workspace; the UX should encourage quick Confirmation rather than ongoing taxonomy maintenance
 - JobDone V1 should build a generic Team layer rather than a separate family/kids product. A family Team, work Team, apprentice Team, and solo Team are all Teams with different settings.
