@@ -200,7 +200,7 @@ export function ShareTargetScreen({ onBack, onRecord, user }) {
           }
         }
       } else {
-        // Create Entry from Capture payloads
+        // Create a text Entry from share-target Capture payloads during Confirmation.
         const payload = capture.payloads?.[0];
         if (!payload) {
           throw new Error('No payload in capture');

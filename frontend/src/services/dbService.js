@@ -460,7 +460,7 @@ export class DBService {
   }
 
   /**
-   * Create a text-first entry Capture for review. No audio/transcription required.
+   * Create a text-first Entry draft from a Capture for Confirmation review.
    */
   async createTextEntry(entryData = {}) {
     const db = await this.ensureDb();
@@ -546,7 +546,7 @@ export class DBService {
   }
 
   /**
-   * Confirm an entry (delete audio, move to saved)
+   * Confirm an Entry draft after text-based Confirmation.
    */
   async confirmEntry(entryId, { locations = [], contacts = [], tags = [], workContexts = [] } = {}) {
     const db = await this.ensureDb();
@@ -580,7 +580,7 @@ export class DBService {
           return;
         }
 
-        // Delete audio blob to save space
+        // Clear the legacy audio blob field before storing the confirmed text Entry.
         entry.audioBlob = null;
         entry.status = 'confirmed';
         entry.syncStatus = 'pending';
@@ -734,12 +734,12 @@ export class DBService {
   }
 
   /**
-   * Create an Entry directly from a Capture (for share-target text/link confirms).
-   * Entry is created as 'confirmed' since user already reviewed.
+   * Create an Entry directly from a Capture after confirmation.
+   * Entry is created as 'confirmed' since user already reviewed the text.
    * @param {object} params
    * @param {string} params.captureId - Source capture ID (for reference)
-   * @param {string} params.transcript - Entry transcript
-   * @param {string} params.summary - Entry summary
+   * @param {string} params.transcript - Entry transcript (legacy compatibility text field)
+   * @param {string} params.summary - Entry summary (legacy compatibility text field)
    * @param {string} [params.createdAt] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */

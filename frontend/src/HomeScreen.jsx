@@ -865,7 +865,7 @@ export function HomeScreen({
         setEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       }
 
-      // Move to confirmed locally.
+      // Move the local Entry draft into confirmed state after Confirmation.
       const locationText = (reviewLocations[id] || '').trim();
       const selectedLocationDraft = reviewLocationDrafts[id];
       const locations = locationText
@@ -906,7 +906,7 @@ export function HomeScreen({
         }
       }
 
-      // Update UI: move to confirmed section (re-sort)
+      // Update UI ordering: move confirmed Entries to the confirmed section after Confirmation.
       setEntries(prev => {
         const updated = prev.map(e => e.id === id ? { ...e, ...timelineEntry, status: 'confirmed' } : e);
         const inProgress = updated.filter(e => e.status !== 'confirmed');
