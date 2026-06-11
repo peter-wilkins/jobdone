@@ -78,6 +78,14 @@ _Avoid_: Local Whisper, Runtime Evaluation, Required Voice Capture
 The red diagnostic bar shown after non-200 API responses during beta. Everyone is a beta tester during MVP, so API Debug Details are enabled for all users and anonymous devices. Reports are still sanitized and can be sent through feedback.
 _Avoid_: Peter-only Debug, Hidden Failure, Silent API Error
 
+**Native Shell**:
+The installable Android app binary that hosts JobDone and owns platform responsibilities such as install, permissions, share targets, camera/contact/location bridges, app links, and WebView lifecycle. Native Shell is the preferred term over PWA shell when JobDone stops depending on browser install flows.
+_Avoid_: PWA Shell, Browser Wrapper, Full Native Rewrite
+
+**Web Runtime**:
+The JobDone JavaScript, CSS, and asset bundle loaded inside the Native Shell's WebView. The Web Runtime owns the existing React product surface and local-first app logic; the Native Shell provides tightly scoped platform capabilities.
+_Avoid_: Remote Code Blob, Native UI, Unversioned JavaScript
+
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
 _Avoid_: Customer-Location Relationship, Property Ownership, Contact Address
