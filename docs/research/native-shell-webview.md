@@ -35,6 +35,77 @@ Useful lesson: the pattern works for a dogfood prototype, but JobDone carries
 user Entries, Contacts, Locations, Photos, Team data, and auth sessions, so it
 needs tighter security than the current Field Relay proof.
 
+## Field Relay Lessons To Reuse
+
+Reuse:
+
+- Gradle/Kotlin app skeleton with no framework ceremony.
+- App-private cached runtime directory plus bundled fallback assets.
+- Atomic writes for downloaded runtime assets.
+- Manifest-driven runtime refresh.
+- `launchMode="singleTop"` and explicit intent handling.
+- Local durable event/capture records before doing slow work.
+- Native ownership of Android permissions and platform actions.
+- Clear split between platform operations and portable runtime logic.
+
+Do not copy as-is:
+
+- `allowUniversalAccessFromFileURLs=true` and broad file URL access. That is too
+  loose for JobDone user data.
+- A generic native `fetch` bridge. JobDone should use normal web `fetch` first;
+  if native fetch is needed later, it must be URL/method scoped.
+- Voice interaction services, recognition services, microphone foreground
+  service, wake locks, and hands-free pings. They are Field Relay-specific.
+- GitHub raw runtime loading as the production trust boundary. It is fine for
+  dogfood, but JobDone should move to signed/hash-verified bundles before real
+  users.
+
+## Starter Options
+
+### Option A - Copy Field Relay Skeleton
+
+Best for a JobDone tracer bullet. Keep the Android project tiny and explicit.
+Remove Field Relay voice services, microphone capture, broad WebView settings,
+and generic fetch bridge. Add only a WebView Activity that loads staging.
+
+### Option B - Capacitor
+
+Good if we want a maintained WebView/native bridge framework, plugins, and
+community patterns. Capacitor is explicitly built for web apps rendered in a
+native WebView.
+
+Cost: more framework surface, more generated files, and another abstraction to
+debug while the app model is still moving.
+
+### Option C - React Native / Expo
+
+Good if we want native UI components and mature over-the-air JavaScript update
+machinery.
+
+Cost: not a reuse path for the current React DOM app. This is closer to a UI
+rewrite than a shell.
+
+Recommendation: start with **Option A**. Reconsider Capacitor once the first
+JobDone Native Shell proves which native plugins we actually need.
+
+## Android Survival Model
+
+JobDone should not try to stay alive all the time. The better Android-native
+model is:
+
+- persist user work immediately in WebView/IndexedDB or app-private native
+  storage;
+- use native share/capture receivers to save inbound material before opening UI;
+- use WorkManager for retryable background sync/report upload that should
+  survive app restarts and device reboots;
+- use foreground services only for visible, user-noticeable work such as active
+  recording or a long-running transfer that Android requires to be visible;
+- use Android 14+ user-initiated data transfer jobs later if large photo/video
+  uploads become common.
+
+That gives JobDone the useful part of Field Relay's resilience without making
+the whole app feel like a background service.
+
 ## Android Policy Read
 
 Android WebView apps are normal Android apps. Google documents WebView as a
@@ -142,4 +213,3 @@ Build a Native Shell spike, not a product rewrite:
    app version/runtime diagnostics.
 5. Only then choose between remote URL loading and signed cached Web Runtime
    bundles.
-
