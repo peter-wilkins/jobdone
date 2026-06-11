@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { dbService } from './services/dbService';
 import { apiService } from './services/apiService';
 import { syncOrchestratorService } from './services/syncOrchestratorService';
@@ -232,6 +232,7 @@ export function HomeScreen({
   const [queryCoverage, setQueryCoverage] = useState(null);
   const [isRecalling, setIsRecalling] = useState(false);
   const [queryInputText, setQueryInputText] = useState('');
+  const querySearchTimerRef = useRef(null);
 
   // Query history dropdown state
   const [queryDropdownOpen, setQueryDropdownOpen] = useState(false);
@@ -242,6 +243,80 @@ export function HomeScreen({
   useEffect(() => {
     queryHistoryService.getRecent().then(setRecentQueries);
   }, []);
+
+  const runLocalRecallQuery = useCallback(async (text, { persistToHistory = false } = {}) => {
+    setQueryDropdownOpen(false);
+    const trimmedText = String(text || '').trim();
+    if (!trimmedText) {
+      setActiveQuery(null);
+      setQueryResults(null);
+      setQueryCoverage(null);
+      setError(null);
+      return;
+    }
+
+    setError(null);
+
+    const publishResults = async (results, coverage = null) => {
+      setActiveQuery(trimmedText);
+      setQueryResults(results);
+      setQueryCoverage(coverage);
+      if (persistToHistory) {
+        await queryHistoryService.add(trimmedText);
+        setRecentQueries(await queryHistoryService.getRecent());
+      }
+    };
+
+    const runPrivateTimelineRecall = async () => {
+      const coverage = user
+        ? recallCoverageFromReplicaState(await dbService.getLocalReplicaState())
+        : null;
+      const result = recallLocalEntriesWithCoverage(trimmedText, selectPrivateTimelineEntries(entries), { coverage });
+      await publishResults(result.entries, result.coverage);
+    };
+
+    setIsRecalling(true);
+    try {
+      await runPrivateTimelineRecall();
+    } catch (err) {
+      if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
+        await runPrivateTimelineRecall();
+      } else if (err?.status === 401 || err?.status === 403) {
+        await runPrivateTimelineRecall();
+      } else if (err?.status === 400) {
+        setError(err?.message || null);
+      } else {
+        setError('Something went wrong — try again.');
+      }
+    } finally {
+      setIsRecalling(false);
+    }
+  }, [entries, user]);
+
+  useEffect(() => {
+    const trimmedQueryInput = queryInputText.trim();
+
+    if (querySearchTimerRef.current) {
+      window.clearTimeout(querySearchTimerRef.current);
+      querySearchTimerRef.current = null;
+    }
+
+    if (!trimmedQueryInput) {
+      void runLocalRecallQuery('');
+      return;
+    }
+
+    querySearchTimerRef.current = window.setTimeout(() => {
+      void runLocalRecallQuery(trimmedQueryInput);
+    }, 180);
+
+    return () => {
+      if (querySearchTimerRef.current) {
+        window.clearTimeout(querySearchTimerRef.current);
+        querySearchTimerRef.current = null;
+      }
+    };
+  }, [queryInputText, runLocalRecallQuery]);
 
   const refreshTeamWorkContext = async () => {
     if (!user || !backendAvailable) {
@@ -1246,53 +1321,6 @@ export function HomeScreen({
     }
   };
 
-  /**
-   * Execute a query: call recall, show results, save to history.
-   * Used for both confirm-screen queries and re-runs from dropdown.
-   */
-  const executeQuery = async (text) => {
-    setQueryDropdownOpen(false);
-    const trimmedText = String(text || '').trim();
-    if (!trimmedText) {
-      setError('Type a search query first.');
-      return;
-    }
-    setError(null);
-
-    const publishResults = async (results, coverage = null) => {
-      setActiveQuery(trimmedText);
-      setQueryResults(results);
-      setQueryCoverage(coverage);
-      await queryHistoryService.add(trimmedText);
-      setRecentQueries(await queryHistoryService.getRecent());
-    };
-
-    const runPrivateTimelineRecall = async () => {
-      const coverage = user
-        ? recallCoverageFromReplicaState(await dbService.getLocalReplicaState())
-        : null;
-      const result = recallLocalEntriesWithCoverage(trimmedText, selectPrivateTimelineEntries(entries), { coverage });
-      await publishResults(result.entries, result.coverage);
-    };
-
-    setIsRecalling(true);
-    try {
-      await runPrivateTimelineRecall();
-    } catch (err) {
-      if (err?.message === 'Failed to fetch' || err?.message?.includes('NetworkError') || !navigator.onLine) {
-        await runPrivateTimelineRecall();
-      } else if (err?.status === 401 || err?.status === 403) {
-        await runPrivateTimelineRecall();
-      } else if (err?.status === 400) {
-        setError(err?.message || 'Type a search query first.');
-      } else {
-        setError('Something went wrong — try again.');
-      }
-    } finally {
-      setIsRecalling(false);
-    }
-  };
-
   // Load entries from database on mount
   useEffect(() => {
     const loadJobs = async () => {
@@ -1449,6 +1477,7 @@ export function HomeScreen({
           <button
             onClick={() => {
               setActiveQuery(null);
+              setQueryInputText('');
               setQueryResults(null);
               setQueryCoverage(null);
             }}
@@ -1501,7 +1530,7 @@ export function HomeScreen({
           className="flex h-12 items-center px-3"
           onSubmit={(event) => {
             event.preventDefault();
-            executeQuery(queryInputText);
+            void runLocalRecallQuery(queryInputText, { persistToHistory: true });
           }}
         >
           <div className="relative w-full">
@@ -1512,31 +1541,18 @@ export function HomeScreen({
               type="search"
               value={queryInputText}
               onChange={(event) => setQueryInputText(event.target.value)}
-              onFocus={() => setQueryDropdownOpen(true)}
+              onFocus={() => {
+                setQueryDropdownOpen(true);
+              }}
               placeholder="Search private Timeline"
-              className="h-9 w-full rounded-full border border-gray-200 bg-gray-50 pl-9 pr-12 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
+              className="h-9 w-full rounded-full border border-gray-200 bg-gray-50 pl-9 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-100"
               aria-label="Search private Timeline"
             />
-            <button
-              type="submit"
-              disabled={!trimmedQueryInput || isRecalling}
-              className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
-              title="Search"
-              aria-label="Search"
-            >
-              {isRecalling ? (
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14m-6-6l6 6-6 6" />
-                </svg>
-              )}
-            </button>
           </div>
         </form>
 
         {/* Dropdown */}
-        {queryDropdownOpen && visibleRecentQueries.length > 0 && (
+        {queryDropdownOpen && !trimmedQueryInput && visibleRecentQueries.length > 0 && (
           <div className="absolute left-4 right-4 top-12 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
             <div className="p-2">
               {visibleRecentQueries.map((q, i) => (
@@ -1544,7 +1560,7 @@ export function HomeScreen({
                   key={q.id || i}
                   onClick={() => {
                     setQueryInputText(q.text);
-                    executeQuery(q.text);
+                    void runLocalRecallQuery(q.text, { persistToHistory: true });
                   }}
                   className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition text-sm text-gray-700 truncate"
                 >
