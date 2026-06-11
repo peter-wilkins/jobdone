@@ -37,6 +37,11 @@ export function createApp(options = {}) {
   fastify.register(registerLocalReplicaRoutes);
   fastify.register(registerTeamRoutes);
 
+  fastify.get('/health', async () => ({
+    status: 'ok',
+    service: 'JobDone Backend',
+  }));
+
   fastify.get('/', async () => {
     return {
       service: 'JobDone Backend',

@@ -9,11 +9,8 @@ const start = async () => {
     const USE_MOCK = process.env.USE_MOCK_APIS === 'true';
 
     if (!USE_MOCK) {
-      if (!process.env.DEEPGRAM_API_KEY) {
-        throw new Error('DEEPGRAM_API_KEY environment variable is required');
-      }
-      if (!process.env.ANTHROPIC_API_KEY) {
-        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+      if (!process.env.VOYAGE_API_KEY) {
+        console.warn('VOYAGE_API_KEY is not configured; legacy embedding paths may fail.');
       }
     }
 
