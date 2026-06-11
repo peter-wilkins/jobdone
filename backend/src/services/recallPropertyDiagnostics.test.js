@@ -19,7 +19,7 @@ const failure = {
     },
   },
   failures: ['missing expected source entry-1'],
-  actual: ['entry-2'],
+  actual: [{ id: 'entry-2', summary: 'Checked Bell Street', recall_score: 1.2, match_reasons: [] }],
   shrunkWorld: {
     contacts: [{ id: 'contact-1', displayName: 'Sarah Jenkins' }],
     locations: [{ id: 'location-1', displayName: 'Bell Street' }],
@@ -43,6 +43,7 @@ test('builds concise recall property diagnostics from the shrunk world', () => {
     queryId: 'location-history',
     queryText: 'Bell Street',
     expectedFirst: 'entry-1',
+    expectedSources: ['entry-1'],
     expectedIncluded: ['entry-1'],
     expectedExcluded: ['entry-3'],
     expectedEmpty: false,
@@ -66,7 +67,8 @@ test('renders a GitHub error annotation that points to the summary', () => {
 
   assert.match(annotation, /^::error title=Recall property failure::/);
   assert.match(annotation, /Query "Bell Street" failed/);
-  assert.match(annotation, /expected include: entry-1/);
+  assert.match(annotation, /expected sources: entry-1/);
+  assert.match(annotation, /expected excluded sources: entry-3/);
   assert.match(annotation, /actual: entry-2/);
   assert.match(annotation, /see job summary/);
 });
@@ -75,17 +77,19 @@ test('renders GitHub summary with expected, actual, excluded, and entry facts', 
   const summary = renderMarkdownSummary(failure, '/tmp/latest.json');
 
   assert.match(summary, /## Recall property failure/);
-  assert.match(summary, /Expected included sources: entry-1/);
+  assert.match(summary, /Expected sources: entry-1/);
   assert.match(summary, /Expected excluded sources: entry-3/);
   assert.match(summary, /Actual sources: entry-2/);
   assert.match(summary, /Checked boiler at Bell Street/);
   assert.match(summary, /"queryText": "Bell Street"/);
+  assert.match(summary, /Expected first source: entry-1/);
 });
 
 test('renders useful local failure text without requiring GitHub Actions', () => {
   const text = renderLocalFailureText(failure, '/tmp/latest.json');
 
   assert.match(text, /Recall property failed: location-history seed 1000/);
-  assert.match(text, /Expected included: entry-1/);
+  assert.match(text, /Expected sources: entry-1/);
+  assert.match(text, /Expected excluded sources: entry-3/);
   assert.match(text, /Shrunk repro: \/tmp\/latest.json/);
 });
