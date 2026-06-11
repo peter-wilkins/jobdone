@@ -590,6 +590,28 @@ CREATE TABLE jobdone."syncIntents" (
 CREATE INDEX syncIntents_actor_created_idx
   ON jobdone."syncIntents" ("actorUserId", "createdAt" DESC);
 
+CREATE TABLE jobdone."syncActions" (
+  id            uuid        PRIMARY KEY,
+  "intentId"    uuid        REFERENCES jobdone."syncIntents"(id),
+  t             bigint      REFERENCES jobdone."syncTransactions"(t),
+  "actorUserId" uuid        NOT NULL,
+  "actionType"  text        NOT NULL,
+  "ownerKind"   text        NOT NULL CHECK ("ownerKind" IN ('user','team')),
+  "ownerId"     uuid        NOT NULL,
+  "objectRefs"  jsonb       NOT NULL DEFAULT '[]',
+  "stateJson"   jsonb       NOT NULL DEFAULT '{}',
+  "resultJson"  jsonb       NOT NULL DEFAULT '{}',
+  status        text        NOT NULL CHECK (status IN ('accepted','rejected','conflict')),
+  "createdAt"   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX syncActions_actor_created_idx
+  ON jobdone."syncActions" ("actorUserId", "createdAt" DESC);
+CREATE INDEX syncActions_owner_created_idx
+  ON jobdone."syncActions" ("ownerKind", "ownerId", "createdAt" DESC);
+CREATE INDEX syncActions_transaction_idx
+  ON jobdone."syncActions" (t);
+
 CREATE TABLE jobdone."outboxEffects" (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   t               bigint      NOT NULL REFERENCES jobdone."syncTransactions"(t),

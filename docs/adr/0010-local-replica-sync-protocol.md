@@ -177,7 +177,7 @@ These three axes vary independently and encrypted mode needs additional fields (
 `t` is safety-critical and must never be mutated. Actor fields (`actorUserId`, `actorEmail`, `actorDeviceId`) are diagnostic and subject to GDPR erasure. Separating them means erasure deletes rows from `syncTransactionActors` without touching the ordering record.
 
 **3. SyncIntent wire shape splits into SyncEnvelope and SyncIntent.**
-`SyncEnvelope { id, replicaEpoch, baseT, createdAt }` handles retry/idempotency plumbing. `SyncIntent { action, ownerKind, ownerId, collection, objectId, payloadJson }` carries the business rule. The `syncIntents` ledger stores only the envelope id and an `intentHash` — not the full parsed action. Policy tests construct bare SyncIntent objects without envelope noise.
+`SyncEnvelope { id, replicaEpoch, baseT, createdAt }` handles retry/idempotency plumbing. Generic object `SyncIntent` records carry storage intent fields such as `action`, `ownerKind`, `ownerId`, `collection`, `objectId`, and `payloadJson`. Product Actions carry JobDone business commands such as `claimBacklogItem` separately in `syncActions`, as described in ADR 0011. The `syncIntents` ledger stores only the envelope id and an `intentHash` — not the full parsed action. Policy tests construct Product Action/state objects without envelope noise.
 
 **4. syncOwnerAccess is capability-grant rows, not a single "has access" record.**
 `capability` is one of `pull | push | readable_access`. Personal scope gets `pull` + `push` auto-created on account creation. Team `readable_access` is a separate grant added when Keybag is set up. Revocation sets `revokedAt`; rows are never deleted. GDPR erasure deletes all rows for a `userId` without touching Team data.
@@ -195,7 +195,7 @@ request
 → ACL check
 → deterministic lock acquisition
 → product action/rule check
-→ write syncTransactions, syncObjects, syncObjectPublicProduct, syncIntents, outboxEffects
+→ write syncTransactions, syncObjects, syncObjectPublicProduct, syncIntents, syncActions, outboxEffects
 → commit
 → generic outbox runner handles post-commit effects
 → HTTP adapter maps typed runtime result to status code
