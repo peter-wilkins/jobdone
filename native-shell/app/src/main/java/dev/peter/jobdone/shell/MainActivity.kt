@@ -82,7 +82,7 @@ class MainActivity : Activity() {
 
         val callbackUrl = AuthCallbackMapper.toWebUrl(intent?.data?.toString())
         if (callbackUrl != null) {
-            log("Loading auth callback URL: $callbackUrl")
+            log("Loading auth callback URL")
             webView.loadUrl(callbackUrl)
         } else if (savedInstanceState == null) {
             log("Loading start URL: ${JobDoneShellConfig.START_URL}")
@@ -123,7 +123,7 @@ class MainActivity : Activity() {
 
     private fun loadAuthCallbackIfPresent(intent: Intent?) {
         AuthCallbackMapper.toWebUrl(intent?.data?.toString())?.let { callbackUrl ->
-            log("Loading auth callback URL from new intent: $callbackUrl")
+            log("Loading auth callback URL from new intent")
             webView.post { webView.loadUrl(callbackUrl) }
         }
     }
@@ -142,7 +142,7 @@ class MainActivity : Activity() {
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             status.text = if (BuildConfig.DEBUG) "JobDone staging shell" else ""
-            log("Page started: $url")
+            log("Page started: ${safeUrlForLog(url)}")
             super.onPageStarted(view, url, favicon)
         }
 
@@ -159,11 +159,20 @@ class MainActivity : Activity() {
 
     private fun openExternal(url: String?) {
         if (url.isNullOrBlank()) return
-        if (BuildConfig.DEBUG) android.util.Log.d("JobDoneShell", "Opening external URL: $url")
+        log("Opening external URL: ${safeUrlForLog(url)}")
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onFailure {
             status.text = "Could not open external link."
+        }
+    }
+
+    private fun safeUrlForLog(url: String?): String {
+        val text = url ?: return ""
+        val fragmentIndex = text.indexOf('#')
+        val withoutFragment = if (fragmentIndex >= 0) "${text.take(fragmentIndex)}#<redacted>" else text
+        return withoutFragment.replace(Regex("([?&](?:code|redirect_to|provider_token|access_token|refresh_token)=)[^&#]*")) {
+            "${it.groupValues[1]}<redacted>"
         }
     }
 }

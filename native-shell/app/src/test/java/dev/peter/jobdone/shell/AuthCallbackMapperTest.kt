@@ -8,7 +8,7 @@ class AuthCallbackMapperTest {
     @Test
     fun mapsNativeCallbackQueryToStagingWebUrl() {
         assertEquals(
-            "https://jobdone-staging.vercel.app?code=abc",
+            "https://jobdone-staging.vercel.app?code=abc&nativeShellAuthCallback=1",
             AuthCallbackMapper.toWebUrl("jobdone-staging://auth-callback?code=abc"),
         )
     }
@@ -16,7 +16,7 @@ class AuthCallbackMapperTest {
     @Test
     fun mapsNativeCallbackFragmentToStagingWebUrl() {
         assertEquals(
-            "https://jobdone-staging.vercel.app#access_token=abc&refresh_token=def",
+            "https://jobdone-staging.vercel.app?nativeShellAuthCallback=1#access_token=abc&refresh_token=def",
             AuthCallbackMapper.toWebUrl("jobdone-staging://auth-callback#access_token=abc&refresh_token=def"),
         )
     }

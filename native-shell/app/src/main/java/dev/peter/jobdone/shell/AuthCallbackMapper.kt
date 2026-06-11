@@ -9,7 +9,7 @@ object AuthCallbackMapper {
         if (uri.scheme != JobDoneShellConfig.AUTH_CALLBACK_SCHEME) return null
         if (uri.host != JobDoneShellConfig.AUTH_CALLBACK_HOST) return null
 
-        val query = uri.rawQuery?.let { "?$it" } ?: ""
+        val query = uri.rawQuery?.let { "?$it&nativeShellAuthCallback=1" } ?: "?nativeShellAuthCallback=1"
         val fragment = uri.rawFragment?.let { "#$it" } ?: ""
         return "${JobDoneShellConfig.START_URL}$query$fragment"
     }
