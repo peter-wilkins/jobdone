@@ -3,7 +3,6 @@
  */
 
 import { authService } from './authService.js';
-import { normalizeRecallEntry } from './entryMapper.js';
 import { getFeedbackDeviceId } from './feedbackIdentityService.js';
 import { fetchWithRequestDiagnostics } from './requestDiagnosticsService.js';
 import { applyAvailableAppUpdate } from './serviceWorker.js';
@@ -387,39 +386,6 @@ export class APIService {
       throw new Error(error.error || `HTTP ${response.status}: Failed to delete user data`);
     }
     return true;
-  }
-
-  /**
-   * Recall entries matching a query
-   * @param {string} query - Query text
-   * @returns {Promise<Array>} Matching entries ordered by relevance
-   */
-  async recall(query) {
-    try {
-      const trimmedQuery = String(query || '').trim();
-      if (!trimmedQuery) {
-        throw new Error('query must be a non-empty string');
-      }
-
-      console.log('[API] Recalling entries for query:', trimmedQuery);
-
-      const response = await apiFetch(`${API_BASE_URL}/api/recall`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify({ query: trimmedQuery }),
-      });
-
-      if (!response.ok) {
-        await throwApiError(response, 'Recall failed');
-      }
-
-      const result = await response.json();
-      console.log('[API] Recall successful, entries:', result.entries?.length || 0);
-      return (result.entries || []).map(normalizeRecallEntry);
-    } catch (error) {
-      console.error('Recall error:', error);
-      throw error;
-    }
   }
 
   async getTeamSetupState(teamId = null) {

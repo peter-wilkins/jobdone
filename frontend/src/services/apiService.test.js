@@ -190,25 +190,6 @@ test('generic Local Replica pull rejects noncanonical response bodies', async ()
   }
 });
 
-test('recall rejects empty queries before fetch', async () => {
-  const originalFetch = globalThis.fetch;
-  let fetchCalled = false;
-  globalThis.fetch = async () => {
-    fetchCalled = true;
-    return new Response('{}', { status: 200 });
-  };
-
-  try {
-    await assert.rejects(
-      () => new APIService().recall('   '),
-      /query must be a non-empty string/,
-    );
-    assert.equal(fetchCalled, false);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
 test('Team Work state requests selected Team ID', async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl = '';
@@ -253,27 +234,6 @@ test('claiming a Team Backlog Item sends an explicit JSON body', async () => {
     assert.equal(requestedOptions.method, 'POST');
     assert.equal(requestedOptions.headers['Content-Type'], 'application/json');
     assert.equal(requestedOptions.body, '{}');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test('recall failed responses preserve server status and message', async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Authentication required' }), {
-    status: 401,
-    headers: { 'content-type': 'application/json' },
-  });
-
-  try {
-    await assert.rejects(
-      () => new APIService().recall('tap repair'),
-      (error) => {
-        assert.equal(error.status, 401);
-        assert.equal(error.message, 'Authentication required');
-        return true;
-      },
-    );
   } finally {
     globalThis.fetch = originalFetch;
   }
