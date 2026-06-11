@@ -235,6 +235,29 @@ test('Team Work state requests selected Team ID', async () => {
   }
 });
 
+test('claiming a Team Backlog Item sends an explicit JSON body', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedOptions = null;
+  globalThis.fetch = async (_url, options) => {
+    requestedOptions = options;
+    return new Response(JSON.stringify({
+      backlogItem: { id: 'item-1', description: 'Clean bench', status: 'claimed' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    await new APIService().claimTeamBacklogItem('item-1');
+    assert.equal(requestedOptions.method, 'POST');
+    assert.equal(requestedOptions.headers['Content-Type'], 'application/json');
+    assert.equal(requestedOptions.body, '{}');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('recall failed responses preserve server status and message', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ error: 'Authentication required' }), {

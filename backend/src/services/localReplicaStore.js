@@ -49,6 +49,12 @@ function intentResult({ intentId, status, t = null, objectId = null, reason = nu
   return { intentId, status, t, objectId, reason };
 }
 
+export function pullWindowForRequest({ sinceT = 0, currentT = 0 } = {}) {
+  return currentT < sinceT
+    ? { fromT: 0, toT: currentT, reset: true }
+    : { fromT: sinceT, toT: currentT, reset: false };
+}
+
 export function createLocalReplicaStore({ connectionString, schema = 'jobdone', pool = null } = {}) {
   const ownedPool = pool ? null : connectionString ? new Pool({ connectionString }) : null;
   return new LocalReplicaStore({ pool: pool || ownedPool, schema, ownsPool: Boolean(ownedPool) });
@@ -117,12 +123,13 @@ export class LocalReplicaStore {
     if (!this.pool) throw new Error('Local Replica database not configured');
     const client = await this.pool.connect();
     try {
-      const toT = await this.currentT(client, request.sinceT);
+      const currentT = await this.currentT(client);
+      const { fromT, toT } = pullWindowForRequest({ sinceT: request.sinceT, currentT });
       const scopes = await this.accessibleScopes(client, actorUserId);
       if (!scopes.length) {
         return {
           replicaEpoch: request.replicaEpoch,
-          fromT: request.sinceT,
+          fromT,
           toT,
           hasMore: false,
           objects: [],
@@ -139,12 +146,12 @@ export class LocalReplicaStore {
           AND (${clause})
         ORDER BY "changedT" ASC, "ownerKind" ASC, "ownerId" ASC, "collection" ASC, "id" ASC
         LIMIT $3
-      `, [request.sinceT, toT, limit + 1, ...values]);
+      `, [fromT, toT, limit + 1, ...values]);
 
       const rows = result.rows.slice(0, limit);
       return {
         replicaEpoch: request.replicaEpoch,
-        fromT: request.sinceT,
+        fromT,
         toT,
         hasMore: result.rows.length > limit,
         objects: rows.map(normalizeSyncObject),

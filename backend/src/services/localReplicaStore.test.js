@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { LocalReplicaStore } from './localReplicaStore.js';
+import { LocalReplicaStore, pullWindowForRequest } from './localReplicaStore.js';
 
 const ACTOR_USER_ID = '2a091a40-b350-4d2f-9d91-4c4b5042e01f';
 const OBJECT_ID = '01973e36-4c80-7abc-8a72-111111111111';
@@ -74,4 +74,15 @@ test('idempotent create retry does not claim an old transaction as newly committ
   assert.equal(outcome.result.t, 2);
   assert.equal(store.persisted.committedT, null);
   assert.equal(store.persisted.baseT, 8);
+});
+
+test('pull window resets stale client cursor after disposable schema wipe', () => {
+  assert.deepEqual(
+    pullWindowForRequest({ sinceT: 42, currentT: 0 }),
+    { fromT: 0, toT: 0, reset: true },
+  );
+  assert.deepEqual(
+    pullWindowForRequest({ sinceT: 2, currentT: 5 }),
+    { fromT: 2, toT: 5, reset: false },
+  );
 });
