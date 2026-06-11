@@ -11,6 +11,10 @@ frontend/.vite/
 frontend/test-results/
 frontend/playwright-report/
 
+# Android build
+native-shell/.gradle/
+native-shell/app/build/
+
 # IDE
 .vscode/
 .idea/
