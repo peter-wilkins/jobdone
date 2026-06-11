@@ -19,5 +19,5 @@ export function isDebugEmail(email) {
 }
 
 export function debugApiDetailsEnabledForUser(user) {
-  return isDebugEmail(user?.email);
+  return true;
 }

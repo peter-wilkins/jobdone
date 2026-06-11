@@ -12,7 +12,8 @@ test('enables API debug details for Peter allowlisted email', () => {
   assert.equal(debugApiDetailsEnabledForUser({ email: ' Peter.Wilkins2@ProtonMail.com ' }), true);
 });
 
-test('does not enable API debug details for normal users', () => {
+test('enables API debug details for everyone during beta', () => {
   assert.equal(isDebugEmail('worker@example.com'), false);
-  assert.equal(debugApiDetailsEnabledForUser({ email: 'worker@example.com' }), false);
+  assert.equal(debugApiDetailsEnabledForUser({ email: 'worker@example.com' }), true);
+  assert.equal(debugApiDetailsEnabledForUser(null), true);
 });

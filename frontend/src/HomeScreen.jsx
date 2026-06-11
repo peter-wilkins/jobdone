@@ -30,15 +30,6 @@ import {
   hasPendingPhotoAttachments,
   preparePhotoAttachment,
 } from './services/photoAttachmentService';
-import {
-  getSuccessfulCaptureCount,
-  getLocalTranscriptionMetrics,
-  maybePreloadWhisperModel,
-  recordTranscriptionChoice,
-  recordSuccessfulTranscription,
-  shouldRaceBackendTranscription,
-  tryLocalTranscribeAudio,
-} from './services/localTranscriptionService';
 import { GlobalMenu } from './GlobalMenu';
 import { formatTime } from './mockData';
 
@@ -47,7 +38,6 @@ const SHOW_QUERY_BAR = false;
 const MOCK_QUERY_TEXT = 'Show me radiator fixes from last month';
 const MIN_STOP_AFTER_MS = 1000;
 const MIN_RECORDING_SECONDS = 1;
-const BACKEND_FIRST_LOCAL_DELAY_MS = 750;
 const BUILD_ID = import.meta.env.VITE_DEPLOYMENT_ID || import.meta.env.VITE_BUILD_ID || 'dev';
 const ENABLE_TRANSCRIPTION_CAPTURE = import.meta.env.VITE_ENABLE_TRANSCRIPTION_CAPTURE === 'true';
 let fastCaptureAttemptedThisRun = false;
@@ -59,35 +49,6 @@ function reviewText(entry) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-}
-
-function textEditDistance(left = '', right = '') {
-  const a = String(left);
-  const b = String(right);
-  if (a === b) return 0;
-  if (!a) return b.length;
-  if (!b) return a.length;
-
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    const current = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      current[j] = Math.min(
-        current[j - 1] + 1,
-        previous[j] + 1,
-        previous[j - 1] + cost
-      );
-    }
-    previous = current;
-  }
-  return previous[b.length];
-}
-
-function transcriptionSourceLabel(source) {
-  if (source === 'backend') return 'Backend';
-  if (source === 'local') return 'Local';
-  return source || 'Unknown';
 }
 
 function containsContactName(entry, contact) {
@@ -265,15 +226,12 @@ export function HomeScreen({
   const [backendAvailable, setBackendAvailable] = useState(true);
   const [fastCaptureEnabled] = useState(() => preferencesService.isFastCaptureEnabled());
   const [captureContext] = useState(() => captureContextService.get());
-  const [, setLocalTranscriptionMetrics] = useState(() => getLocalTranscriptionMetrics());
-  const [, setSuccessfulCaptureCount] = useState(0);
   const [foregroundReturnCount, setForegroundReturnCount] = useState(0);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [updateStatus, setUpdateStatus] = useState(null);
   const fastCaptureEnabledAtOpenRef = useRef(fastCaptureEnabled);
   const wasBackgroundedRef = useRef(document.visibilityState === 'hidden');
   const handledForegroundReturnRef = useRef(0);
-  const localTranscriptionPreloadAttemptedRef = useRef(false);
   const structurePredictionRequestedRef = useRef(new Set());
   const preExtractionFingerprintsRef = useRef(new Map());
   const confirmingIdsRef = useRef(new Set());
@@ -585,23 +543,6 @@ export function HomeScreen({
     });
   }, []);
 
-  useEffect(() => {
-    if (!ENABLE_TRANSCRIPTION_CAPTURE) return;
-    if (localTranscriptionPreloadAttemptedRef.current) return;
-    if (getSuccessfulCaptureCount() < 1) return;
-
-    const preload = maybePreloadWhisperModel();
-    if (!preload) {
-      setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
-      return;
-    }
-
-    localTranscriptionPreloadAttemptedRef.current = true;
-    preload.then(setLocalTranscriptionMetrics).catch(() => {
-      setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
-    });
-  }, [foregroundReturnCount]);
-
   useOutsideDismiss(queryDropdownOpen, [dropdownRef], () => setQueryDropdownOpen(false));
 
   useEffect(() => {
@@ -853,94 +794,15 @@ export function HomeScreen({
         throw new Error('Recording not found');
       }
 
-      const timedLocal = async () => {
-        const startedAt = performance.now();
-        try {
-          const value = await tryLocalTranscribeAudio(entry.audioBlob, { captureContext });
-          return { source: 'local', value, latencyMs: value.latencyMs ?? Math.round(performance.now() - startedAt) };
-        } catch (error) {
-          return { source: 'local', value: { ok: false, reason: error?.message || 'local_failed' }, latencyMs: Math.round(performance.now() - startedAt) };
-        }
-      };
-      const timedBackend = async () => {
-        const startedAt = performance.now();
-        try {
-          const value = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
-          return { source: 'backend', value: { ...value, ok: true }, latencyMs: Math.round(performance.now() - startedAt) };
-        } catch (error) {
-          return { source: 'backend', value: { ok: false, reason: error?.message || 'backend_failed', error }, latencyMs: Math.round(performance.now() - startedAt) };
-        }
-      };
-
-      const raceBackend = shouldRaceBackendTranscription();
-      const localPromise = raceBackend
-        ? new Promise(resolve => window.setTimeout(resolve, BACKEND_FIRST_LOCAL_DELAY_MS)).then(timedLocal)
-        : timedLocal();
-      const backendPromise = raceBackend ? timedBackend() : null;
-      const firstResult = backendPromise ? await Promise.race([localPromise, backendPromise]) : await localPromise;
-      let localOutcome = firstResult.source === 'local' ? firstResult : null;
-      let backendOutcome = firstResult.source === 'backend' ? firstResult : null;
-
-      if (!firstResult.value.ok) {
-        if (firstResult.source === 'backend' && firstResult.value.error?.code === 'empty_transcription') {
-          throw firstResult.value.error;
-        }
-        const fallback = firstResult.source === 'local'
-          ? (backendPromise ? await backendPromise : await timedBackend())
-          : await localPromise;
-        if (fallback.source === 'local') localOutcome = fallback;
-        else backendOutcome = fallback;
-      }
-
-      const selectedOutcome = firstResult.value.ok
-        ? firstResult
-        : [localOutcome, backendOutcome].find(outcome => outcome?.value?.ok);
-      if (!selectedOutcome?.value?.ok) {
-        const failed = firstResult.value.error || new Error(firstResult.value.reason || 'Transcription failed');
-        throw failed;
-      }
-
-      const result = selectedOutcome.value;
-      const selectedSource = selectedOutcome.source;
-      if (selectedSource === 'backend' && !localOutcome?.value?.ok) {
-        console.debug('[LocalTranscription] Backend fallback:', localOutcome?.value?.reason || 'local_unavailable');
-      }
-      const transcriptionCandidates = [
-        {
-          source: 'backend',
-          provider: 'deepgram',
-          transcript: backendOutcome?.value?.ok ? backendOutcome.value.transcript : '',
-          selectable: Boolean(backendOutcome?.value?.ok),
-          selected: selectedSource === 'backend',
-          latencyMs: backendOutcome?.latencyMs ?? null,
-          status: backendOutcome?.value?.ok ? 'ok' : (raceBackend ? 'failed' : 'suppressed'),
-          reason: backendOutcome?.value?.ok ? null : (backendOutcome?.value?.reason || (raceBackend ? null : 'local_preferred')),
-        },
-        {
-          source: 'local',
-          provider: localOutcome?.value?.provider || 'whisper.cpp',
-          transcript: localOutcome?.value?.ok ? localOutcome.value.transcript : '',
-          selectable: Boolean(localOutcome?.value?.ok),
-          selected: selectedSource === 'local',
-          latencyMs: localOutcome?.latencyMs ?? null,
-          status: localOutcome?.value?.ok ? 'ok' : 'placeholder',
-          reason: localOutcome?.value?.ok ? null : (localOutcome?.value?.reason || 'runtime_not_integrated'),
-        },
-      ];
-      const successfulCaptures = recordSuccessfulTranscription();
-      setSuccessfulCaptureCount(successfulCaptures);
-      const preload = maybePreloadWhisperModel();
-      preload?.then(setLocalTranscriptionMetrics).catch(() => {
-        setLocalTranscriptionMetrics(getLocalTranscriptionMetrics());
-      });
+      const result = await apiService.transcribeAudio(entry.audioBlob, { captureContext });
 
       // Update entry with raw transcription data and intent (goes to ready_for_review).
       const updated = await dbService.updateEntryWithTranscription(jobId, {
         transcript: result.transcript,
         summary: result.summary || result.transcript,
         intent: result.intent || 'NOTE',
-        transcriptionSource: selectedSource,
-        transcriptionCandidates,
+        transcriptionSource: 'backend',
+        transcriptionCandidates: [],
       });
 
       // Update UI
@@ -990,27 +852,6 @@ export function HomeScreen({
         return newSet;
       });
     }
-  };
-
-  const selectTranscriptionCandidate = async (entry, candidate) => {
-    if (!candidate?.selectable || !candidate.transcript) return;
-    const existingDraft = reviewTextDrafts[entry.id];
-    const nextText = existingDraft?.trim()
-      ? `${existingDraft.trim()}\n\n${candidate.transcript}`
-      : candidate.transcript;
-    const candidates = (entry.transcriptionCandidates || []).map(item => ({
-      ...item,
-      selected: item.source === candidate.source,
-    }));
-    const updates = {
-      transcript: candidate.transcript,
-      summary: nextText,
-      transcriptionSource: candidate.source,
-      transcriptionCandidates: candidates,
-    };
-    const updated = await dbService.updateEntry(entry.id, updates);
-    setReviewTextDrafts(prev => ({ ...prev, [entry.id]: nextText }));
-    setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...updated } : item));
   };
 
   const startTextCapture = async () => {
@@ -1270,36 +1111,6 @@ export function HomeScreen({
         } catch (syncErr) {
           console.warn('[UI] Cloud sync failed, entry saved locally:', syncErr);
           // Don't fail the UI - entry is safe locally, will retry on next login
-        }
-      }
-
-      if (entry.transcriptionCandidates?.length) {
-        try {
-          const selectedSource = entry.transcriptionSource || entry.transcriptionCandidates.find(candidate => candidate.selected)?.source || 'backend';
-          const selectedCandidate = entry.transcriptionCandidates.find(candidate => candidate.source === selectedSource);
-          const editDistance = selectedCandidate?.transcript
-            ? textEditDistance(selectedCandidate.transcript, timelineEntry.summary || timelineEntry.transcript || '')
-            : null;
-          recordTranscriptionChoice({
-            selectedSource,
-            editDistance,
-            originalLength: selectedCandidate?.transcript?.length || 0,
-          });
-          await apiService.saveTranscriptionEvaluation({
-            captureId: entry.captureId || entry.id,
-            entryId: timelineEntry.remoteId || null,
-            selectedSource,
-            reviewText: timelineEntry.summary || timelineEntry.transcript || '',
-            editDistance,
-            candidates: entry.transcriptionCandidates,
-            metadata: {
-              buildId: BUILD_ID,
-              intent: entry.intent,
-              localFirst: selectedSource === 'local',
-            },
-          });
-        } catch (evaluationErr) {
-          console.warn('[TranscriptionEvaluation] Save failed:', evaluationErr);
         }
       }
 
@@ -2191,8 +2002,6 @@ export function HomeScreen({
         }
       };
       const showSeparateTranscript = Boolean(entry.transcript && entry.transcript !== entry.summary);
-      const transcriptionCandidates = entry.transcriptionCandidates || [];
-      const selectedTranscriptionSource = entry.transcriptionSource || transcriptionCandidates.find(candidate => candidate.selected)?.source;
       const attachments = entry.attachments || [];
       const attachmentError = reviewAttachmentErrors[entry.id];
       const photosPending = hasPendingPhotoAttachments(attachments);
@@ -2215,51 +2024,6 @@ export function HomeScreen({
       return (
         <div key={entry.id} className="py-4 border-b border-gray-100 last:border-b-0">
           <div className="mb-4">
-              {transcriptionCandidates.length > 0 && (
-                <div className="mb-3 grid gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                      Transcription: evaluation
-                    </span>
-                    {selectedTranscriptionSource && (
-                      <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                        {transcriptionSourceLabel(selectedTranscriptionSource)} selected
-                      </span>
-                    )}
-                  </div>
-                  {transcriptionCandidates.map(candidate => {
-                    const selected = candidate.source === selectedTranscriptionSource;
-                    const disabled = !candidate.selectable || !candidate.transcript;
-                    return (
-                      <button
-                        key={candidate.source}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => selectTranscriptionCandidate(entry, candidate)}
-                        className={`rounded border px-3 py-2 text-left ${
-                          selected
-                            ? 'border-blue-300 bg-blue-50 text-blue-950'
-                            : disabled
-                              ? 'border-gray-200 bg-gray-50 text-gray-500'
-                              : 'border-gray-200 bg-white text-gray-900'
-                        }`}
-                      >
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium">{transcriptionSourceLabel(candidate.source)}</span>
-                          <span className="text-xs text-gray-500">
-                            {candidate.latencyMs != null ? `${candidate.latencyMs}ms` : candidate.status || 'pending'}
-                          </span>
-                        </span>
-                        {candidate.transcript ? (
-                          <span className="mt-1 block text-sm">{candidate.transcript}</span>
-                        ) : (
-                          <span className="mt-1 block text-xs">{candidate.reason || 'Not ready yet'}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
               <textarea
                 ref={(node) => {
                   if (node) textAreaRefs.current.set(entry.id, node);

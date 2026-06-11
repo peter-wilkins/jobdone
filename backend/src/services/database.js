@@ -663,80 +663,6 @@ export async function getEntryByCreatedAt(userId, createdAt) {
   }
 }
 
-function normalizeTranscriptionCandidate(candidate = {}) {
-  const source = String(candidate.source || candidate.provider || '').trim();
-  if (!source) return null;
-
-  return {
-    source,
-    provider: candidate.provider ? String(candidate.provider).slice(0, 80) : source,
-    transcript: String(candidate.transcript || ''),
-    selectable: Boolean(candidate.selectable),
-    selected: Boolean(candidate.selected),
-    latency_ms: Number.isFinite(Number(candidate.latency_ms ?? candidate.latencyMs))
-      ? Math.max(0, Math.round(Number(candidate.latency_ms ?? candidate.latencyMs)))
-      : null,
-    status: candidate.status ? String(candidate.status).slice(0, 80) : null,
-    reason: candidate.reason ? String(candidate.reason).slice(0, 200) : null,
-  };
-}
-
-export async function saveTranscriptionEvaluation(identity = {}, evaluation = {}) {
-  if (!jobdoneDb) {
-    console.warn('[DB] Supabase not configured, skipping transcription evaluation save');
-    return null;
-  }
-
-  const userId = identity.userId || identity.user_id || null;
-  const anonymousDeviceId = identity.anonymousDeviceId || identity.anonymous_device_id || null;
-  if (!userId && !anonymousDeviceId) {
-    throw new Error('user or anonymous_device_id required');
-  }
-  const identityKey = userId ? `user:${userId}` : `device:${anonymousDeviceId}`;
-
-  const captureId = String(evaluation.captureId || evaluation.capture_id || '').trim();
-  if (!captureId) throw new Error('capture_id required');
-
-  const selectedSource = String(evaluation.selectedSource || evaluation.selected_source || '').trim();
-  if (!selectedSource) throw new Error('selected_source required');
-
-  const candidates = (Array.isArray(evaluation.candidates) ? evaluation.candidates : [])
-    .map(normalizeTranscriptionCandidate)
-    .filter(Boolean);
-  if (!candidates.length) throw new Error('candidates required');
-
-  const row = {
-    user_id: userId,
-    anonymous_device_id: anonymousDeviceId,
-    identity_key: identityKey,
-    capture_id: captureId,
-    entry_id: evaluation.entryId || evaluation.entry_id || null,
-    selected_source: selectedSource,
-    review_text: String(evaluation.reviewText || evaluation.review_text || '').slice(0, 20000),
-    edit_distance: Number.isFinite(Number(evaluation.editDistance ?? evaluation.edit_distance))
-      ? Math.max(0, Math.round(Number(evaluation.editDistance ?? evaluation.edit_distance)))
-      : null,
-    candidates: JSON.stringify(candidates),
-    metadata: {
-      ...(evaluation.metadata || {}),
-      source: 'frontend_review',
-    },
-    updated_at: new Date().toISOString(),
-  };
-
-  const { data, error } = await jobdoneDb
-    .from('transcription_evaluations')
-    .upsert([row], { onConflict: 'identity_key,capture_id' })
-    .select();
-
-  if (error) {
-    console.error('[DB] Transcription evaluation save error:', error);
-    throw error;
-  }
-
-  return data?.[0] || null;
-}
-
 /**
  * Delete all user data (GDPR right to erasure).
  * Removes entries, queries, and feedback for the given user.
@@ -783,12 +709,6 @@ export async function deleteUserData(userId) {
       .delete()
       .eq('user_id', userId);
     if (feedbackErr) throw feedbackErr;
-
-    const { error: evaluationErr } = await jobdoneDb
-      .from('transcription_evaluations')
-      .delete()
-      .eq('user_id', userId);
-    if (evaluationErr) throw evaluationErr;
 
     console.log('[DB] All user data deleted:', userId);
     return { success: true };

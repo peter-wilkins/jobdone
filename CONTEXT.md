@@ -70,25 +70,13 @@ _Avoid_: Hidden Confirmation, Auto-Save, Final Summary
 An optional review action run after the user has twiddled review context such as Location, Contact, Tags, Work Context, or Backlog Item. Clean Up Text uses the confirmed/reviewed Capture Context to improve the user-visible Entry text, including Markdown formatting, bullet points, deduplication, and clearer wording. It may remove duplication already captured in user-set context, such as repeating a selected Contact in the Entry text. It must not overwrite Context Clues or Work Context values the user has already set.
 _Avoid_: Final Extraction, First Guess, Background Suggestion, Raw Transcript
 
-**Local Transcription**:
-A phone-capable transcription path that turns Capture audio into reviewable text without requiring the backend at that moment. Local Transcription is a product capability: lazy loading, cache status, fallback behaviour, dogfooding metrics, and weak-connectivity UX.
-_Avoid_: Runtime-only Spike, Backend Transcription Replacement
+**Backend Transcription**:
+An optional audio-to-text path behind `VITE_ENABLE_TRANSCRIPTION_CAPTURE`. It is not the default MVP Capture path. The default path is editable text plus OS dictation, because that is simpler, faster, and avoids JobDone owning fragile browser transcription runtime state.
+_Avoid_: Local Whisper, Runtime Evaluation, Required Voice Capture
 
-**Transcription Runtime**:
-The concrete self-hosted technology used to perform Local Transcription, such as upstream whisper.cpp WebAssembly or a Rust/WASM runtime. The Runtime is replaceable; it sits behind the Local Transcription seam and may fail independently of the product-level Local Transcription workflow.
-_Avoid_: Product Mode, Capture Flow
-
-**Transcription Source**:
-The visible provenance of a Capture transcript, such as local, backend, fallback-to-backend, or evaluation race. Transcription Source helps dogfooding and debugging; it should be visible near the review text for a Capture and may also appear in lightweight app status when testing Local Transcription.
-_Avoid_: Hidden Provider Choice, Debug-only Log
-
-**Transcription Evaluation**:
-A dogfooding and testing path that compares two or more Transcription Sources, Runtimes, or backend Providers for latency, quality, and failure behaviour without changing the normal Capture path by default. The same Evaluation harness should compare Local Transcription against backend transcription now, and backend Provider A against backend Provider B later. When two transcripts are produced, Evaluation may show both in review and let the user choose the better one; that choice is the first quality signal.
-_Avoid_: Permanent Race Mode, Provider Lock-In
-
-**Beta Tester**:
-A User who has explicitly opted in to preview or diagnostic product behaviour before it is ready for normal users. Beta Tester status is global to the User, not Team-specific, and can enable extra feedback surfaces such as Transcription Evaluation after JobDone has real users.
-_Avoid_: Hidden Debug Victim, Internal User Only, Team Beta Setting
+**API Debug Details**:
+The red diagnostic bar shown after non-200 API responses during beta. Everyone is a beta tester during MVP, so API Debug Details are enabled for all users and anonymous devices. Reports are still sanitized and can be sent through feedback.
+_Avoid_: Peter-only Debug, Hidden Failure, Silent API Error
 
 **Co-occurrence Clue**:
 A prediction clue derived from confirmed Entries where a Contact and Location appeared together before. It suggests likely structure during review but does not mean the Contact owns, lives at, manages, or permanently belongs to the Location.
@@ -397,29 +385,9 @@ _Avoid_: Search bar, Input field, Record button
 - JobDone may use extraction on the onboarding answer to create bounded prompt guides and default Capture Context, but user-provided text must be treated as domain data, not as executable instructions to the model.
 - Pre-Extraction can run behind the scenes before review to make good guesses for Context Clues and Prediction Candidate Sets. It should run lazily when suggestions are needed, not automatically as a blocking step after every transcription.
 - Deterministic Pre-Extraction should be phone-capable/client-side where possible and may run against the editable Capture text after a short typing pause, such as 300-500ms. This keeps review snappy, supports offline/local mode, avoids backend cost while typing, and avoids making transcription a dependency for beta-user Capture. Online Clean Up Text can happen later when connectivity returns.
-- Local Transcription is a parked beta/spike capability, not the default MVP Capture path. If revisited, it owns lazy loading, cache status, backend fallback, dogfood UX, and weak-connectivity behaviour. Transcription Runtime work owns whether JobDone can legally and practically self-host the underlying WASM transcription engine.
-- Transcription Source should be visible during dogfooding, especially in Entry review. Users and agents should be able to tell whether text came from Local Transcription, backend transcription, fallback-to-backend, or an evaluation race.
-- JobDone may occasionally race Local Transcription and backend transcription to compare latency and quality, but racing is an evaluation mode, not the default user path. The long-term preference is high-quality Local Transcription with backend fallback for unexpected failures.
-- Transcription Evaluation should be provider-agnostic. Evaluation records should include source/provider, latency, success/failure, and enough user-visible quality signal for dogfooding, but JobDone should not permanently race every Capture by default.
-- When Evaluation produces competing transcripts, Entry review should show both and let the user pick the better starting point before Pre-Extraction runs. The selected transcript becomes quality feedback as well as the text used for Context Clue and Work Context suggestions.
-- Losing Evaluation transcripts are diagnostic material, not normal Entry content. They may be kept with Evaluation metadata for debugging and provider comparison, but should not appear in Timeline, Recall, Share Packs, or normal Entry text.
-- Transcription Evaluation records should be stored durably on the backend, with local buffering when offline. Provider comparison needs durable rows with Capture identity, selected source, transcript candidates, latency, failure information, and the user's choice.
-- During no-user MVP dogfooding, Transcription Evaluation can be enabled by default so Capture quality feedback is gathered quickly. Before normal users, this should move behind a visible debug or Beta Tester flag.
-- The first Transcription Evaluation slice should prove the review flow and metadata shape before real Local Transcription works. It may show the backend transcript beside a local-runtime placeholder such as "Local transcription runtime not ready yet" so choice, source display, and storage boundaries can be tested before WASM runtime work.
-- Placeholder Evaluation candidates are visible status only, not selectable. A candidate becomes selectable only when it has produced real transcript text.
-- On-device transcription is not a dependency of Pre-Extraction. If a phone-capable transcription path works without hurting page load, JobDone can support weak-connectivity Capture as Local Transcription -> local Pre-Extraction -> local Confirmation -> later sync, with online Clean Up Text deferred.
-- Local Transcription should optimise for dogfoodable weak-connectivity Capture quality first, not smallest possible model. A larger Runtime/model is acceptable if it fits realistic target devices, loads lazily/backgrounds cleanly, and produces noticeably better short-note transcripts.
-- The first hard Local Transcription target is Android Chrome/PWA on Peter's real dogfooding phone. Desktop can help debug runtime integration, but acceptance should be based on acceptable short-note transcription, fallback, and status visibility on that phone.
-- Runtime/model loading must never block Capture and should stay behind a Beta Tester/debug flag while beta-user onboarding focuses on text-first Capture. While setup is incomplete or disabled, Capture should continue through editable text and OS dictation rather than JobDone-owned transcription.
-- JobDone should avoid automatic Runtime/model downloads on mobile data or when the browser reports data-saving mode. Because browser connection signals are imperfect, this should be conservative: skip auto-download when the device appears to be on cellular or save-data, show status, and allow an explicit user-triggered download later.
-- Browser Cache Storage is the preferred place for Runtime/model assets, with a small local readiness record for version, size, status, and last failure. Large model bytes should not go into IndexedDB unless Cache Storage proves unsuitable.
-- Local Transcription runtime work should run in a Web Worker. The main thread must stay responsive during model setup and transcription, and the Service Worker should not own heavy runtime state.
-- During beta/evaluation settling, JobDone may race Local Transcription and backend transcription and use whichever finishes first as the review starting point. If Local Transcription wins repeatedly, such as five Captures in a row with acceptable quality, JobDone can stop making routine backend transcription calls and keep backend only as fallback. If Local Transcription becomes slow, fails, or quality drops, backend fallback should resume.
-- Acceptable Local Transcription quality starts with user choice and correction behaviour, not automatic semantic scoring. Choosing the local transcript over backend is a quality win; choosing local and saving with only small edits is also a quality win. Choosing backend, or heavily rewriting a local transcript before save, should not count as a local quality win.
-- Local Transcription status should be compact and close to Capture/review surfaces during dogfooding, such as "local ready", "loading model", "cellular: paused", "backend fallback", or "evaluation". Avoid a large debug/settings panel unless real testing friction shows it is needed.
-- The first Runtime implementation route should use upstream whisper.cpp WebAssembly. Rust/WASM remains a fallback/spike if upstream whisper.cpp browser integration is blocked, legally awkward, or too ugly to maintain.
-- Transcription model files should not be committed to git. They should be downloaded and cached at runtime. Built WASM artifacts should also stay out of git when practical, using pinned packages, releases, or build steps; if vendoring WASM becomes necessary, it must be explicit and small enough not to damage repo usability.
-- Local Transcription is English-first for MVP dogfooding. Multi-language support can come later as a model/runtime choice once the local feedback loop is proven.
+- Local Whisper transcription has been cut from the MVP app. Do not reintroduce a browser Whisper runtime, model preloader, race UI, or transcription evaluation harness without a fresh issue and proof that text-first Capture plus OS dictation is not enough.
+- Backend Transcription may remain as an optional feature-flagged path for experiments, but the main Capture surface is text-first.
+- API Debug Details are on for everyone during MVP because every tester is effectively a beta tester. The UI should make API failures visible, sanitized, and easy to send as feedback.
 - Pre-Extraction should have a property-test feedback loop. Generated Captures, candidate Contacts/Locations/Backlog Items, and expected matches should prove that deterministic rules make useful suggestions without inventing durable structure, and failing cases should shrink to a small readable repro.
 - Clean Up Text should normally happen after the user has twiddled review context, because JobDone may not know whether the Capture is personal work, Team work, family work, or another mode until the user selects a Work Context or Backlog Item.
 - Clean Up Text is optional. Users who are happy with the text can confirm without waiting for more AI. Clean Up Text may make the message more readable, add Markdown structure such as bullet points, and reduce repeated details already captured by user-set context, but user-set context remains authoritative.
