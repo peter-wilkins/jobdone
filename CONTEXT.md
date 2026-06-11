@@ -129,11 +129,11 @@ A locally recorded request for the backend to accept a sync change. Today the Lo
 _Avoid_: Fire-and-Forget Mutation, Blind Offline Write, UI Event Log
 
 **Product Action**:
-A named JobDone business operation that may need policy validation, race management, and post-commit effects, such as `claimBacklogItem`, `submitClaimedWork`, or `decideApprovalRequest`. Product Actions sit above generic Sync Intents: the JobDone policy layer validates the Product Action and derives allowed state changes, while the generic storage layer commits objects and ordering.
+A named JobDone business operation that may need policy validation, race management, and post-commit effects, such as `claimBacklogItem`, `submitClaimedWork`, or `decideApprovalRequest`. Product Actions sit above generic Sync Intents: the JobDone policy layer validates the Product Action and derives allowed state changes, while the generic storage layer commits objects and ordering. User-originated Product Actions should use frontend-created UUIDv7 action IDs; `syncIntents` remain the transport/idempotency envelope.
 _Avoid_: Hidden Payload Mutation, UI Click, Generic Object Write
 
 **stateJson**:
-Backend-readable, Zod-validated business state for policy and coordination. `stateJson` can contain non-sensitive facts such as Backlog status, claimant identity, approval status, owner scope, and action kind. It is deliberately separate from private payload content such as Entry text, Contact details, Location labels/addresses, and Photos, so those payloads can later be encrypted.
+Backend-readable, Zod-validated business state for policy and coordination. `stateJson` can contain non-sensitive facts such as Backlog status, claimant identity, approval status, owner scope, and action kind. It is deliberately separate from private payload content such as Entry text, Contact details, Location labels/addresses, and Photos, so those payloads can later be encrypted. Generic sync code owns the action envelope; JobDone policy owns per-action `stateJson` schemas.
 _Avoid_: Metadata Bag, Private Payload, Prompt Context
 
 **Sync Transaction**:

@@ -113,6 +113,10 @@ separate from the object payload so rules, race handling, outbox effects, and
 debugging can all point at "what was attempted" without reading private payload
 content.
 
+See `docs/adr/0011-product-actions-and-generic-sync-envelope.md` for the
+`syncIntents`/`syncActions` split, UUIDv7 action ID rule, transaction semantics,
+and Zod envelope pattern.
+
 ## Plaintext State JSON
 
 `stateJson` is the backend-readable business metadata needed for policy. It is
