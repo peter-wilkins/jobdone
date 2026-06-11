@@ -5,10 +5,10 @@ import org.junit.Test
 
 class NavigationPolicyTest {
     @Test
-    fun allowsJobDoneStagingInsideWebView() {
+    fun allowsConfiguredJobDoneHostInsideWebView() {
         assertEquals(
             NavigationDecision.WEBVIEW,
-            NavigationPolicy.decide("https://jobdone-staging.vercel.app/team/example"),
+            NavigationPolicy.decide("${JobDoneShellConfig.START_URL}/team/example"),
         )
     }
 

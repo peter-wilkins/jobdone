@@ -141,7 +141,7 @@ class MainActivity : Activity() {
             handleNavigation(url)
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-            status.text = if (BuildConfig.DEBUG) "JobDone staging shell" else ""
+            status.text = if (BuildConfig.DEBUG) JobDoneShellConfig.SHELL_LABEL else ""
             log("Page started: ${safeUrlForLog(url)}")
             super.onPageStarted(view, url, favicon)
         }

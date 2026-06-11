@@ -9,10 +9,7 @@ enum class NavigationDecision {
 }
 
 object NavigationPolicy {
-    private val webViewHosts = setOf(
-        "jobdone-staging.vercel.app",
-        "jobdone-frontend-staging.vercel.app",
-    )
+    private val webViewHost = runCatching { URI(JobDoneShellConfig.START_URL).host.lowercase() }.getOrNull()
 
     fun decide(url: String?): NavigationDecision {
         if (url.isNullOrBlank()) return NavigationDecision.BLOCK
@@ -21,7 +18,7 @@ object NavigationPolicy {
         val host = uri.host?.lowercase()
 
         if (scheme != "https") return NavigationDecision.BLOCK
-        if (host in webViewHosts) return NavigationDecision.WEBVIEW
+        if (host == webViewHost) return NavigationDecision.WEBVIEW
         return NavigationDecision.EXTERNAL
     }
 }

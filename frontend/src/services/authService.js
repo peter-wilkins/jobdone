@@ -42,14 +42,22 @@ export function authRedirectUrl({
   location = globalThis.window?.location,
   userAgent = globalThis.navigator?.userAgent,
 } = {}) {
-  if (isNativeShellUserAgent(userAgent)) return 'jobdone-staging://auth-callback';
+  const nativeShellCallbackUrl = nativeShellAuthCallbackUrl(userAgent);
+  if (nativeShellCallbackUrl) return nativeShellCallbackUrl;
   const currentOrigin = trimTrailingSlash(location?.origin);
   if (isJobDoneAuthOrigin(currentOrigin)) return currentOrigin;
   return trimTrailingSlash(configuredAppUrl || currentOrigin);
 }
 
 export function isNativeShellUserAgent(userAgent) {
-  return String(userAgent || '').includes('JobDoneNativeShell/0.1.0 staging');
+  return nativeShellAuthCallbackUrl(userAgent) !== null;
+}
+
+export function nativeShellAuthCallbackUrl(userAgent) {
+  const text = String(userAgent || '');
+  if (text.includes('JobDoneNativeShell/0.1.0 production')) return 'jobdone://auth-callback';
+  if (text.includes('JobDoneNativeShell/0.1.0 staging')) return 'jobdone-staging://auth-callback';
+  return null;
 }
 
 export function consumeAuthErrorFromLocation({

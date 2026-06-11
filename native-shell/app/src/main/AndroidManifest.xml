@@ -28,7 +28,7 @@
 
                 <data
                     android:host="auth-callback"
-                    android:scheme="jobdone-staging" />
+                    android:scheme="${authCallbackScheme}" />
             </intent-filter>
         </activity>
 

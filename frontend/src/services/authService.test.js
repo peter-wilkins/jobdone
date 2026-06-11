@@ -6,6 +6,7 @@ import {
   consumeAuthErrorFromLocation,
   isJobDoneAuthOrigin,
   isNativeShellUserAgent,
+  nativeShellAuthCallbackUrl,
 } from './authService.js';
 
 test('auth redirect uses current browser origin when no app URL is configured', () => {
@@ -38,7 +39,7 @@ test('auth redirect prefers current installed app origin over canonical build UR
   );
 });
 
-test('auth redirect uses native shell callback scheme when running inside shell', () => {
+test('auth redirect uses staging native shell callback scheme when running inside staging shell', () => {
   assert.equal(
     authRedirectUrl({
       configuredAppUrl: 'https://jobdone-staging.vercel.app',
@@ -49,9 +50,27 @@ test('auth redirect uses native shell callback scheme when running inside shell'
   );
 });
 
+test('auth redirect uses production native shell callback scheme when running inside production shell', () => {
+  assert.equal(
+    authRedirectUrl({
+      configuredAppUrl: 'https://jobdone.continuumkit.org',
+      location: { origin: 'https://jobdone.continuumkit.org' },
+      userAgent: 'Mozilla/5.0 JobDoneNativeShell/0.1.0 production',
+    }),
+    'jobdone://auth-callback',
+  );
+});
+
 test('native shell detection is explicit to JobDone shell marker', () => {
   assert.equal(isNativeShellUserAgent('Mozilla/5.0 JobDoneNativeShell/0.1.0 staging'), true);
+  assert.equal(isNativeShellUserAgent('Mozilla/5.0 JobDoneNativeShell/0.1.0 production'), true);
   assert.equal(isNativeShellUserAgent('Mozilla/5.0'), false);
+});
+
+test('native shell auth callback URL follows shell environment', () => {
+  assert.equal(nativeShellAuthCallbackUrl('JobDoneNativeShell/0.1.0 staging'), 'jobdone-staging://auth-callback');
+  assert.equal(nativeShellAuthCallbackUrl('JobDoneNativeShell/0.1.0 production'), 'jobdone://auth-callback');
+  assert.equal(nativeShellAuthCallbackUrl('Mozilla/5.0'), null);
 });
 
 test('auth redirect does not trust unrelated current origins', () => {
