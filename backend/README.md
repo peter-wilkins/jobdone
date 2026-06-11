@@ -54,7 +54,6 @@ npm test
 - `GET /health`
 - `POST /api/sync/save`
 - `GET /api/sync/entries`
-- `POST /api/recall`
 - `POST /api/queries`
 - `POST /api/feedback/save`
 - `POST /api/crash-reports`

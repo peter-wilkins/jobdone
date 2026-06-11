@@ -3,7 +3,6 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { registerSyncRoutes } from './routes/sync.js';
 import { registerFeedbackRoutes } from './routes/feedback.js';
-import { registerRecallRoutes } from './routes/recall.js';
 import { registerQueryRoutes } from './routes/queries.js';
 import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
@@ -30,7 +29,6 @@ export function createApp(options = {}) {
 
   fastify.register(registerSyncRoutes);
   fastify.register(registerFeedbackRoutes);
-  fastify.register(registerRecallRoutes);
   fastify.register(registerQueryRoutes);
   fastify.register(registerStructureRoutes);
   fastify.register(registerLocationRoutes);
