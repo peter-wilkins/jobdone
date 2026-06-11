@@ -2,6 +2,22 @@ function list(values) {
   return values?.length ? values.join(', ') : '(none)';
 }
 
+function readIds(values) {
+  const ids = [];
+  for (const value of values || []) {
+    if (typeof value === 'string') {
+      ids.push(value);
+    } else if (value && typeof value.id === 'string') {
+      ids.push(value.id);
+    }
+  }
+  return ids;
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 function escapeGitHubCommand(value) {
   return String(value)
     .replaceAll('%', '%25')
@@ -31,15 +47,21 @@ export function buildRelevantEntryFacts(failure) {
 
 export function buildFailureDiagnostic(failure) {
   const expected = failure.query?.expect || {};
+  const expectedIncluded = expected.include || [];
+  const expectedExcluded = expected.exclude || [];
+  const expectedFirst = expected.first || null;
+  const expectedSources = unique([...expectedIncluded, ...(expectedFirst ? [expectedFirst] : [])]);
+
   return {
     seed: failure.seed,
     queryId: failure.query?.id,
     queryText: failure.query?.text,
-    expectedFirst: expected.first || null,
-    expectedIncluded: expected.include || [],
-    expectedExcluded: expected.exclude || [],
+    expectedFirst,
+    expectedSources,
+    expectedIncluded,
+    expectedExcluded,
     expectedEmpty: expected.empty === true,
-    actual: failure.actual || [],
+    actual: readIds(failure.actual),
     failures: failure.failures || [],
     entries: buildRelevantEntryFacts(failure),
   };
@@ -49,7 +71,8 @@ export function renderGitHubErrorAnnotation(failure) {
   const diagnostic = buildFailureDiagnostic(failure);
   const message = [
     `Query "${diagnostic.queryText}" failed`,
-    `expected include: ${list(diagnostic.expectedIncluded)}`,
+    `expected sources: ${list(diagnostic.expectedSources)}`,
+    `expected excluded sources: ${list(diagnostic.expectedExcluded)}`,
     `expected first: ${diagnostic.expectedFirst || '(none)'}`,
     `actual: ${list(diagnostic.actual)}`,
     'see job summary for shrunk repro',
@@ -75,7 +98,7 @@ export function renderMarkdownSummary(failure, failurePath) {
     `- Query ID: ${diagnostic.queryId}`,
     `- Query: ${diagnostic.queryText}`,
     `- Expected first source: ${diagnostic.expectedFirst || '(none)'}`,
-    `- Expected included sources: ${list(diagnostic.expectedIncluded)}`,
+    `- Expected sources: ${list(diagnostic.expectedSources)}`,
     `- Expected excluded sources: ${list(diagnostic.expectedExcluded)}`,
     `- Expected empty result: ${diagnostic.expectedEmpty ? 'yes' : 'no'}`,
     `- Actual sources: ${list(diagnostic.actual)}`,
@@ -105,9 +128,9 @@ export function renderLocalFailureText(failure, failurePath) {
   return [
     `Recall property failed: ${diagnostic.queryId} seed ${diagnostic.seed}`,
     `Query: ${diagnostic.queryText}`,
-    `Expected included: ${list(diagnostic.expectedIncluded)}`,
+    `Expected sources: ${list(diagnostic.expectedSources)}`,
     `Expected first: ${diagnostic.expectedFirst || '(none)'}`,
-    `Expected excluded: ${list(diagnostic.expectedExcluded)}`,
+    `Expected excluded sources: ${list(diagnostic.expectedExcluded)}`,
     `Actual: ${list(diagnostic.actual)}`,
     'Failures:',
     ...(diagnostic.failures.length ? diagnostic.failures.map(item => `- ${item}`) : ['- (none)']),
