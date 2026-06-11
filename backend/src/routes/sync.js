@@ -96,8 +96,8 @@ export async function registerSyncRoutes(fastify, deps = {}) {
     saveEntryAttachments: deps.saveEntryAttachments ?? saveEntryAttachments,
     deleteUserData: deps.deleteUserData ?? deleteUserData,
   };
-  const embeddingService = deps.embeddingService ?? getEmbeddingService();
   const legacyEntrySyncDisabled = deps.disableLegacyEntrySync ?? process.env.DISABLE_LEGACY_ENTRY_SYNC === 'true';
+  const getEmbeddingServiceForSave = () => deps.embeddingService ?? getEmbeddingService();
 
   /**
    * POST /api/sync/save
@@ -139,6 +139,7 @@ export async function registerSyncRoutes(fastify, deps = {}) {
         return assertSyncResponse(parseEntrySaveResponse({ success: true, entry }));
       }
 
+      const embeddingService = getEmbeddingServiceForSave();
       const embedding = await embeddingService.embedText(entryData.summary);
       const saved = await db.saveEntry(user.id, {
         ...entryData,

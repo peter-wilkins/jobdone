@@ -54,6 +54,11 @@ describe('SyncRoute POST /api/sync/save', () => {
       saveEntry: async () => {
         saveCalled = true;
       },
+      embeddingService: {
+        embedText: async () => {
+          throw new Error('embedding service must not run when legacy path is disabled');
+        },
+      },
     });
 
     const res = await app.inject({
