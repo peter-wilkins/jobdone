@@ -48,7 +48,7 @@ test('Local Replica push route rejects noncanonical payloads before storage', as
 test('Local Replica health route reports deploy configuration without auth', async () => {
   const app = await buildApp({
     configured: true,
-    schema: 'jobdone_next',
+    schema: 'jobdone',
   });
 
   try {
@@ -60,7 +60,7 @@ test('Local Replica health route reports deploy configuration without auth', asy
     assert.equal(response.statusCode, 200);
     assert.deepEqual(JSON.parse(response.body), {
       configured: true,
-      schema: 'jobdone_next',
+      schema: 'jobdone',
     });
   } finally {
     await app.close();

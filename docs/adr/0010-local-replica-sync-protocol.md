@@ -49,17 +49,20 @@ The first `syncObjects` contract is:
 - `payloadHash`
 - `schemaVersion`
 
-Object rows carry owner scope. `syncTransactions` carry actor identity.
+Object rows carry owner scope. `syncTransactions` carry ordering only; actor identity lives in `syncTransactionActors`.
 
 The first `syncTransactions` contract is:
 
 - `t` bigint, monotonic transaction number
-- `replicaEpoch` UUID
+- `source`, such as `syncPush`, `system`, `import`, or `repair`
+- `createdAt` backend commit timestamp
+
+The first `syncTransactionActors` contract is:
+
+- `t` bigint, one-to-one reference to `syncTransactions`
 - `actorUserId` UUID, nullable for system work
 - `actorEmail` text, nullable
 - `actorDeviceId` text, nullable
-- `source`, such as `syncPush`, `system`, `import`, or `repair`
-- `createdAt` backend commit timestamp
 
 Idempotency belongs to Sync Intents rather than Sync Transactions.
 
@@ -92,7 +95,7 @@ Optimistic UI depends on action risk. Personal immutable creates are fully optim
 
 For MVP, the sync adapter may protect push/pull correctness with a Postgres advisory lock or another explicit serialization mechanism. Correctness is more important than write throughput while JobDone has no real users.
 
-While reshaping the schema, staging may use a temporary `jobdone_next` schema. `jobdone_next` exists only to build and test the clean Local Replica contract without fighting deployed v1 tables. Once schema contracts and property tests are green, the final schema remains `jobdone`; old v1 tables and the temporary schema should be deleted rather than kept as long-term compatibility layers.
+While reshaping the schema, staging may be wiped and rebuilt from `docs/schema.sql`. The final schema remains `jobdone`; old v1 tables and temporary schemas should be deleted rather than kept as long-term compatibility layers.
 
 ## Mutable Collections
 
@@ -163,9 +166,9 @@ Property tests should be split at useful boundaries:
 
 These tests should prove preservation of IDs, associations, tombstones, transaction ordering, and no cross-user or cross-team leakage.
 
-## Decomplex Review (2026-06-10)
+## Decomplex Review (2026-06-10 to 2026-06-11)
 
-Five complections identified and resolved before implementation. See `docs/sync-schema-proposal.sql` for the revised schema.
+The settled schema lives in `docs/schema.sql`. The deleted `docs/sync-schema-proposal.sql` was a temporary scratch file.
 
 **1. payloadMeta envelope replaces flat codec/encryptionMode/schemaVersion columns.**
 These three axes vary independently and encrypted mode needs additional fields (`keyId`, `algorithm`, `nonce`). A single `payloadMeta jsonb` envelope carries all of them. MVP default: `{"codec":"json","encryptionMode":"none","schemaVersion":1}`.
@@ -181,3 +184,39 @@ These three axes vary independently and encrypted mode needs additional fields (
 
 **5. replicaEpoch removed from syncObjects rows.**
 `replicaEpoch` is a client-envelope concept for cold-restore detection. It belongs only in request/response envelopes and a server-side `replicaState` record. Pull response carries `resetRequired: true` when the server epoch has changed. Individual stored objects carry only `createdT` and `changedT`.
+
+**6. Product runtime wraps generic storage through a transaction pipeline.**
+The reusable backend pipeline is:
+
+```text
+request
+→ auth identity check
+→ open DB transaction
+→ ACL check
+→ deterministic lock acquisition
+→ product action/rule check
+→ write syncTransactions, syncObjects, syncObjectPublicProduct, syncIntents, outboxEffects
+→ commit
+→ generic outbox runner handles post-commit effects
+→ HTTP adapter maps typed runtime result to status code
+```
+
+Business truth and outbox scheduling commit atomically. Post-commit effects such as email, AI, indexing, and push notification use a mailbox/outbox pattern and never roll back accepted business state.
+
+**7. Product-readable facts are explicit public product projections.**
+The generic storage engine remains dumb and reusable. JobDone-specific rule/routing/list facts live in `syncObjectPublicProduct.publicProductJson`, not directly in `syncObjects`. This JSON is deliberately public to the backend and must contain only non-sensitive product facts that JobDone needs for rules, conflicts, safe filtering, or list UI.
+
+`publicProductJson` is a latest-only projection. It is replaced as a whole document on each accepted transition. It is not patch/merge state and it is not a history table. Each projection carries `schemaName` and `schemaVersion`; shared Zod schemas define valid shapes, while the backend product runtime remains the authority that derives the next projection.
+
+No object gets a public product projection by default. Add one only when rules or safe server-side behaviour need it. Likely JobDone MVP projections include Teams, Team Members/access facts, Team Invites, Backlog Items, and Approval Requests. Entry text, Contacts, Locations, Photos, Captures, and private Context Clue links remain private/encrypted payload content unless a Team or user explicitly opts into a server-readable feature.
+
+**8. Product actions use declared multi-object write sets.**
+Actions may compose several object writes in one transaction, but each action declares the object refs it may lock/write before running. The runtime locks those refs in deterministic order to avoid deadlocks and to make race handling property-testable. The client sends intent args; the server validates with Zod, reads current projections, enforces policy, and derives the complete next projections. The client never gets to assert that a protected transition succeeded.
+
+**9. Effects use a generic outbox runner plus product handlers.**
+The transaction writes typed `outboxEffects` rows after validating `effectJson` with an effect-specific Zod schema. The response may report effects as queued, but not delivered. A generic runner claims due effects, retries with backoff, marks succeeded/failed/dead, and delegates actual work to product handlers such as `sendTeamInviteEmail` or `enqueueAiSummary`. Effect handlers live in the app backend repo for MVP and can be extracted later once the seam proves useful.
+
+**10. Runtime failures use opsEvents, not feedback.**
+User feedback and machine/runtime failures are separate streams. `feedback` remains human product signal. `opsEvents` records backend/runtime failures and unusual states only, best-effort after rollback, with sanitized details and a request ID. Successful business actions do not create `opsEvents`; success is already represented by `syncTransactions`, `syncObjects`, `syncIntents`, and `outboxEffects`.
+
+The generic transaction runner returns typed result objects rather than HTTP statuses. HTTP adapters map results to `401`, `403`, `409`, `422`, `500`, or `503`. Production responses hide internals and include request IDs; debug-allowlisted users may receive sanitized diagnostic detail.

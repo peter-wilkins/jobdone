@@ -10,7 +10,7 @@ import { createLocalReplicaStore, LocalReplicaStore } from './localReplicaStore.
 const { Pool } = pg;
 
 const DB_URL = process.env.LOCAL_REPLICA_PROPERTY_DB_URL;
-const SCHEMA_SQL_PATH = new URL('../../../supabase/create_jobdone_next_local_replica.sql', import.meta.url);
+const SCHEMA_SQL_PATH = new URL('../../../docs/schema.sql', import.meta.url);
 
 async function resetSchema(pool) {
   const sql = await readFile(SCHEMA_SQL_PATH, 'utf8');
@@ -44,7 +44,7 @@ function byId(objects = []) {
 
 class ProbeLocalReplicaStore extends LocalReplicaStore {
   constructor({ currentObject }) {
-    super({ pool: null, schema: 'jobdone_next' });
+    super({ pool: null, schema: 'jobdone' });
     this.currentObject = currentObject;
     this.persisted = null;
   }
@@ -121,7 +121,7 @@ test('Local Replica backend property loop pushes generated intents then pulls ma
   skip: DB_URL ? false : 'Set LOCAL_REPLICA_PROPERTY_DB_URL to run local Postgres property loop',
 }, async () => {
   const pool = new Pool({ connectionString: DB_URL });
-  const store = createLocalReplicaStore({ pool, schema: 'jobdone_next' });
+  const store = createLocalReplicaStore({ pool, schema: 'jobdone' });
   const actorUserId = '2a091a40-b350-4d2f-9d91-4c4b5042e01f';
   const actor = { id: actorUserId, email: 'property@example.com' };
   const app = await buildApp(store, actor);

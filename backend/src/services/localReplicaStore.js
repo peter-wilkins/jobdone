@@ -24,6 +24,7 @@ function toIso(value) {
 }
 
 function normalizeSyncObject(row = {}) {
+  const payloadMeta = row.payloadMeta || {};
   return {
     id: row.id,
     ownerKind: row.ownerKind,
@@ -35,12 +36,12 @@ function normalizeSyncObject(row = {}) {
     createdAt: toIso(row.createdAt),
     changedAt: toIso(row.changedAt),
     deletedAt: row.deletedAt == null ? null : toIso(row.deletedAt),
-    codec: row.codec || 'json',
-    encryptionMode: row.encryptionMode || 'none',
+    codec: payloadMeta.codec || 'json',
+    encryptionMode: payloadMeta.encryptionMode || 'none',
     payloadJson: row.payloadJson || {},
     payloadBytes: null,
     payloadHash: row.payloadHash,
-    schemaVersion: toNumber(row.schemaVersion, 1),
+    schemaVersion: toNumber(payloadMeta.schemaVersion, 1),
   };
 }
 
@@ -48,13 +49,13 @@ function intentResult({ intentId, status, t = null, objectId = null, reason = nu
   return { intentId, status, t, objectId, reason };
 }
 
-export function createLocalReplicaStore({ connectionString, schema = 'jobdone_next', pool = null } = {}) {
+export function createLocalReplicaStore({ connectionString, schema = 'jobdone', pool = null } = {}) {
   const ownedPool = pool ? null : connectionString ? new Pool({ connectionString }) : null;
   return new LocalReplicaStore({ pool: pool || ownedPool, schema, ownsPool: Boolean(ownedPool) });
 }
 
 export class LocalReplicaStore {
-  constructor({ pool, schema = 'jobdone_next', ownsPool = false } = {}) {
+  constructor({ pool, schema = 'jobdone', ownsPool = false } = {}) {
     this.pool = pool;
     this.schema = schema;
     this.ownsPool = ownsPool;
@@ -303,14 +304,20 @@ export class LocalReplicaStore {
     return toNumber(result.rows[0]?.toT, fallback);
   }
 
-  async createTransaction(client, { replicaEpoch, actorUserId, actorEmail, actorDeviceId }) {
+  async createTransaction(client, { actorUserId, actorEmail, actorDeviceId }) {
     const result = await client.query(`
       INSERT INTO ${this.table('syncTransactions')}
-        ("replicaEpoch", "actorUserId", "actorEmail", "actorDeviceId", "source")
-      VALUES ($1, $2, $3, $4, 'syncPush')
+        ("source")
+      VALUES ('syncPush')
       RETURNING "t"
-    `, [replicaEpoch, actorUserId, actorEmail, actorDeviceId]);
-    return toNumber(result.rows[0].t);
+    `);
+    const t = toNumber(result.rows[0].t);
+    await client.query(`
+      INSERT INTO ${this.table('syncTransactionActors')}
+        ("t", "actorUserId", "actorEmail", "actorDeviceId")
+      VALUES ($1, $2, $3, $4)
+    `, [t, actorUserId, actorEmail, actorDeviceId]);
+    return t;
   }
 
   async accessibleScopes(client, actorUserId) {
@@ -318,7 +325,7 @@ export class LocalReplicaStore {
       SELECT "ownerKind", "ownerId"
       FROM ${this.table('syncOwnerAccess')}
       WHERE "userId" = $1
-        AND "revokedT" IS NULL
+        AND "revokedAt" IS NULL
     `, [actorUserId]);
     const scopes = [{ ownerKind: 'user', ownerId: actorUserId }];
     for (const row of result.rows) {
@@ -335,7 +342,7 @@ export class LocalReplicaStore {
       WHERE "ownerKind" = $1
         AND "ownerId" = $2
         AND "userId" = $3
-        AND "revokedT" IS NULL
+        AND "revokedAt" IS NULL
       LIMIT 1
     `, [intent.ownerKind, intent.ownerId, actorUserId]);
     return result.rowCount > 0;
@@ -350,18 +357,12 @@ export class LocalReplicaStore {
     const result = row.resultJson?.result || intentResult({
       intentId: row.id,
       status: row.status,
-      t: row.committedT == null ? null : toNumber(row.committedT),
-      objectId: row.objectId || null,
+      t: row.resultT == null ? null : toNumber(row.resultT),
+      objectId: row.resultJson?.result?.objectId || null,
     });
-    const object = row.objectId ? await this.findObject(client, {
-      ownerKind: row.ownerKind,
-      ownerId: row.ownerId,
-      collection: row.collection,
-      objectId: row.objectId,
-    }) : null;
     return {
       result,
-      object: object ? normalizeSyncObject(object) : null,
+      object: null,
     };
   }
 
@@ -381,8 +382,8 @@ export class LocalReplicaStore {
     const result = await client.query(`
       INSERT INTO ${this.table('syncObjects')}
         ("id", "ownerKind", "ownerId", "collection", "createdT", "changedT",
-         "createdAt", "changedAt", "payloadJson", "payloadHash", "schemaVersion")
-      VALUES ($1, $2, $3, $4, $5, $5, $6, $6, $7::jsonb, $8, 1)
+         "createdAt", "changedAt", "payloadJson", "payloadHash", "payloadMeta")
+      VALUES ($1, $2, $3, $4, $5, $5, $6, $6, $7::jsonb, $8, $9::jsonb)
       RETURNING *
     `, [
       intent.objectId,
@@ -393,6 +394,7 @@ export class LocalReplicaStore {
       intent.createdAt,
       JSON.stringify(intent.payloadJson || {}),
       intent.payloadHash || `missing:${intent.id}`,
+      JSON.stringify({ codec: 'json', encryptionMode: 'none', schemaVersion: 1 }),
     ]);
     return normalizeSyncObject(result.rows[0]);
   }
@@ -406,7 +408,7 @@ export class LocalReplicaStore {
           "deletedAt" = NULL,
           "payloadJson" = $7::jsonb,
           "payloadHash" = $8,
-          "schemaVersion" = 1
+          "payloadMeta" = $9::jsonb
       WHERE "ownerKind" = $1
         AND "ownerId" = $2
         AND "collection" = $3
@@ -421,6 +423,7 @@ export class LocalReplicaStore {
       intent.createdAt,
       JSON.stringify(intent.payloadJson || current.payloadJson || {}),
       intent.payloadHash || current.payloadHash,
+      JSON.stringify({ codec: 'json', encryptionMode: 'none', schemaVersion: 1 }),
     ]);
     return normalizeSyncObject(result.rows[0]);
   }
@@ -450,9 +453,6 @@ export class LocalReplicaStore {
 
   async persistIntentResult(client, {
     actorUserId,
-    actorDeviceId,
-    replicaEpoch,
-    baseT,
     intent,
     result,
     committedT = null,
@@ -460,29 +460,17 @@ export class LocalReplicaStore {
   }) {
     await client.query(`
       INSERT INTO ${this.table('syncIntents')}
-        ("id", "replicaEpoch", "baseT", "actorUserId", "actorDeviceId",
-         "ownerKind", "ownerId", "collection", "action", "objectId",
-         "baseObjectT", "payloadJson", "payloadHash", "status", "resultJson",
-         "committedT", "createdAt")
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15::jsonb, $16, $17)
+        ("id", "actorUserId", "intentHash", "status", "resultT", "resultJson", "createdAt", "resolvedAt")
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
     `, [
       intent.id,
-      replicaEpoch,
-      baseT,
       actorUserId,
-      actorDeviceId,
-      intent.ownerKind,
-      intent.ownerId,
-      intent.collection,
-      intent.action,
-      intent.objectId || null,
-      intent.baseObjectT ?? null,
-      JSON.stringify(intent.payloadJson || {}),
-      intent.payloadHash || null,
+      intent.payloadHash || intent.id,
       result.status,
-      JSON.stringify({ result }),
       committedT,
+      JSON.stringify({ result }),
       intent.createdAt,
+      new Date().toISOString(),
     ]);
     return { result, object };
   }

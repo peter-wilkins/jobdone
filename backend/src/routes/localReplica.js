@@ -9,7 +9,7 @@ import {
 
 const defaultStore = createLocalReplicaStore({
   connectionString: process.env.LOCAL_REPLICA_DB_URL,
-  schema: process.env.LOCAL_REPLICA_SCHEMA || 'jobdone_next',
+  schema: process.env.LOCAL_REPLICA_SCHEMA || 'jobdone',
 });
 
 function assertParsed(parsed, fallbackError) {

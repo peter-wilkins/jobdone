@@ -65,7 +65,7 @@ async function countSmokeObjects(pool, schema, ownerId, objectId) {
 async function main() {
   const connectionString = process.env.LOCAL_REPLICA_DB_URL
     || requiredEnv('JOBDONE_STAGING_SUPABASE_DB_URL');
-  const schema = process.env.LOCAL_REPLICA_SCHEMA || 'jobdone_next';
+  const schema = process.env.LOCAL_REPLICA_SCHEMA || 'jobdone';
   const pool = new Pool({ connectionString });
   const store = createLocalReplicaStore({ pool, schema });
   const actor = {

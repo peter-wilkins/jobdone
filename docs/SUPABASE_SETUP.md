@@ -60,9 +60,9 @@ cat >> .env << 'EOF'
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=eyJhbG...
 SUPABASE_DB_URL=postgresql://postgres.project-ref:password@aws-0-region.pooler.supabase.com:5432/postgres
-# Local Replica DB. Staging may point at scratch schema jobdone_next.
+# Local Replica DB.
 LOCAL_REPLICA_DB_URL=$SUPABASE_DB_URL
-LOCAL_REPLICA_SCHEMA=jobdone_next
+LOCAL_REPLICA_SCHEMA=jobdone
 EOF
 ```
 
@@ -103,7 +103,7 @@ fields, codec/encryption metadata, and the typed collection payload.
 ## Querying Jobs
 
 Via Supabase dashboard:
-1. **Table Editor** → choose Local Replica schema, usually `jobdone_next` in staging
+1. **Table Editor** → choose the `jobdone` schema
 2. Click `syncObjects`
 3. See all your data
 4. Filter by `collection = 'entries'`
@@ -112,5 +112,5 @@ Via SQL:
 
 ```bash
 . ~/.profile
-psql "$SUPABASE_DB_URL" -c "select id, \"payloadJson\"->>'text', \"createdAt\" from jobdone_next.\"syncObjects\" where collection = 'entries' order by \"createdT\" desc limit 10;"
+psql "$SUPABASE_DB_URL" -c "select id, \"payloadJson\"->>'text', \"createdAt\" from jobdone.\"syncObjects\" where collection = 'entries' order by \"createdT\" desc limit 10;"
 ```

@@ -1,121 +1,78 @@
 import { readFileSync } from 'node:fs';
 
 const mode = process.env.SCHEMA_MODE || 'mvp-clean';
-const sqlPath = process.env.LOCAL_REPLICA_SCHEMA_SQL || 'supabase/create_jobdone_next_local_replica.sql';
+const sqlPath = process.env.LOCAL_REPLICA_SCHEMA_SQL || 'docs/schema.sql';
 
 const expectedTables = {
-  syncTransactions: {
-    columns: {
-      t: 'BIGINT',
-      replicaEpoch: 'UUID',
-      actorUserId: 'UUID',
-      actorEmail: 'TEXT',
-      actorDeviceId: 'TEXT',
-      source: 'TEXT',
-      createdAt: 'TIMESTAMPTZ',
-    },
-    indexes: [
-      'syncTransactionsReplicaTIdx',
-      'syncTransactionsActorUserTIdx',
-    ],
-  },
-  syncOwnerAccess: {
-    columns: {
-      id: 'UUID',
-      ownerKind: 'TEXT',
-      ownerId: 'UUID',
-      userId: 'UUID',
-      role: 'TEXT',
-      createdT: 'BIGINT',
-      revokedT: 'BIGINT',
-      createdAt: 'TIMESTAMPTZ',
-      revokedAt: 'TIMESTAMPTZ',
-    },
-    indexes: [
-      'syncOwnerAccessActiveUidx',
-      'syncOwnerAccessUserOwnerIdx',
-      'syncOwnerAccessOwnerIdx',
-    ],
-  },
-  syncObjects: {
-    columns: {
-      id: 'UUID',
-      ownerKind: 'TEXT',
-      ownerId: 'UUID',
-      collection: 'TEXT',
-      createdT: 'BIGINT',
-      changedT: 'BIGINT',
-      deletedT: 'BIGINT',
-      createdAt: 'TIMESTAMPTZ',
-      changedAt: 'TIMESTAMPTZ',
-      deletedAt: 'TIMESTAMPTZ',
-      codec: 'TEXT',
-      encryptionMode: 'TEXT',
-      payloadJson: 'JSONB',
-      payloadBytes: 'BYTEA',
-      payloadHash: 'TEXT',
-      schemaVersion: 'INTEGER',
-    },
-    indexes: [
-      'syncObjectsOwnerChangedIdx',
-      'syncObjectsOwnerCollectionChangedIdx',
-      'syncObjectsPayloadHashIdx',
-      'syncObjectsDeletedIdx',
-    ],
-  },
-  syncIntents: {
-    columns: {
-      id: 'UUID',
-      replicaEpoch: 'UUID',
-      baseT: 'BIGINT',
-      actorUserId: 'UUID',
-      actorDeviceId: 'TEXT',
-      ownerKind: 'TEXT',
-      ownerId: 'UUID',
-      collection: 'TEXT',
-      action: 'TEXT',
-      objectId: 'UUID',
-      baseObjectT: 'BIGINT',
-      payloadJson: 'JSONB',
-      payloadHash: 'TEXT',
-      status: 'TEXT',
-      resultJson: 'JSONB',
-      committedT: 'BIGINT',
-      createdAt: 'TIMESTAMPTZ',
-      receivedAt: 'TIMESTAMPTZ',
-    },
-    indexes: [
-      'syncIntentsActorReceivedIdx',
-      'syncIntentsOwnerStatusIdx',
-      'syncIntentsCommittedTIdx',
-    ],
-  },
+  syncTransactions: ['t', 'source', 'createdAt'],
+  syncTransactionActors: ['t', 'actorUserId', 'actorEmail', 'actorDeviceId'],
+  syncObjects: [
+    'id',
+    'ownerKind',
+    'ownerId',
+    'collection',
+    'createdT',
+    'changedT',
+    'deletedT',
+    'createdAt',
+    'changedAt',
+    'deletedAt',
+    'payloadMeta',
+    'payloadJson',
+    'payloadBytes',
+    'payloadHash',
+  ],
+  syncObjectPublicProduct: [
+    'ownerKind',
+    'ownerId',
+    'collection',
+    'objectId',
+    'schemaName',
+    'schemaVersion',
+    'publicProductJson',
+    'changedT',
+    'changedAt',
+  ],
+  syncOwnerAccess: ['id', 'userId', 'ownerKind', 'ownerId', 'capability', 'grantedAt', 'revokedAt'],
+  syncIntents: ['id', 'actorUserId', 'intentHash', 'status', 'resultT', 'resultJson', 'createdAt', 'resolvedAt'],
+  outboxEffects: [
+    'id',
+    't',
+    'effectType',
+    'ownerKind',
+    'ownerId',
+    'objectRefs',
+    'effectJson',
+    'status',
+    'attempts',
+    'nextAttemptAt',
+    'createdAt',
+    'updatedAt',
+    'lastError',
+  ],
+  opsEvents: [
+    'id',
+    'requestId',
+    'severity',
+    'source',
+    'kind',
+    'action',
+    'ownerKind',
+    'ownerId',
+    'objectRefs',
+    'retryable',
+    'sanitizedJson',
+    'createdAt',
+  ],
 };
 
-const forbiddenNames = [
-  'backendId',
+const forbiddenSyncColumns = [
+  'replicaEpoch',
+  'baseT',
   'remoteId',
   'serverId',
-  'updatedT',
   'updatedAt',
-  'backend_id',
-  'remote_id',
-  'server_id',
-  'owner_id',
-  'owner_kind',
-  'created_t',
-  'changed_t',
-  'deleted_t',
-  'created_at',
-  'changed_at',
-  'deleted_at',
-  'updated_t',
-  'updated_at',
-  'payload_json',
-  'payload_bytes',
-  'payload_hash',
-  'schema_version',
-  'encryption_mode',
+  'updatedT',
 ];
 
 function fail(message) {
@@ -135,118 +92,27 @@ function readSql() {
 }
 
 function extractCreateTableBlock(sql, tableName) {
-  const pattern = new RegExp(`CREATE TABLE "${tableName}" \\([\\s\\S]*?\\n\\);`, 'm');
-  const match = sql.match(pattern);
-  return match?.[0] || null;
+  const escaped = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`CREATE TABLE (?:jobdone\\.)?"${escaped}" \\([\\s\\S]*?\\n\\);`, 'm');
+  return sql.match(pattern)?.[0] || null;
 }
 
 function extractColumns(createTableSql) {
-  const columns = new Map();
+  const columns = [];
   for (const line of createTableSql.split('\n')) {
-    const match = line.match(/^\s+"([^"]+)"\s+([A-Z]+(?:\s+WITH\s+TIME\s+ZONE)?)/);
-    if (match) {
-      columns.set(match[1], match[2].replace(/\s+/g, ' '));
-    }
+    const match = line.match(/^\s+(?:"([^"]+)"|([a-z][A-Za-z0-9]*))\s+/);
+    if (!match) continue;
+    const name = match[1] || match[2];
+    if ([
+      'PRIMARY',
+      'FOREIGN',
+      'UNIQUE',
+      'CHECK',
+      'CONSTRAINT',
+    ].includes(name.toUpperCase())) continue;
+    columns.push(name);
   }
   return columns;
-}
-
-function listCreateTables(sql) {
-  return [...sql.matchAll(/CREATE TABLE "([^"]+)"/g)].map(match => match[1]);
-}
-
-function listQuotedIdentifiers(sql) {
-  return [...sql.matchAll(/"([^"]+)"/g)].map(match => match[1]);
-}
-
-function assertCamelCaseIdentifiers(sql) {
-  const sqlWithoutComments = sql.replace(/--.*$/gm, '');
-  const badIdentifiers = listQuotedIdentifiers(sqlWithoutComments)
-    .filter(identifier => identifier.includes('_'));
-  assert(
-    badIdentifiers.length === 0,
-    `JobDone sync SQL identifiers must be camelCase. Found: ${[...new Set(badIdentifiers)].join(', ')}`
-  );
-
-  for (const forbiddenName of forbiddenNames) {
-    assert(
-      !sqlWithoutComments.includes(`"${forbiddenName}"`),
-      `Forbidden app-facing schema identifier found: "${forbiddenName}"`
-    );
-  }
-}
-
-function assertTableColumns(sql) {
-  const actualTables = listCreateTables(sql).sort();
-  const expectedTableNames = Object.keys(expectedTables).sort();
-
-  assert(
-    JSON.stringify(actualTables) === JSON.stringify(expectedTableNames),
-    `Expected only ${expectedTableNames.join(', ')} tables, found ${actualTables.join(', ')}`
-  );
-
-  for (const [tableName, expectation] of Object.entries(expectedTables)) {
-    const block = extractCreateTableBlock(sql, tableName);
-    assert(block, `Missing CREATE TABLE "${tableName}"`);
-
-    const columns = extractColumns(block);
-    for (const [columnName, expectedType] of Object.entries(expectation.columns)) {
-      assert(columns.has(columnName), `Missing "${tableName}"."${columnName}"`);
-      assert(
-        columns.get(columnName) === expectedType,
-        `"${tableName}"."${columnName}" expected ${expectedType}, got ${columns.get(columnName)}`
-      );
-    }
-
-    const extraColumns = [...columns.keys()].filter(columnName => !(columnName in expectation.columns));
-    assert(
-      extraColumns.length === 0,
-      `"${tableName}" has unexpected columns: ${extraColumns.join(', ')}`
-    );
-  }
-}
-
-function assertSyncObjectContract(sql) {
-  const block = extractCreateTableBlock(sql, 'syncObjects');
-  assert(block.includes('PRIMARY KEY ("ownerKind", "ownerId", "collection", "id")'),
-    'syncObjects must use owner/collection/id primary key');
-  assert(block.includes('CHECK ("changedT" >= "createdT")'),
-    'syncObjects must assert changedT >= createdT');
-  assert(block.includes('CHECK ("deletedT" IS NULL OR "deletedT" >= "changedT")'),
-    'syncObjects must assert deletedT >= changedT');
-  assert(block.includes('"collection" ~ \'^[a-z][A-Za-z0-9]*$\''),
-    'syncObjects collection names must be camelCase without underscores');
-  assert(block.includes('"codec" IN (\'json\')'),
-    'syncObjects MVP codec must be json');
-  assert(block.includes('"encryptionMode" IN (\'none\')'),
-    'syncObjects MVP encryptionMode must be none');
-  assert(block.includes('CHECK ("payloadBytes" IS NULL)'),
-    'syncObjects must keep payloadBytes disabled while MVP codec is json');
-}
-
-function assertIndexes(sql) {
-  for (const [tableName, expectation] of Object.entries(expectedTables)) {
-    for (const indexName of expectation.indexes) {
-      assert(sql.includes(`CREATE INDEX "${indexName}"`) || sql.includes(`CREATE UNIQUE INDEX "${indexName}"`),
-        `Missing expected index ${indexName} for ${tableName}`);
-    }
-  }
-}
-
-function assertRls(sql) {
-  for (const tableName of Object.keys(expectedTables)) {
-    assert(sql.includes(`ALTER TABLE "${tableName}" ENABLE ROW LEVEL SECURITY;`),
-      `Missing RLS enablement for ${tableName}`);
-    assert(sql.includes(`'${tableName}'`),
-      `Policy loop must include ${tableName}`);
-  }
-
-  assert(sql.includes('deny_all_direct_access'), 'Missing deny_all_direct_access policy');
-  assert(sql.includes('backend_direct_access'), 'Missing backend_direct_access policy');
-  assert(sql.includes('REVOKE ALL ON SCHEMA jobdone_next FROM PUBLIC, anon, authenticated;'),
-    'Missing schema revoke for public client roles');
-  assert(sql.includes('REVOKE ALL ON ALL TABLES IN SCHEMA jobdone_next FROM PUBLIC, anon, authenticated;'),
-    'Missing table revoke for public client roles');
 }
 
 function assertMode() {
@@ -256,21 +122,83 @@ function assertMode() {
   }
 }
 
+function assertCleanSlate(sql) {
+  assert(sql.includes('DROP SCHEMA IF EXISTS jobdone CASCADE;'), 'mvp-clean schema must explicitly drop disposable jobdone schema');
+  assert(sql.includes('CREATE SCHEMA jobdone;'), 'Missing jobdone schema creation');
+}
+
+function assertTablesAndColumns(sql) {
+  for (const [tableName, expectedColumns] of Object.entries(expectedTables)) {
+    const block = extractCreateTableBlock(sql, tableName);
+    assert(block, `Missing CREATE TABLE jobdone."${tableName}"`);
+    assert(block.includes(`jobdone."${tableName}"`), `${tableName} table name must be quoted camelCase`);
+
+    const columns = extractColumns(block);
+    assert(
+      JSON.stringify(columns) === JSON.stringify(expectedColumns),
+      `${tableName} columns mismatch.\nExpected: ${expectedColumns.join(', ')}\nActual:   ${columns.join(', ')}`
+    );
+
+    for (const column of expectedColumns) {
+      if (/[A-Z]/.test(column)) {
+        assert(block.includes(`"${column}"`), `${tableName}.${column} must be quoted camelCase in SQL`);
+      }
+    }
+
+    for (const forbidden of forbiddenSyncColumns) {
+      if (!expectedColumns.includes(forbidden)) {
+        assert(!block.includes(`"${forbidden}"`), `${tableName} must not contain stale column "${forbidden}"`);
+      }
+    }
+  }
+}
+
+function assertContracts(sql) {
+  const syncObjects = extractCreateTableBlock(sql, 'syncObjects');
+  assert(syncObjects.includes('PRIMARY KEY (id, "ownerKind", "ownerId")'), 'syncObjects primary key changed unexpectedly');
+  assert(syncObjects.includes('"payloadMeta"'), 'syncObjects must use payloadMeta envelope');
+  assert(!syncObjects.includes('"replicaEpoch"'), 'syncObjects must not store replicaEpoch');
+
+  const publicProduct = extractCreateTableBlock(sql, 'syncObjectPublicProduct');
+  assert(publicProduct.includes('"publicProductJson" jsonb'), 'syncObjectPublicProduct must store publicProductJson');
+  assert(publicProduct.includes('ON DELETE CASCADE'), 'syncObjectPublicProduct must cascade with syncObjects');
+
+  const outbox = extractCreateTableBlock(sql, 'outboxEffects');
+  assert(outbox.includes('"effectType"'), 'outboxEffects must include effectType');
+  assert(outbox.includes('"effectJson"'), 'outboxEffects must include effectJson');
+  assert(outbox.includes("'queued','running','succeeded','failed','dead'"), 'outboxEffects status set changed unexpectedly');
+
+  const ops = extractCreateTableBlock(sql, 'opsEvents');
+  assert(ops.includes('"requestId"'), 'opsEvents must include requestId');
+  assert(ops.includes('"sanitizedJson"'), 'opsEvents must include sanitizedJson');
+}
+
+function assertIndexesAndPrivileges(sql) {
+  for (const indexName of [
+    'syncObjects_owner_collection_id_uidx',
+    'syncObjectPublicProduct_owner_collection_idx',
+    'syncOwnerAccess_active_uidx',
+    'syncIntents_actor_created_idx',
+    'outboxEffects_due_idx',
+    'opsEvents_request_idx',
+  ]) {
+    assert(sql.includes(indexName), `Missing index ${indexName}`);
+  }
+
+  assert(sql.includes('deny_all_direct_access'), 'Missing deny_all_direct_access policy loop');
+  assert(sql.includes('backend_direct_access'), 'Missing backend_direct_access policy loop');
+  assert(sql.includes('REVOKE ALL ON SCHEMA jobdone FROM PUBLIC, anon, authenticated;'), 'Missing schema revoke for public client roles');
+  assert(sql.includes('REVOKE ALL ON ALL TABLES IN SCHEMA jobdone FROM PUBLIC, anon, authenticated;'), 'Missing table revoke for public client roles');
+}
+
 function main() {
   assertMode();
   const sql = readSql();
-
-  assert(sql.includes('DROP SCHEMA IF EXISTS jobdone_next CASCADE;'),
-    'mvp-clean schema must be explicitly disposable');
-  assert(sql.includes('CREATE SCHEMA jobdone_next;'), 'Missing jobdone_next schema creation');
-
-  assertCamelCaseIdentifiers(sql);
-  assertTableColumns(sql);
-  assertSyncObjectContract(sql);
-  assertIndexes(sql);
-  assertRls(sql);
-
-  console.log(`Local Replica schema conformance passed (${mode})`);
+  assertCleanSlate(sql);
+  assertTablesAndColumns(sql);
+  assertContracts(sql);
+  assertIndexesAndPrivileges(sql);
+  console.log(`Local Replica schema conformance passed (${mode}, ${sqlPath})`);
 }
 
 main();

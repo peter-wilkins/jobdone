@@ -7,7 +7,7 @@ const OBJECT_ID = '01973e36-4c80-7abc-8a72-111111111111';
 
 class ProbeLocalReplicaStore extends LocalReplicaStore {
   constructor({ currentObject }) {
-    super({ pool: null, schema: 'jobdone_next' });
+    super({ pool: null, schema: 'jobdone' });
     this.currentObject = currentObject;
     this.persisted = null;
   }

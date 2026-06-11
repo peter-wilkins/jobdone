@@ -49,7 +49,7 @@ if [[ "$target" == "staging" || "$target" == "production" || "$target" == "prod"
   node -e '
     const health = JSON.parse(process.argv[1]);
     const target = process.argv[2];
-    if (health.configured !== true || health.schema !== "jobdone_next") {
+    if (health.configured !== true || health.schema !== "jobdone") {
       console.error(`Local Replica not configured for ${target}: ${JSON.stringify(health)}`);
       process.exit(1);
     }

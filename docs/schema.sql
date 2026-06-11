@@ -88,23 +88,27 @@ ALTER TABLE context_clues ENABLE ROW LEVEL SECURITY;
 
 -- 5. locations (real places associated with confirmed Entries)
 CREATE TABLE locations (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       TEXT NOT NULL,
-  local_id      TEXT,
-  status        TEXT NOT NULL DEFAULT 'confirmed',
-  display_name  TEXT NOT NULL DEFAULT '',
-  place_text    TEXT NOT NULL DEFAULT '',
-  address_text  TEXT NOT NULL DEFAULT '',
-  geo           extensions.geography(Point, 4326),
-  accuracy_meters DOUBLE PRECISION,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "userId"         UUID NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived','confirmed')),
+  "displayName"    TEXT NOT NULL DEFAULT '',
+  "placeText"      TEXT NOT NULL DEFAULT '',
+  "addressText"    TEXT NOT NULL DEFAULT '',
+  geo              extensions.geography(Point, 4326),
+  "accuracyMeters" DOUBLE PRECISION,
+  "providerPlaceId" TEXT,
+  "contentHash"    TEXT NOT NULL DEFAULT '',
+  "identityKeys"   TEXT[] NOT NULL DEFAULT '{}',
+  "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX locations_user_id_idx    ON locations(user_id);
-CREATE INDEX locations_updated_at_idx ON locations(updated_at DESC);
-CREATE INDEX locations_geo_gist_idx   ON locations USING GIST (geo);
-CREATE UNIQUE INDEX locations_user_id_local_id_uidx ON locations(user_id, local_id) WHERE local_id IS NOT NULL;
+CREATE INDEX locations_user_id_idx         ON locations("userId");
+CREATE INDEX locations_updated_at_idx      ON locations("updatedAt" DESC);
+CREATE INDEX locations_geo_gist_idx        ON locations USING GIST (geo);
+CREATE INDEX locations_identity_keys_idx   ON locations USING GIN ("identityKeys");
+CREATE UNIQUE INDEX locations_user_id_id_uidx ON locations("userId", id);
+CREATE INDEX locations_user_status_updated_idx ON locations("userId", status, "updatedAt" DESC);
 
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 
@@ -477,72 +481,138 @@ $$;
 -- See docs/adr/0010-local-replica-sync-protocol.md and decomplex review.
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE jobdone.syncTransactions (
+CREATE TABLE jobdone."syncTransactions" (
   t             bigint      PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   source        text        NOT NULL CHECK (source IN ('syncPush','system','import','repair')),
-  createdAt     timestamptz NOT NULL DEFAULT now()
+  "createdAt"   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE jobdone.syncTransactionActors (
-  t             bigint      PRIMARY KEY REFERENCES jobdone.syncTransactions(t) ON DELETE CASCADE,
-  actorUserId   uuid,
-  actorEmail    text,
-  actorDeviceId text
+CREATE TABLE jobdone."syncTransactionActors" (
+  t               bigint      PRIMARY KEY REFERENCES jobdone."syncTransactions"(t) ON DELETE CASCADE,
+  "actorUserId"   uuid,
+  "actorEmail"    text,
+  "actorDeviceId" text
 );
 
-CREATE TABLE jobdone.syncObjects (
-  id              uuid        NOT NULL,
-  ownerKind       text        NOT NULL CHECK (ownerKind IN ('user','team')),
-  ownerId         uuid        NOT NULL,
-  collection      text        NOT NULL,
-  createdT        bigint      NOT NULL REFERENCES jobdone.syncTransactions(t),
-  changedT        bigint      NOT NULL REFERENCES jobdone.syncTransactions(t),
-  deletedT        bigint               REFERENCES jobdone.syncTransactions(t),
-  createdAt       timestamptz NOT NULL DEFAULT now(),
-  changedAt       timestamptz NOT NULL DEFAULT now(),
-  deletedAt       timestamptz,
-  payloadMeta     jsonb       NOT NULL DEFAULT '{"codec":"json","encryptionMode":"none","schemaVersion":1}',
-  payloadJson     jsonb,
-  payloadBytes    bytea,
-  payloadHash     text,
-  PRIMARY KEY (id, ownerKind, ownerId)
+CREATE TABLE jobdone."syncObjects" (
+  id             uuid        NOT NULL,
+  "ownerKind"    text        NOT NULL CHECK ("ownerKind" IN ('user','team')),
+  "ownerId"      uuid        NOT NULL,
+  collection     text        NOT NULL,
+  "createdT"     bigint      NOT NULL REFERENCES jobdone."syncTransactions"(t),
+  "changedT"     bigint      NOT NULL REFERENCES jobdone."syncTransactions"(t),
+  "deletedT"     bigint               REFERENCES jobdone."syncTransactions"(t),
+  "createdAt"    timestamptz NOT NULL DEFAULT now(),
+  "changedAt"    timestamptz NOT NULL DEFAULT now(),
+  "deletedAt"    timestamptz,
+  "payloadMeta"  jsonb       NOT NULL DEFAULT '{"codec":"json","encryptionMode":"none","schemaVersion":1}',
+  "payloadJson"  jsonb,
+  "payloadBytes" bytea,
+  "payloadHash"  text,
+  PRIMARY KEY (id, "ownerKind", "ownerId")
 );
 
 CREATE UNIQUE INDEX syncObjects_owner_collection_id_uidx
-  ON jobdone.syncObjects (ownerKind, ownerId, collection, id);
+  ON jobdone."syncObjects" ("ownerKind", "ownerId", collection, id);
 CREATE INDEX syncObjects_owner_changedT_idx
-  ON jobdone.syncObjects (ownerKind, ownerId, changedT DESC)
-  WHERE deletedT IS NULL;
+  ON jobdone."syncObjects" ("ownerKind", "ownerId", "changedT" DESC)
+  WHERE "deletedT" IS NULL;
 
-CREATE TABLE jobdone.syncOwnerAccess (
+CREATE TABLE jobdone."syncObjectPublicProduct" (
+  "ownerKind"         text        NOT NULL CHECK ("ownerKind" IN ('user','team')),
+  "ownerId"           uuid        NOT NULL,
+  collection          text        NOT NULL,
+  "objectId"          uuid        NOT NULL,
+  "schemaName"        text        NOT NULL,
+  "schemaVersion"     integer     NOT NULL CHECK ("schemaVersion" > 0),
+  "publicProductJson" jsonb       NOT NULL,
+  "changedT"          bigint      NOT NULL REFERENCES jobdone."syncTransactions"(t),
+  "changedAt"         timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("ownerKind", "ownerId", collection, "objectId"),
+  FOREIGN KEY ("ownerKind", "ownerId", collection, "objectId")
+    REFERENCES jobdone."syncObjects" ("ownerKind", "ownerId", collection, id)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX syncObjectPublicProduct_owner_collection_idx
+  ON jobdone."syncObjectPublicProduct" ("ownerKind", "ownerId", collection);
+CREATE INDEX syncObjectPublicProduct_changedT_idx
+  ON jobdone."syncObjectPublicProduct" ("changedT" DESC);
+
+CREATE TABLE jobdone."syncOwnerAccess" (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  userId      uuid        NOT NULL,
-  ownerKind   text        NOT NULL CHECK (ownerKind IN ('user','team')),
-  ownerId     uuid        NOT NULL,
+  "userId"    uuid        NOT NULL,
+  "ownerKind" text        NOT NULL CHECK ("ownerKind" IN ('user','team')),
+  "ownerId"   uuid        NOT NULL,
   capability  text        NOT NULL CHECK (capability IN ('pull','push','readable_access')),
-  grantedAt   timestamptz NOT NULL DEFAULT now(),
-  revokedAt   timestamptz
+  "grantedAt" timestamptz NOT NULL DEFAULT now(),
+  "revokedAt" timestamptz
 );
 
 CREATE UNIQUE INDEX syncOwnerAccess_active_uidx
-  ON jobdone.syncOwnerAccess (userId, ownerKind, ownerId, capability)
-  WHERE revokedAt IS NULL;
+  ON jobdone."syncOwnerAccess" ("userId", "ownerKind", "ownerId", capability)
+  WHERE "revokedAt" IS NULL;
 CREATE INDEX syncOwnerAccess_owner_idx
-  ON jobdone.syncOwnerAccess (ownerKind, ownerId)
-  WHERE revokedAt IS NULL;
+  ON jobdone."syncOwnerAccess" ("ownerKind", "ownerId")
+  WHERE "revokedAt" IS NULL;
 
-CREATE TABLE jobdone.syncIntents (
+CREATE TABLE jobdone."syncIntents" (
   id              uuid        PRIMARY KEY,
-  actorUserId     uuid        NOT NULL,
-  intentHash      text        NOT NULL,
+  "actorUserId"   uuid        NOT NULL,
+  "intentHash"    text        NOT NULL,
   status          text        NOT NULL CHECK (status IN ('accepted','rejected','conflict')),
-  resultT         bigint      REFERENCES jobdone.syncTransactions(t),
-  createdAt       timestamptz NOT NULL DEFAULT now(),
-  resolvedAt      timestamptz
+  "resultT"       bigint      REFERENCES jobdone."syncTransactions"(t),
+  "resultJson"    jsonb       NOT NULL,
+  "createdAt"     timestamptz NOT NULL DEFAULT now(),
+  "resolvedAt"    timestamptz
 );
 
 CREATE INDEX syncIntents_actor_created_idx
-  ON jobdone.syncIntents (actorUserId, createdAt DESC);
+  ON jobdone."syncIntents" ("actorUserId", "createdAt" DESC);
+
+CREATE TABLE jobdone."outboxEffects" (
+  id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  t               bigint      NOT NULL REFERENCES jobdone."syncTransactions"(t),
+  "effectType"    text        NOT NULL,
+  "ownerKind"     text        NOT NULL CHECK ("ownerKind" IN ('user','team')),
+  "ownerId"       uuid        NOT NULL,
+  "objectRefs"    jsonb       NOT NULL DEFAULT '[]',
+  "effectJson"    jsonb       NOT NULL,
+  status          text        NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','succeeded','failed','dead')),
+  attempts        integer     NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  "nextAttemptAt" timestamptz NOT NULL DEFAULT now(),
+  "createdAt"     timestamptz NOT NULL DEFAULT now(),
+  "updatedAt"     timestamptz NOT NULL DEFAULT now(),
+  "lastError"     text
+);
+
+CREATE INDEX outboxEffects_due_idx
+  ON jobdone."outboxEffects" ("nextAttemptAt", "createdAt")
+  WHERE status IN ('queued','failed');
+CREATE INDEX outboxEffects_transaction_idx
+  ON jobdone."outboxEffects" (t);
+
+CREATE TABLE jobdone."opsEvents" (
+  id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  "requestId"     text        NOT NULL,
+  severity        text        NOT NULL CHECK (severity IN ('info','warning','error','critical')),
+  source          text        NOT NULL,
+  kind            text        NOT NULL,
+  action          text,
+  "ownerKind"     text        CHECK ("ownerKind" IS NULL OR "ownerKind" IN ('user','team')),
+  "ownerId"       uuid,
+  "objectRefs"    jsonb       NOT NULL DEFAULT '[]',
+  retryable       boolean     NOT NULL DEFAULT false,
+  "sanitizedJson" jsonb       NOT NULL DEFAULT '{}',
+  "createdAt"     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX opsEvents_request_idx
+  ON jobdone."opsEvents" ("requestId");
+CREATE INDEX opsEvents_created_idx
+  ON jobdone."opsEvents" ("createdAt" DESC);
+CREATE INDEX opsEvents_severity_created_idx
+  ON jobdone."opsEvents" (severity, "createdAt" DESC);
 
 DO $$
 DECLARE
