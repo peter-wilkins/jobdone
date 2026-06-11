@@ -38,9 +38,9 @@ Verified on `RF8N6017PKY`:
 - IndexedDB data survives app force-stop/reopen;
 - text Capture can be confirmed;
 - burger menu no longer shows Reviews, Inbox, or My Work.
+- Team navigation reaches the Create Team/login-required screen;
+- feedback can be sent from the Share idea screen.
 
 Still to test manually:
 
-- login path and any WebView/OAuth callback issue;
-- Team page navigation;
-- feedback report.
+- full login callback path and any WebView/OAuth handoff issue.
