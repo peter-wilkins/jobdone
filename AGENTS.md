@@ -12,15 +12,16 @@ If the user starts a side quest while a feature is in progress, challenge the
 scope shift. Prefer capturing the side quest as one or more GitHub issues, then
 return to the current feature unless the user explicitly reprioritizes.
 
-### Junior and senior agent roles
+### Branch and review workflows
 
-Junior/Spark agents should use the `junior-issue-worker` skill: work one issue
-on a branch, open a draft PR, and stop. They must not approve, merge, deploy,
-apply remote SQL, mutate production env vars, or close issues.
+AFK/Spark branch agents should use the `issue-branch-worker` skill: work one
+issue on a branch, open a draft PR, and stop. They must not approve, merge,
+deploy, apply remote SQL, mutate production env vars, or close issues.
 
-Approve-and-merge work should use the `senior-review-merge` skill and requires a
-GPT-5.5 reviewer. If the current model is not GPT-5.5, or the model is unknown,
-stop instead of approving or merging.
+Approve-and-merge work should use the `review-merge` skill. This is a capability
+workflow, not a developer-seniority workflow. Do not refuse because the current
+session cannot prove a specific model name; instead, apply the review and merge
+gates in the skill.
 
 ### Issue tracker
 

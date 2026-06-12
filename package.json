@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:frontend": "npm --prefix frontend run build",
+    "check:agent-workflows": "node scripts/check-agent-workflow-rules.js",
     "check:schema": "node scripts/check-local-replica-schema.js",
     "typecheck:contracts": "tsc -p tsconfig.contracts.json",
     "test:backend": "npm --prefix backend test",

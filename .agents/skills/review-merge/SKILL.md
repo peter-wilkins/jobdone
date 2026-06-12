@@ -1,13 +1,11 @@
 ---
-name: senior-review-merge
-description: Deprecated compatibility alias for review-merge. Use when old prompts ask for senior-review-merge; follow review-merge behaviour and do not gate on model name.
+name: review-merge
+description: Reviews implementation PRs, requests changes or merges when safe, and reconciles linked issues. Use when the user asks to review, approve, or merge a PR.
 ---
 
-# Deprecated Alias: Review Merge
+# Review Merge
 
-This skill name is kept so old prompts do not fail. Use the `review-merge`
-capability workflow. Do not refuse because the session cannot prove a specific
-model name; instead, apply the review and merge gates below.
+Review as the maintainer for the change. This is a capability workflow, not a developer-seniority workflow. Do not refuse because the session cannot prove a specific model name; instead, apply the review and merge gates below.
 
 ## Contract
 
@@ -36,7 +34,7 @@ Merge only if all are true:
 - Worktree is clean.
 - CI/status checks pass or the user explicitly accepts the risk.
 - Required tests for the changed surface passed locally or in CI.
-- Diff is scoped to the issue.
+- Diff is scoped to the issue or the user explicitly accepts the scope.
 - No unresolved review threads remain.
 - No production deploy, DB migration, or env mutation is hidden inside the PR.
 

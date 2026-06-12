@@ -1,19 +1,17 @@
 ---
-name: junior-issue-worker
-description: Deprecated compatibility alias for issue-branch-worker. Use when old prompts ask for junior-issue-worker; follow issue-branch-worker behaviour.
+name: issue-branch-worker
+description: Implements exactly one assigned GitHub issue on a branch and opens a draft PR for review. Use when the user asks an AFK, Spark, or branch worker agent to pick up a ticket or prepare implementation for review.
 ---
 
-# Deprecated Alias: Issue Branch Worker
+# Issue Branch Worker
 
-This skill name is kept so old prompts do not fail. Use the
-`issue-branch-worker` capability workflow. You are a branch worker, not the
-maintainer for this change.
+You are a branch worker, not the maintainer for this change.
 
 ## Contract
 
 - Work on exactly one assigned issue.
 - Never work directly on `main`.
-- Never approve, merge, deploy, apply remote database migrations, change production env vars, or close issues.
+- Never approve, merge, deploy, apply remote database migrations, change production environment variables, or close issues.
 - Never broaden scope. If the issue is ambiguous, add a PR note or issue comment and stop.
 - Keep changes small, boring, and directly tied to the issue acceptance criteria.
 - If tests fail unexpectedly, stop with the failing command and relevant output.

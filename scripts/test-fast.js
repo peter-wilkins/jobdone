@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 
 const suites = [
+  { name: 'agent-workflows', command: 'npm', args: ['run', 'check:agent-workflows'] },
   { name: 'backend', command: 'npm', args: ['--prefix', 'backend', 'test'] },
   { name: 'frontend', command: 'npm', args: ['--prefix', 'frontend', 'test'] },
 ];
