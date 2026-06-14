@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
+import { buildTeamCaptureContext } from './services/captureContextService';
 import { teamScreenId } from './services/teamNavigationService';
 
 const EMPTY_FORM = { description: '', points: 3 };
-const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false };
+const DEFAULT_TEAM = { name: '', template: 'high_trust', points_enabled: false, require_owner_self_review: false, capture_context: null };
 const TEAM_EDIT_SELECTED_TEAM_KEY = 'jobdone.teamEdit.selectedTeamId';
 
 const TEAM_TEMPLATES = [
@@ -216,6 +217,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
         name: team.name,
         template: team.template,
         requireOwnerSelfReview: Boolean(team.require_owner_self_review),
+        captureContext: buildTeamCaptureContext(team.name, team.capture_context?.notes || ''),
         createNewTeam,
       });
       setTeam(result.team || team);
@@ -509,6 +511,25 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
               placeholder="Team name, e.g. Chawmore"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+              Team context
+            </label>
+            <textarea
+              value={team.capture_context?.notes || ''}
+              onChange={(event) => setTeam(prev => ({
+                ...prev,
+                capture_context: buildTeamCaptureContext(prev.name, event.target.value),
+              }))}
+              rows={4}
+              maxLength={500}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none"
+              placeholder="What is this Team mostly for? Example: farm jobs around ponds, fields, fences, tracks, machinery, and seasonal maintenance."
+            />
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              Used as safe context for guesses. It is treated as data, not as instructions.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">

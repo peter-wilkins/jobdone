@@ -19,6 +19,7 @@ import { canStrengthenLocationDraft, strengthenLocationDraftWithClue } from './s
 import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './services/serviceWorker';
 import { predictionSourcePresentation } from './services/predictionSourceService';
 import { runPreExtraction } from './services/preExtractionService';
+import { captureContextService } from './services/captureContextService';
 import { classify } from './services/classifyService';
 import { setAppUpdateGuard } from './services/appUpdateGuardService';
 import { PhotoAttachmentControls, PhotoAttachmentThumb } from './PhotoAttachmentControls';
@@ -742,6 +743,7 @@ export function HomeScreen({
                   transcript: entry.transcript,
                 },
                 contextClues,
+                captureContext: captureContextService.get(),
               });
             } catch (err) {
               backendPredictionError = true;

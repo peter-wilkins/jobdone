@@ -42,6 +42,8 @@ _Avoid_: Loose Tag, Arbitrary Metadata, Prompt Text
 
 **Capture Context**:
 Bounded, user-controlled context that helps JobDone summarize, extract, and predict structure for a Capture. Capture Context can come from a personal onboarding answer, a Team purpose/domain, claimed Backlog Items, Work Context, or future domain profiles. Capture Context is data about what the user is likely doing; it is not raw prompt text or model instructions.
+
+Team Capture Context is configured on the Team and uses the same safety rule as personal onboarding context: it is bounded, normalized domain data used for candidate ranking and prompt guidance, never executable instructions. Prompt-like text such as "ignore previous instructions" must remain inert content. A farm Team can say it is about ponds, fields, fencing, tracks, machinery, and seasonal maintenance so Capture review and extraction can make better local guesses without changing the system prompt authority.
 _Avoid_: Prompt, Prompt Injection, Product Mode
 
 **Tag**:

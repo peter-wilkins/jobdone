@@ -73,6 +73,26 @@ function normalizeDescription(value) {
   return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
 
+function compactContextText(value, maxLength) {
+  return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+export function validateCaptureContextInput(input = null, teamName = '') {
+  if (!input || typeof input !== 'object') return null;
+  const label = compactContextText(input.label || teamName, 80);
+  const notes = compactContextText(input.notes, 500);
+  const examples = compactContextText(input.examples, 240);
+  if (!label && !notes && !examples) return null;
+  return {
+    version: 1,
+    source: 'team_settings',
+    label,
+    examples,
+    notes,
+    createdAt: input.createdAt || input.created_at || nowIso(),
+  };
+}
+
 export function validateBacklogItemInput(input = {}) {
   const description = normalizeDescription(input.description);
   const rawPoints = input.points === '' || input.points === undefined ? null : input.points;
@@ -124,6 +144,7 @@ export function presentTeam(row = {}) {
     approval_mode: row.approval_mode,
     workers_can_create_backlog_items: Boolean(row.workers_can_create_backlog_items),
     require_owner_self_review: Boolean(row.require_owner_self_review),
+    capture_context: validateCaptureContextInput(row.capture_context, row.name),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -213,6 +234,7 @@ export function validateTeamInput(input = {}) {
     name,
     ...settings,
     require_owner_self_review: Boolean(input.require_owner_self_review),
+    capture_context: validateCaptureContextInput(input.capture_context, name),
     updated_at: nowIso(),
   };
 }

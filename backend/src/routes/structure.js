@@ -66,7 +66,7 @@ export async function registerStructureRoutes(fastify, deps = {}) {
     const user = await auth(request, reply);
     if (!user) return;
 
-    const { entryData, contextClues = [] } = request.body ?? {};
+    const { entryData, contextClues = [], captureContext = null } = request.body ?? {};
     if (!entryData?.summary || typeof entryData.summary !== 'string') {
       return reply.status(400).send({ error: 'entryData.summary required' });
     }
@@ -82,7 +82,7 @@ export async function registerStructureRoutes(fastify, deps = {}) {
         coOccurrences,
         tagVocabulary,
       });
-      const structuredRequest = buildStructuredPredictionRequest({ entryData, candidateSet });
+      const structuredRequest = buildStructuredPredictionRequest({ entryData, candidateSet, captureContext });
       const rawPrediction = await predictor(structuredRequest);
       const prediction = normalizeStructuredPredictionResponse(rawPrediction, candidateSet);
 

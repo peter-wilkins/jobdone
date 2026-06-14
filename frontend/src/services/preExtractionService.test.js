@@ -361,6 +361,25 @@ test('pre-extraction suggests backlog items from several description words', () 
   assert.equal(result.suggestions.backlogItems[0]?.id, 'target');
 });
 
+test('pre-extraction can match Team candidates from bounded Capture Context notes', () => {
+  const result = runPreExtraction({
+    captureText: 'Checked pond overflow by the field fence',
+    candidates: {
+      teams: [{
+        id: 'team-farm',
+        name: 'Farm',
+        capture_context: {
+          label: 'Farm',
+          notes: 'ponds, fields, fencing, drainage, machinery, seasonal jobs',
+        },
+      }],
+    },
+  });
+
+  assert.equal(result.suggestions.teams[0].id, 'team-farm');
+  assert.equal(result.suggestions.teams[0].source, 'deterministic_pre_extraction');
+});
+
 test('pre-extraction strongly suggests backlog items when three words match fuzzily', () => {
   const result = runPreExtraction({
     captureText: 'Cleaned the kitchen sink traps today.',

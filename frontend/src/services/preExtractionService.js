@@ -77,6 +77,7 @@ function candidateLabel(candidate = {}) {
 }
 
 function candidateSearchText(candidate = {}) {
+  const captureContext = candidate.capture_context || candidate.captureContext || {};
   return [
     candidate.displayName,
     candidate.display_name,
@@ -88,6 +89,9 @@ function candidateSearchText(candidate = {}) {
     candidate.address_text,
     candidate.placeText,
     candidate.place_text,
+    captureContext.label,
+    captureContext.examples,
+    captureContext.notes,
   ].filter(Boolean).join(' ');
 }
 

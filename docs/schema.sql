@@ -369,6 +369,7 @@ CREATE TABLE teams (
                                     CHECK (approval_mode IN ('auto', 'manual')),
   workers_can_create_backlog_items  BOOLEAN NOT NULL DEFAULT TRUE,
   require_owner_self_review         BOOLEAN NOT NULL DEFAULT FALSE,
+  capture_context                   JSONB,
   created_at                        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
