@@ -14,6 +14,11 @@ export function InviteScreen({ onBack, onNavigate, user }) {
   const [error, setError] = useState(null);
   const acceptedRef = useRef(false);
 
+  function destinationFromInvite(rawDestination = 'my-work') {
+    if (rawDestination === 'my-work' || rawDestination === 'team-work') return 'action-inbox';
+    return rawDestination;
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function loadInvite() {
@@ -41,7 +46,7 @@ export function InviteScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       const result = await apiService.acceptTeamInvite(token);
-      onNavigate?.(result.destination || 'my-work');
+      onNavigate?.(destinationFromInvite(result.destination));
     } catch (err) {
       acceptedRef.current = false;
       setError(err.message || 'Could not accept invite');

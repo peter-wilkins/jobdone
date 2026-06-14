@@ -9,7 +9,7 @@ const initialWorkState = {
   approvedItems: [],
 };
 
-test('My Work refreshes on focus and keeps stale queue visible when refresh fails', async ({ page }) => {
+test('Action Inbox refreshes on focus and keeps stale queue visible when refresh fails', async ({ page }) => {
   let requestCount = 0;
   let failRefresh = false;
 
@@ -29,14 +29,15 @@ test('My Work refreshes on focus and keeps stale queue visible when refresh fail
     });
   });
 
-  await page.goto('/#my-work');
+  await page.goto('/#action-inbox');
   await expect(page.getByText('Visible stale item')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Action Inbox' })).toBeVisible();
 
   failRefresh = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
   await expect(page.getByText('Visible stale item')).toBeVisible();
-  await expect(page.getByText('My Work may be out of date.')).toBeVisible();
+  await expect(page.getByText('Action Inbox may be out of date.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   expect(requestCount).toBeGreaterThanOrEqual(2);
 });

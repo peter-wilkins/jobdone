@@ -407,7 +407,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
             </h2>
             {user ? (
               <p className="mt-2 text-sm leading-5 text-gray-500">
-                You can do Team work from My Work, but only the Team Owner can change settings, invites, Backlog Items, and approvals.
+                You can do Team work from Action Inbox, but only the Team Owner can change settings, invites, Backlog Items, and approvals.
               </p>
             ) : (
               <p className="mt-2 text-sm leading-5 text-gray-500">
@@ -416,10 +416,10 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
             )}
             <button
               type="button"
-              onClick={() => onNavigate?.(user ? 'my-work' : 'login')}
+              onClick={() => onNavigate?.(user ? 'action-inbox' : 'login')}
               className="mt-4 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800"
             >
-              {user ? 'Go to My Work' : 'Log in'}
+              {user ? 'Go to Action Inbox' : 'Log in'}
             </button>
           </section>
         ) : (

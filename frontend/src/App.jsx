@@ -39,7 +39,10 @@ function screenFromLocation() {
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
   if (hash.startsWith('team/')) return hash;
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'my-work', 'team-work', 'invite'].includes(hash) ? hash : 'home';
+  if (hash === 'my-work' || hash === 'team-work') return 'action-inbox';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'action-inbox', 'invite'].includes(hash)
+    ? hash
+    : 'home';
 }
 
 function isPlainHomeOpen() {
@@ -377,7 +380,7 @@ function App() {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamPageScreen teamId={teamIdFromScreen(screen)} onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
-  if (screen === 'my-work' || screen === 'team-work') {
+  if (screen === 'action-inbox' || screen === 'my-work' || screen === 'team-work') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 

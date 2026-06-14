@@ -50,7 +50,7 @@ export function MyWorkScreen({ onBack }) {
         return next;
       });
     } catch (err) {
-      setStaleError(err.message || 'Could not refresh My Work');
+      setStaleError(err.message || 'Could not refresh Action Inbox');
     } finally {
       if (showLoading) {
         setIsLoading(false);
@@ -182,8 +182,8 @@ export function MyWorkScreen({ onBack }) {
           </svg>
         </button>
         <div>
-          <h1 className="text-xl font-light text-gray-900 leading-5">My Work</h1>
-          <p className="text-xs text-gray-500">Backlog across your Teams</p>
+          <h1 className="text-xl font-light text-gray-900 leading-5">Action Inbox</h1>
+          <p className="text-xs text-gray-500">Actionable work across your Teams</p>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export function MyWorkScreen({ onBack }) {
       {(staleError || isRefreshing) && (
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
           <p className="min-w-0 flex-1 text-xs text-amber-800">
-            {isRefreshing ? 'Refreshing My Work...' : 'My Work may be out of date.'}
+            {isRefreshing ? 'Refreshing Action Inbox...' : 'Action Inbox may be out of date.'}
           </p>
           {!isRefreshing && (
             <button
