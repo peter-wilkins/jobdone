@@ -10,13 +10,13 @@ import {
   backlogItemContextSnapshot,
   canLoadTeamPageState,
   loadCachedTeamPageState,
+  buildTeamTimelineEntries,
   searchTeamContext,
-  selectTeamTimelineEntries,
   saveCachedTeamPageState,
   teamContextSnapshot,
 } from './services/teamPageService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
-import { FinishedItem, OpenItem, WorkItem } from './TeamWorkItems';
+import { OpenItem, WorkItem } from './TeamWorkItems';
 
 const EMPTY_BACKLOG_FORM = { description: '', points: 3 };
 
@@ -71,9 +71,16 @@ function entryText(entry) {
 }
 
 function TimelineItem({ entry }) {
+  const timelineContext = entry?.timelineContext || null;
+  const timelineMeta = [timelineContext?.label, timelineContext?.statusText]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm text-gray-800 leading-5 max-h-16 overflow-hidden">{entryText(entry)}</p>
+      {timelineMeta && (
+        <p className="mt-1 text-xs text-gray-500">{timelineMeta}</p>
+      )}
       <p className="mt-1 text-xs text-gray-400">
         {entry.createdAt || entry.created_at || ''}
       </p>
@@ -240,7 +247,13 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const canCreateBacklogItems = Boolean(teamAccess?.canCreateBacklogItems);
   const canEditTeam = Boolean(teamAccess?.canEditTeam);
   const canCreateTimelineEntries = Boolean(teamAccess?.canCreateTimelineEntries || canCreateBacklogItems || canEditTeam);
-  const teamTimelineEntries = selectTeamTimelineEntries(recentEntries, teamId, team?.name).slice(0, 10);
+  const teamTimelineEntries = buildTeamTimelineEntries({
+    entries: recentEntries,
+    teamId,
+    teamName: team?.name,
+    inProgressItems,
+    approvedItems,
+  }).slice(0, 10);
   const trimmedTeamSearchText = teamSearchText.trim();
   const teamSearchResults = trimmedTeamSearchText
     ? searchTeamContext({
@@ -711,28 +724,6 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
                 ))}
               </section>
             )}
-
-            <section>
-              <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">
-                <h2 className="text-sm font-semibold text-gray-900">
-                  {usesManualApproval ? 'Approved / History' : 'Done / History'}
-                </h2>
-                <span className="text-xs text-gray-400">{approvedItems.length}</span>
-              </div>
-              {approvedItems.length === 0 ? (
-                <p className="py-5 text-sm text-gray-400">
-                  {usesManualApproval ? 'No approved work yet.' : 'No finished work yet.'}
-                </p>
-              ) : (
-                approvedItems.map(item => (
-                  <FinishedItem
-                    key={item.id}
-                    item={item}
-                    pointsEnabled={pointsEnabled}
-                  />
-                ))
-              )}
-            </section>
 
             <section>
               <div className="flex items-baseline justify-between border-b border-gray-200 pb-2">

@@ -5,6 +5,7 @@ import {
   loadCachedTeamPageState,
   saveCachedTeamPageState,
   backlogItemContextSnapshot,
+  buildTeamTimelineEntries,
   resolveTeamPageUser,
   searchTeamContext,
   selectPrivateTimelineEntries,
@@ -52,6 +53,55 @@ test('Team page waits for restored user before loading remote Team state', () =>
   assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: {} }), false);
   assert.equal(canLoadTeamPageState({ teamId: '', user: { id: 'user-1' } }), false);
   assert.equal(canLoadTeamPageState({ teamId: 'team-1', user: { id: 'user-1' } }), true);
+});
+
+test('Team Timeline includes a submitted Backlog Entry with a derived status label', () => {
+  const entries = [
+    {
+      id: 'entry-submitted',
+      createdAt: '2026-01-01T10:00:00.000Z',
+      text: 'Evidence of claim',
+      workContexts: [{ id: 'item-1', type: 'backlog_item', label: 'Empty bins', teamId: 'team-1' }],
+    },
+    {
+      id: 'entry-other-team',
+      workContexts: [{ id: 'item-2', type: 'backlog_item', label: 'Not ours', teamId: 'team-2' }],
+    },
+  ];
+
+  const timeline = buildTeamTimelineEntries({
+    entries,
+    teamId: 'team-1',
+    inProgressItems: [{ id: 'item-1', status: 'submitted' }],
+    approvedItems: [],
+  });
+
+  assert.equal(timeline.length, 1);
+  assert.equal(timeline[0].id, 'entry-submitted');
+  assert.equal(timeline[0].timelineContext.type, 'backlog_item');
+  assert.equal(timeline[0].timelineContext.statusText, 'Submitted');
+});
+
+test('Team Timeline includes an approved completed Backlog Entry with a derived status label', () => {
+  const entries = [
+    {
+      id: 'entry-approved',
+      createdAt: '2026-01-01T10:00:00.000Z',
+      text: 'Evidence approved',
+      workContexts: [{ id: 'item-2', type: 'backlog_item', label: 'Clean pump', teamName: 'Farm Team', teamId: 'team-1' }],
+    },
+  ];
+
+  const timeline = buildTeamTimelineEntries({
+    entries,
+    teamId: 'team-1',
+    teamName: 'Farm Team',
+    approvedItems: [{ id: 'item-2', status: 'approved' }],
+    inProgressItems: [],
+  });
+
+  assert.equal(timeline.length, 1);
+  assert.equal(timeline[0].timelineContext.statusText, 'Approved');
 });
 
 test('Team page can use restored auth user when parent user prop is stale', () => {

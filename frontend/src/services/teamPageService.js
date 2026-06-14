@@ -42,6 +42,74 @@ export function selectTeamTimelineEntries(entries = [], teamId = null, teamName 
   });
 }
 
+function normalizeBacklogStatus(status) {
+  if (status === 'needs_more_evidence') return 'Needs more evidence';
+  if (status === 'submitted') return 'Submitted';
+  if (status === 'approved') return 'Approved';
+  if (status === 'claimed') return 'Claimed';
+  if (status === 'open') return 'Open';
+  return status ? status : '';
+}
+
+function mapBacklogItemStatus(items = []) {
+  const map = new Map();
+  for (const item of items || []) {
+    if (item?.id) {
+      map.set(item.id, item.status || null);
+    }
+  }
+  return map;
+}
+
+function matchingTeamContexts(entry, teamId, teamName) {
+  const contexts = Array.isArray(entry?.workContexts) ? entry.workContexts : [];
+  const normalizedTeamName = String(teamName || '').trim().toLowerCase();
+  return contexts.filter(context => {
+    const contextTeam = contextTeamId(context);
+    if (teamId && contextTeam) return contextTeam === teamId;
+    return Boolean(normalizedTeamName && contextTeamName(context) === normalizedTeamName);
+  });
+}
+
+function timelineContextForEntry(entry, teamId, teamName, backlogStatusByItemId = new Map()) {
+  const contextCandidates = matchingTeamContexts(entry, teamId, teamName);
+  const backlogContext = contextCandidates.find(context => (context.type || 'team') === 'backlog_item' && context.id);
+  const teamContext = contextCandidates.find(context => (context.type || 'team') === 'team');
+  const activeContext = backlogContext || teamContext || contextCandidates[0];
+  if (!activeContext) return null;
+
+  const sourceStatus = activeContext.id ? backlogStatusByItemId.get(activeContext.id) : null;
+  const status = sourceStatus || activeContext.status || null;
+  return {
+    type: activeContext.type || 'team',
+    id: activeContext.id || null,
+    label: activeContext.label || activeContext.description || activeContext.teamName || 'Team',
+    status,
+    statusText: normalizeBacklogStatus(status),
+  };
+}
+
+export function buildTeamTimelineEntries({
+  entries = [],
+  teamId = null,
+  teamName = '',
+  inProgressItems = [],
+  approvedItems = [],
+} = {}) {
+  const contextAwareStatus = mapBacklogItemStatus([
+    ...(Array.isArray(inProgressItems) ? inProgressItems : []),
+    ...(Array.isArray(approvedItems) ? approvedItems : []),
+  ]);
+  return (selectTeamTimelineEntries(entries, teamId, teamName) || [])
+    .map(entry => {
+      const timelineContext = timelineContextForEntry(entry, teamId, teamName, contextAwareStatus);
+      return {
+        ...entry,
+        timelineContext,
+      };
+    });
+}
+
 export function resolveTeamPageUser({ user = null, authUser = null } = {}) {
   if (user?.id) return user;
   if (authUser?.id) return authUser;
@@ -188,8 +256,18 @@ export function searchTeamBacklogItems(query, items = [], limit = 10) {
     .map(candidate => candidate.item);
 }
 
-export function searchTeamEntries(query, entries = [], teamId = null, teamName = '', limit = 10) {
-  return recallLocalEntries(query, selectTeamTimelineEntries(entries, teamId, teamName), limit);
+export function searchTeamEntries(query, entries = [], teamId = null, teamName = '', limit = 10, inProgressItems = [], approvedItems = []) {
+  return recallLocalEntries(
+    query,
+    buildTeamTimelineEntries({
+      entries,
+      teamId,
+      teamName,
+      inProgressItems,
+      approvedItems,
+    }),
+    limit,
+  );
 }
 
 export function searchTeamContext({
@@ -217,7 +295,15 @@ export function searchTeamContext({
     ...approvedItems,
     ...requestItems,
   ]);
-  const timelineEntries = searchTeamEntries(query, entries, resolvedTeamId, resolvedTeamName);
+  const timelineEntries = searchTeamEntries(
+    query,
+    entries,
+    resolvedTeamId,
+    resolvedTeamName,
+    10,
+    inProgressItems,
+    approvedItems,
+  );
   return {
     backlogItems,
     entries: timelineEntries,
