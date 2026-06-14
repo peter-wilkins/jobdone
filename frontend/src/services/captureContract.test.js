@@ -65,3 +65,15 @@ test('Entry-from-Capture input rejects legacy created_at', () => {
   assert.equal(result.success, false);
   assert.equal(result.error, 'Use entryFromCapture.createdAt, not entryFromCapture.created_at');
 });
+
+test('Entry-from-Capture input rejects Capture creation time', () => {
+  const result = parseEntryFromCaptureInput({
+    captureId: 'capture-local-1',
+    transcript: 'Shared note',
+    summary: 'Shared note',
+    createdAt: '2026-06-05T12:00:00.000Z',
+  });
+
+  assert.equal(result.success, false);
+  assert.match(result.error, /Unrecognized key/);
+});

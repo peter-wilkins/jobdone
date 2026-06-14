@@ -88,7 +88,6 @@ export function buildLocalCaptureSchemas(z) {
     captureId: z.string().min(1, 'captureId required'),
     transcript: z.string().optional().default(''),
     summary: z.string().optional().default(''),
-    createdAt: z.string().optional(),
     locations: z.array(looseObjectSchema).default([]),
     contacts: z.array(looseObjectSchema).default([]),
     tags: z.array(looseObjectSchema).default([]),

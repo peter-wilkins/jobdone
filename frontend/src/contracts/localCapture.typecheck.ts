@@ -59,7 +59,6 @@ const entryFromCapture: EntryFromCaptureInput = {
   captureId: 'capture-local-1',
   transcript: 'Shared note',
   summary: 'Shared note',
-  createdAt: '2026-06-05T12:00:00.000Z',
   locations: [{ id: 'location-local-1', displayName: '14 Bell Street' }],
   contacts: [{ id: 'contact-local-1', displayName: 'Ann Smith' }],
   tags: [{ id: 'tag-local-1', label: 'Boiler Service' }],
@@ -69,8 +68,15 @@ const entryFromCapture: EntryFromCaptureInput = {
 const entryFromCaptureWithLegacyCreatedAt: EntryFromCaptureInput = {
   captureId: 'capture-local-1',
   summary: 'Shared note',
-  // @ts-expect-error createdAt is the canonical Entry-from-Capture timestamp.
+  // @ts-expect-error Entry-from-Capture timestamps are set at Confirmation.
   created_at: '2026-06-05T12:00:00.000Z',
+};
+
+const entryFromCaptureWithCaptureCreatedAt: EntryFromCaptureInput = {
+  captureId: 'capture-local-1',
+  summary: 'Shared note',
+  // @ts-expect-error Entry-from-Capture timestamps are set at Confirmation.
+  createdAt: '2026-06-05T12:00:00.000Z',
 };
 
 const entryFromCaptureWithLegacySnapshots: EntryFromCaptureInput = {
@@ -88,4 +94,5 @@ void captureUpdate;
 void captureUpdateWithLegacyTimestamp;
 void entryFromCapture;
 void entryFromCaptureWithLegacyCreatedAt;
+void entryFromCaptureWithCaptureCreatedAt;
 void entryFromCaptureWithLegacySnapshots;

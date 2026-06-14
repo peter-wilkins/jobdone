@@ -211,7 +211,6 @@ export function ShareTargetScreen({ onBack, onRecord, user }) {
           captureId: capture.id,
           transcript: preview.body,
           summary: preview.title,
-          createdAt: capture.createdAt || capture.created_at,
         });
 
         // Get the created entry for optional sync

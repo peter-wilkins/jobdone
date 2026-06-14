@@ -740,7 +740,6 @@ export class DBService {
    * @param {string} params.captureId - Source capture ID (for reference)
    * @param {string} params.transcript - Entry transcript (legacy compatibility text field)
    * @param {string} params.summary - Entry summary (legacy compatibility text field)
-   * @param {string} [params.createdAt] - Optional timestamp (defaults to now)
    * @returns {Promise<string>} New entry ID
    */
   async createEntryFromCapture(input = {}) {
@@ -748,7 +747,6 @@ export class DBService {
       captureId,
       transcript,
       summary,
-      createdAt,
       locations = [],
       contacts = [],
       tags = [],
@@ -798,7 +796,7 @@ export class DBService {
       status: 'confirmed',
       syncStatus: 'pending',
       remoteId: null,
-      createdAt: createdAt || now,
+      createdAt: now,
       syncedAt: null,
       intent: 'NOTE',
       locationIds: locationSnapshots.map(location => location.id),
