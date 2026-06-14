@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  clearCachedReadableTeams,
   loadCachedReadableTeams,
   mergeReadableTeams,
   saveCachedReadableTeams,
@@ -13,6 +14,7 @@ function memoryStorage() {
   return {
     getItem: key => values.has(key) ? values.get(key) : null,
     setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key),
   };
 }
 
@@ -46,4 +48,15 @@ test('Team menu cache restores stable readable Teams before live refresh', () =>
   ], { storage });
 
   assert.deepEqual(loadCachedReadableTeams({ storage }).map(team => team.id), ['team-1', 'team-2']);
+});
+
+test('Team menu cache can be cleared after confirmed sign out', () => {
+  const storage = memoryStorage();
+  saveCachedReadableTeams([{ id: 'team-1', name: 'Owner Team' }], { storage });
+
+  assert.deepEqual(loadCachedReadableTeams({ storage }).map(team => team.id), ['team-1']);
+
+  clearCachedReadableTeams({ storage });
+
+  assert.deepEqual(loadCachedReadableTeams({ storage }), []);
 });

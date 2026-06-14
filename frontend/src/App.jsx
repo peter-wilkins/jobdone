@@ -26,6 +26,7 @@ import {
   setApiErrorDetailsEnabled,
 } from './services/requestDiagnosticsService';
 import {
+  clearCachedReadableTeams,
   loadCachedReadableTeams,
   mergeReadableTeams,
   saveCachedReadableTeams,
@@ -62,6 +63,7 @@ function App() {
   const [apiDebugDetail, setApiDebugDetail] = useState(null);
   const [apiDebugReportStatus, setApiDebugReportStatus] = useState(null);
   const [readableTeams, setReadableTeams] = useState(() => loadCachedReadableTeams());
+  const [authReady, setAuthReady] = useState(false);
   const teamNavRequestRef = useRef(0);
 
   function applySyncResultNotice(result) {
@@ -93,12 +95,16 @@ function App() {
     }
   }
 
-  const refreshReadableTeams = useCallback(async () => {
+  const refreshReadableTeams = useCallback(async ({ clearWhenSignedOut = false } = {}) => {
     const requestId = teamNavRequestRef.current + 1;
     teamNavRequestRef.current = requestId;
     if (!authService.getUser()) {
-      setReadableTeams([]);
-      return [];
+      if (clearWhenSignedOut) {
+        setReadableTeams([]);
+        clearCachedReadableTeams();
+        return [];
+      }
+      return loadCachedReadableTeams();
     }
     try {
       const state = await apiService.getTeamSetupState();
@@ -131,13 +137,16 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!authReady) return () => {
+      cancelled = true;
+    };
     queueMicrotask(() => {
       if (!cancelled) refreshReadableTeams();
     });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, refreshReadableTeams, screen, user]);
+  }, [authReady, refreshKey, refreshReadableTeams, screen, user]);
 
   useEffect(() => {
     const onApiErrorDetail = (event) => {
@@ -169,6 +178,11 @@ function App() {
     // Restore existing session on load
     authService.init().then(session => {
       setUser(session?.user || null);
+      setAuthReady(true);
+      if (!session?.user) {
+        setReadableTeams([]);
+        clearCachedReadableTeams();
+      }
       if (session?.user) {
         runConfirmedDataSync('initial_session');
       }
@@ -178,6 +192,12 @@ function App() {
     const unsubscribe = authService.onChange(async (event, session) => {
       const newUser = session?.user || null;
       setUser(newUser);
+      setAuthReady(true);
+
+      if (event === 'SIGNED_OUT') {
+        setReadableTeams([]);
+        clearCachedReadableTeams();
+      }
 
       if (event === 'SIGNED_IN' && newUser) {
         // Navigate away from login screen if open

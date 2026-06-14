@@ -63,3 +63,13 @@ export function saveCachedReadableTeams(teams = [], { storage } = {}) {
     // Cache is best effort; navigation still uses live state.
   }
 }
+
+export function clearCachedReadableTeams({ storage } = {}) {
+  const resolvedStorage = resolveStorage(storage);
+  if (!resolvedStorage) return;
+  try {
+    resolvedStorage.removeItem(READABLE_TEAMS_CACHE_KEY);
+  } catch {
+    // Cache is best effort; auth state remains authoritative.
+  }
+}
