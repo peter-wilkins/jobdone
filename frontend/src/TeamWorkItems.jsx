@@ -57,8 +57,8 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
               disabled={busy}
             />
           )}
-          onSubmit={({ text, attachments }) => onSubmit(item, text, attachments).then(() => evidencePhotos.reset())}
-          onDiscard={evidencePhotos.reset}
+          onConfirm={({ text, attachments }) => onSubmit(item, text, attachments).then(() => evidencePhotos.reset())}
+          onReject={() => evidencePhotos.reset()}
         />
       )}
     </div>

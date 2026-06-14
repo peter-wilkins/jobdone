@@ -570,8 +570,8 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
                       disabled={isSavingTeamCapture}
                     />
                   )}
-                  onSubmit={saveTeamCapture}
-                  onDiscard={teamCapturePhotos.reset}
+                  onConfirm={saveTeamCapture}
+                  onReject={() => teamCapturePhotos.reset()}
                 />
               </section>
             ) : (

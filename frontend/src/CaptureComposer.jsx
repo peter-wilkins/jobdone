@@ -4,6 +4,7 @@ import {
   clearComposerDraft,
   loadComposerDraft,
   saveComposerDraft,
+  rejectCaptureComposerDraft,
   shouldEnableComposerSubmit,
   submitCaptureComposerDraft,
 } from './services/captureComposerService';
@@ -24,6 +25,8 @@ export function CaptureComposer({
   suggestions = [],
   suggestionLabel = 'Suggestions',
   rows = 2,
+  onConfirm,
+  onReject,
   onSubmit,
   onDiscard,
   onTextChange,
@@ -31,6 +34,8 @@ export function CaptureComposer({
   const textareaId = useId();
   const [text, setText] = useState(() => loadComposerDraft(draftKey) ?? defaultText);
   const [error, setError] = useState('');
+  const confirmAdapter = onConfirm || onSubmit;
+  const rejectAdapter = onReject || onDiscard;
 
   const updateText = (nextText) => {
     setText(nextText);
@@ -52,23 +57,40 @@ export function CaptureComposer({
         text,
         attachments,
         draftKey,
-        onSubmit,
+        onSubmit: confirmAdapter,
       });
-      setText('');
-      onTextChange?.('');
+      resetComposer();
     } catch (err) {
       setError(err?.message || 'Could not save. Try again.');
     }
   };
 
-  const discard = () => {
-    const hasWork = text.trim() || (attachments || []).length > 0;
-    if (hasWork && !window.confirm('Discard this capture?')) return;
+  const resetComposer = () => {
     setText('');
     setError('');
     clearComposerDraft(draftKey);
     onTextChange?.('');
-    onDiscard?.();
+  };
+
+  const reject = async () => {
+    const hasWork = text.trim() || (attachments || []).length > 0;
+    if (hasWork && !window.confirm('Discard this capture?')) return;
+    setError('');
+    try {
+      if (rejectAdapter) {
+        await rejectCaptureComposerDraft({
+          text,
+          attachments,
+          draftKey,
+          onReject: rejectAdapter,
+        });
+      } else {
+        clearComposerDraft(draftKey);
+      }
+      resetComposer();
+    } catch (err) {
+      setError(err?.message || 'Could not save. Try again.');
+    }
   };
 
   const canSubmit = shouldEnableComposerSubmit({ text, attachments, requireText, busy });
@@ -111,7 +133,7 @@ export function CaptureComposer({
           <button
             type="button"
             disabled={busy || (!text.trim() && !(attachments || []).length)}
-            onClick={discard}
+            onClick={reject}
             className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
             title={discardLabel}
             aria-label={discardLabel}

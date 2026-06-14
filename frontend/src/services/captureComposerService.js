@@ -84,3 +84,19 @@ export async function submitCaptureComposerDraft({
   if (clearDraft) clearComposerDraft(draftKey, { storage });
   return result;
 }
+
+export async function rejectCaptureComposerDraft({
+  text = '',
+  attachments = [],
+  draftKey = '',
+  onReject,
+  storage,
+  clearDraft = true,
+} = {}) {
+  if (typeof onReject !== 'function') {
+    throw new Error('Capture Composer reject adapter is not configured.');
+  }
+  const result = await onReject({ text: String(text || ''), attachments });
+  if (clearDraft) clearComposerDraft(draftKey, { storage });
+  return result;
+}

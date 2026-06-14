@@ -5,6 +5,7 @@ import {
   clearComposerDraft,
   loadComposerDraft,
   saveComposerDraft,
+  rejectCaptureComposerDraft,
   shouldEnableComposerSubmit,
   submitCaptureComposerDraft,
 } from './captureComposerService.js';
@@ -69,6 +70,22 @@ test('Capture Composer keeps draft when submit adapter fails', async () => {
   );
 
   assert.equal(loadComposerDraft('team-evidence:item-3', { storage }), 'Still important');
+});
+
+test('Capture Composer reject adapter clears draft only after successful reject', async () => {
+  const storage = memoryStorage();
+  saveComposerDraft('team-evidence:item-4', 'Needs discard');
+
+  await rejectCaptureComposerDraft({
+    draftKey: 'team-evidence:item-4',
+    text: 'Needs discard',
+    storage,
+    onReject: async ({ text }) => {
+      assert.equal(text, 'Needs discard');
+    },
+  });
+
+  assert.equal(loadComposerDraft('team-evidence:item-4', { storage }), null);
 });
 
 test('Capture Composer submit is disabled for empty required text and pending attachments', () => {
