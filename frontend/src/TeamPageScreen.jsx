@@ -15,6 +15,11 @@ import {
   saveCachedTeamPageState,
   teamContextSnapshot,
 } from './services/teamPageService';
+import {
+  buildTeamCaptureCandidates,
+  runTeamCapturePreExtraction,
+  selectAutoAttachedContextClues,
+} from './services/teamCaptureExtractionService';
 import { CLAIM_RACE_FEEDBACK_MS } from './services/teamWorkItemService';
 import { OpenItem, WorkItem } from './TeamWorkItems';
 
@@ -390,7 +395,50 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
         transcript: entryText,
         intent: 'NOTE',
       });
+      let extractedClues = { locations: [], contacts: [], tags: [] };
+      try {
+        const [localContacts, localLocations, localTags] = await Promise.all([
+          dbService.getContacts('confirmed'),
+          dbService.getLocations('confirmed'),
+          dbService.getTags('confirmed'),
+        ]);
+        const candidates = buildTeamCaptureCandidates({
+          contacts: localContacts,
+          locations: localLocations,
+          tags: localTags,
+          team,
+          backlogItems: [...inProgressItems, ...openBacklogItems],
+        });
+        const preExtraction = runTeamCapturePreExtraction({
+          captureText: entryText,
+          candidates,
+          userId: effectiveUser?.id || '',
+        });
+        let backendPrediction = null;
+        if (effectiveUser?.id && entryText) {
+          try {
+            const result = await apiService.predictStructure({
+              entryData: { summary: entryText, transcript: entryText },
+              contextClues: [],
+              captureContext: team.capture_context || null,
+            });
+            backendPrediction = result?.prediction || null;
+          } catch (predictionErr) {
+            console.warn('[Team] Structure prediction unavailable for Team capture:', predictionErr);
+          }
+        }
+        extractedClues = selectAutoAttachedContextClues({
+          preExtraction,
+          candidates,
+          backendPrediction,
+        });
+      } catch (extractionErr) {
+        console.warn('[Team] Team capture extraction failed, saving without auto-attached clues:', extractionErr);
+      }
       const confirmedEntry = await dbService.confirmEntry(entryId, {
+        locations: extractedClues.locations,
+        contacts: extractedClues.contacts,
+        tags: extractedClues.tags,
         workContexts: [teamSnapshot],
       });
       entry = { ...entry, ...confirmedEntry };
