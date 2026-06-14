@@ -444,7 +444,7 @@ export class APIService {
     });
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}: Failed to load My Work`);
+      throw new Error(error.error || `HTTP ${response.status}: Failed to load Action Inbox`);
     }
     return response.json();
   }
