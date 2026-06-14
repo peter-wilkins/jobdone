@@ -13,7 +13,7 @@ Raw inbound material awaiting review — text, photo, shared contact, or link �
 _Avoid_: Draft, Item, Import, Upload
 
 **Capture Composer**:
-The reusable input surface for creating a Capture before Confirmation. The same Capture Composer should appear on personal and Team surfaces with the same core affordances: growing text, Photos, Location, Contact, Confirm, and Reject. Text autosaves into the local Capture while the user types, and Photos attach to the Capture immediately after picker selection. Reject discards only unconfirmed Capture work; after Confirmation, the Entry is immutable. Surface context may prefill the destination, such as Private Context, Team Context, or a specific Backlog Item, but the composer should not ask users to solve ambiguous routing when they started from a clear surface.
+The reusable input surface for creating a Capture before Confirmation. The same Capture Composer should appear on personal and Team surfaces with the same core affordances: growing text, Photos, Location, Contact, Confirm, and Reject. Text autosaves into the local Capture while the user types, and Photos attach to the Capture immediately after picker selection. Reject discards only unconfirmed Capture work; after Confirmation, the Entry is immutable. The Capture Composer owns local editing state and UI only; it does not decide Team, Backlog, Approval, or save policy. Callers provide the destination and save adapter: personal callers save Private Entries, Team Page callers save Team Entries, and Backlog Item callers save Entries plus Backlog Evidence links. Surface context may prefill the destination, such as Private Context, Team Context, or a specific Backlog Item, but the composer should not ask users to solve ambiguous routing when they started from a clear surface.
 _Avoid_: Note Box, Evidence Form, Search Box, Team-Specific Capture UI
 
 **Entry**:
@@ -216,6 +216,10 @@ _Avoid_: Bookmark, Web Page, Search Result
 The local recovery queue of unconfirmed Captures awaiting Confirmation or Rejection when they were not reviewed immediately, such as interrupted Android/platform shares. Inbox is storage and recovery, not the normal Capture product surface.
 _Avoid_: Drafts, Queue, Imports
 
+**Action Inbox**:
+An optional cross-context surface for things that need the user's action, such as claimed work, needs-more-evidence items, approvals, failed sync follow-up, or unfinished Captures. Action Inbox is not the primary Team work surface and should not replace Team Pages for normal Team browsing. It may replace or absorb My Work if dogfooding proves users need one place for actionable work across many Teams. Use the full term **Action Inbox** to avoid confusing it with the Capture recovery Inbox.
+_Avoid_: Inbox, My Work as Primary Navigation, Team Browser
+
 **Timeline**:
 The chronological stream of all confirmed Entries — the user's full operational memory.
 _Avoid_: Feed, History, Log
@@ -313,7 +317,7 @@ One requested or intended piece of work on a Backlog. A Backlog Item can later b
 _Avoid_: Task, Job, Ticket
 
 **Backlog Evidence**:
-One or more confirmed Entries attached to a specific Backlog Item to show what happened. Adding Backlog Evidence does not by itself mark the Backlog Item done or send it for approval; completion/submission is a separate explicit user action.
+One or more confirmed Entries attached to a specific Backlog Item to show what happened. Evidence is not a separate evidence-only text object: it is a normal Entry plus a link to the Backlog Item, Claim, and Approval flow. Adding Backlog Evidence does not by itself mark the Backlog Item done or send it for approval; completion/submission is a separate explicit user action.
 _Avoid_: Auto-Complete, Hidden Approval, Evidence Object
 
 **Claim**:
@@ -348,6 +352,10 @@ _Avoid_: Team Setup, Team Edit, Admin Settings
 The Team Owner hub for day-to-day Team work. Team Home puts Needs Review first, with lightweight access to creating Backlog Items and editing Teams without hiding those actions in the burger menu.
 _Avoid_: Team Setup, Admin Dashboard, Settings-only View
 
+**Team Page**:
+The main work surface for one Team Context. A Team Page owns Team-scoped capture, Backlog work, and Team Timeline in one place: current/claimable work first, the Capture Composer scoped to that Team, then the Team Timeline. Captures started from the Team Page save to the Team Timeline without asking the user to choose a destination. Captures started from a specific Backlog Item save as evidence for that Backlog Item and also appear in the Team Timeline.
+_Avoid_: Ambiguous Team Picker, Separate Evidence Form, Team-Only Capture App
+
 **My Work View**:
 The Team Member-facing surface for doing work across all Teams they belong to: claimed/in-progress items first, open Backlog Items next, and submitted/done history after that. Items retain their Team context internally and may show a small Team label when useful.
 _Avoid_: Child View, Employee View, Single-Team Work Screen
@@ -365,7 +373,7 @@ The Team-level write policy for shared Team data. High Trust Teams allow Team Me
 _Avoid_: Permission Matrix, Product Mode, Role Explosion
 
 **Team Timeline**:
-The confirmed Entry stream for a Team Context. In High Trust Teams, the Team Timeline is shared operational memory that any Team Member may contribute to when the information could help the Team later. In Low Trust and Family-style Teams, the Team Timeline is primarily owner-published guidance, instructions, and context for workers; Team Members contribute through Backlog Evidence rather than freeform Timeline Entries.
+The confirmed Entry stream for a Team Context. Team Timeline is Entry-first: freeform Team capture creates a Team-scoped Entry, and Backlog Evidence creates a Team-scoped Entry linked to a Backlog Item, Claim, and Approval flow. The Timeline may decorate Entries with derived labels such as submitted, approved, or needs more evidence from Claim/Approval state, but V1 should avoid a separate Team Timeline Event feed unless real use proves Entries cannot carry the history. In High Trust Teams, the Team Timeline is shared operational memory that any Team Member may contribute to when the information could help the Team later. In Low Trust and Family-style Teams, the Team Timeline is primarily owner-published guidance, instructions, and context for workers; Team Members contribute through Backlog Evidence rather than freeform Timeline Entries.
 _Avoid_: Chat, Feed, Worker Drafts, Approval Queue
 
 **Team Template**:
