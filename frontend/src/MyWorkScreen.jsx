@@ -130,7 +130,7 @@ export function MyWorkScreen({ onBack }) {
     }
   };
 
-  const submitItem = async (item, evidenceText, attachments = []) => {
+  const submitItem = async (item, evidenceText, attachments = [], contextClues = {}) => {
     setBusyItemId(item.id);
     setError(null);
     try {
@@ -145,6 +145,9 @@ export function MyWorkScreen({ onBack }) {
           attachments,
         });
         let entry = await dbService.confirmEntry(entryId, {
+          locations: contextClues.locations || [],
+          contacts: contextClues.contacts || [],
+          tags: contextClues.tags || [],
           workContexts: contextSnapshot ? [contextSnapshot] : [],
         });
         try {

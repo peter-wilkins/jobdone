@@ -1,7 +1,14 @@
+import { useEffect, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
+import { CaptureContextControls } from './CaptureContextControls';
 import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { evidenceTextForEntry, suggestEvidenceEntries } from './services/evidenceSuggestionService';
 import { usePhotoAttachments } from './services/photoAttachmentHooks';
+import {
+  buildTeamCaptureCandidates,
+  runTeamCapturePreExtraction,
+  selectAutoAttachedContextClues,
+} from './services/teamCaptureExtractionService';
 import {
   itemPointsEnabled,
   itemUsesManualApproval,
@@ -10,7 +17,20 @@ import {
   teamLabel,
 } from './services/teamWorkItemService';
 
-export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntries, onSubmit, busy }) {
+export function WorkItem({
+  item,
+  pointsEnabled,
+  usesManualApproval,
+  recentEntries,
+  onSubmit,
+  busy,
+  contacts = [],
+  locations = [],
+  tags = [],
+  team = null,
+  userId = '',
+  enableContextControls = false,
+}) {
   const request = item.approval_request || {};
   const rowPointsEnabled = itemPointsEnabled(item, pointsEnabled);
   const rowUsesManualApproval = itemUsesManualApproval(item, usesManualApproval);
@@ -20,6 +40,40 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
     text: evidenceTextForEntry(entry),
   }));
   const evidencePhotos = usePhotoAttachments();
+  const [evidenceText, setEvidenceText] = useState('');
+  const [candidates, setCandidates] = useState({ contacts: [], locations: [], tags: [] });
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [locationPanelOpen, setLocationPanelOpen] = useState(false);
+  const [contactPanelOpen, setContactPanelOpen] = useState(false);
+
+  useEffect(() => {
+    const nextCandidates = buildTeamCaptureCandidates({
+      contacts,
+      locations,
+      tags,
+      team,
+      backlogItems: [item],
+    });
+    const preExtraction = runTeamCapturePreExtraction({
+      captureText: evidenceText,
+      candidates: nextCandidates,
+      userId,
+    });
+    const suggested = selectAutoAttachedContextClues({ preExtraction, candidates: nextCandidates });
+    setCandidates(nextCandidates);
+    setSelectedLocation(current => current || suggested.locations[0] || null);
+    setSelectedContact(current => current || suggested.contacts[0] || null);
+  }, [contacts, evidenceText, item, locations, tags, team, userId]);
+
+  const resetEvidenceCapture = () => {
+    evidencePhotos.reset();
+    setEvidenceText('');
+    setSelectedLocation(null);
+    setSelectedContact(null);
+    setLocationPanelOpen(false);
+    setContactPanelOpen(false);
+  };
 
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
@@ -48,6 +102,36 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
           rows={4}
           suggestions={composerSuggestions}
           suggestionLabel="Possible evidence"
+          toolSlot={enableContextControls ? (
+            <CaptureContextControls
+              locationText={selectedLocation?.label || selectedLocation?.displayName || ''}
+              locationPanelOpen={locationPanelOpen}
+              locationCandidates={candidates.locations || []}
+              onToggleLocation={() => setLocationPanelOpen(open => !open)}
+              onLocationTextChange={(nextText) => setSelectedLocation(nextText ? {
+                id: null,
+                label: nextText,
+                displayName: nextText,
+                placeText: nextText,
+              } : null)}
+              onRemoveLocation={() => setSelectedLocation(null)}
+              onSelectLocationCandidate={(candidate) => {
+                setSelectedLocation(candidate);
+                setLocationPanelOpen(false);
+              }}
+              selectedContact={selectedContact}
+              contactPanelOpen={contactPanelOpen}
+              contactCandidates={candidates.contacts || []}
+              contactPickerSupported={false}
+              onOpenContact={() => setContactPanelOpen(true)}
+              onCloseContact={() => setContactPanelOpen(false)}
+              onRemoveContact={() => setSelectedContact(null)}
+              onSelectContactCandidate={(candidate) => {
+                setSelectedContact(candidate);
+                setContactPanelOpen(false);
+              }}
+            />
+          ) : null}
           attachmentSlot={(
             <PhotoAttachmentControls
               attachments={evidencePhotos.attachments}
@@ -57,8 +141,13 @@ export function WorkItem({ item, pointsEnabled, usesManualApproval, recentEntrie
               disabled={busy}
             />
           )}
-          onConfirm={({ text, attachments }) => onSubmit(item, text, attachments).then(() => evidencePhotos.reset())}
-          onReject={() => evidencePhotos.reset()}
+          onTextChange={setEvidenceText}
+          onConfirm={({ text, attachments }) => onSubmit(item, text, attachments, {
+            locations: selectedLocation ? [selectedLocation] : [],
+            contacts: selectedContact ? [selectedContact] : [],
+            tags: [],
+          }).then(resetEvidenceCapture)}
+          onReject={resetEvidenceCapture}
         />
       )}
     </div>

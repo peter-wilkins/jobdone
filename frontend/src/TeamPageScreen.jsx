@@ -116,6 +116,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [teamSearchText, setTeamSearchText] = useState('');
   const [teamCaptureText, setTeamCaptureText] = useState('');
   const [teamCaptureCandidates, setTeamCaptureCandidates] = useState({ contacts: [], locations: [], tags: [] });
+  const [localContextCandidates, setLocalContextCandidates] = useState({ contacts: [], locations: [], tags: [] });
   const [teamCaptureLocation, setTeamCaptureLocation] = useState(null);
   const [teamCaptureContact, setTeamCaptureContact] = useState(null);
   const [teamCaptureLocationPanelOpen, setTeamCaptureLocationPanelOpen] = useState(false);
@@ -256,6 +257,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           dbService.getLocations('confirmed'),
           dbService.getTags('confirmed'),
         ]);
+        setLocalContextCandidates({ contacts: localContacts, locations: localLocations, tags: localTags });
         const candidates = buildTeamCaptureCandidates({
           contacts: localContacts,
           locations: localLocations,
@@ -350,7 +352,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
     }
   };
 
-  const submitItem = async (item, evidenceText, attachments = []) => {
+  const submitItem = async (item, evidenceText, attachments = [], contextClues = {}) => {
     setBusyItemId(item.id);
     setError(null);
     try {
@@ -365,6 +367,9 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
           attachments,
         });
         let entry = await dbService.confirmEntry(entryId, {
+          locations: contextClues.locations || [],
+          contacts: contextClues.contacts || [],
+          tags: contextClues.tags || [],
           workContexts: contextSnapshot ? [contextSnapshot] : [],
         });
         try {
@@ -746,6 +751,12 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
                     pointsEnabled={pointsEnabled}
                     usesManualApproval={usesManualApproval}
                     recentEntries={recentEntries}
+                    contacts={localContextCandidates.contacts}
+                    locations={localContextCandidates.locations}
+                    tags={localContextCandidates.tags}
+                    team={team}
+                    userId={effectiveUser?.id || ''}
+                    enableContextControls
                     busy={busyItemId === item.id}
                     onSubmit={submitItem}
                   />
