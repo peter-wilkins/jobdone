@@ -5,6 +5,7 @@ import {
   loadCachedReadableTeams,
   mergeReadableTeams,
   saveCachedReadableTeams,
+  shouldHoldTeamScreenForAuth,
   teamIdFromScreen,
   teamScreenId,
 } from './teamNavigationService.js';
@@ -23,6 +24,33 @@ test('Team navigation encodes readable Team links', () => {
   assert.equal(teamScreenId(teamId), 'team/team%2Fslash%20and%20space');
   assert.equal(teamIdFromScreen('team/team%2Fslash%20and%20space'), teamId);
   assert.equal(teamIdFromScreen('my-work'), null);
+});
+
+test('Team route waits for auth restore before showing logged-out UI', () => {
+  assert.equal(shouldHoldTeamScreenForAuth({
+    screen: teamScreenId('team-1'),
+    authReady: false,
+    user: null,
+    cachedUser: null,
+  }), true);
+  assert.equal(shouldHoldTeamScreenForAuth({
+    screen: teamScreenId('team-1'),
+    authReady: true,
+    user: null,
+    cachedUser: null,
+  }), false);
+  assert.equal(shouldHoldTeamScreenForAuth({
+    screen: teamScreenId('team-1'),
+    authReady: false,
+    user: { id: 'user-1' },
+    cachedUser: null,
+  }), false);
+  assert.equal(shouldHoldTeamScreenForAuth({
+    screen: 'home',
+    authReady: false,
+    user: null,
+    cachedUser: null,
+  }), false);
 });
 
 test('Team menu merges owned and member Teams without duplicates', () => {

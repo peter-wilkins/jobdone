@@ -30,6 +30,7 @@ import {
   loadCachedReadableTeams,
   mergeReadableTeams,
   saveCachedReadableTeams,
+  shouldHoldTeamScreenForAuth,
   teamIdFromScreen,
 } from './services/teamNavigationService';
 
@@ -396,8 +397,27 @@ function App() {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamReviewScreen onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
-  if (teamIdFromScreen(screen)) {
-    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamPageScreen teamId={teamIdFromScreen(screen)} onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
+  const activeTeamId = teamIdFromScreen(screen);
+  if (activeTeamId) {
+    if (shouldHoldTeamScreenForAuth({
+      screen,
+      authReady,
+      user,
+      cachedUser: authService.getUser(),
+    })) {
+      return (
+        <>
+          {environmentBanner}
+          {crashStatusBar}
+          {authStatusBar}
+          {globalMenu}
+          <div className="min-h-screen bg-white flex items-center justify-center px-4">
+            <p className="text-sm text-gray-400">Checking sign-in...</p>
+          </div>
+        </>
+      );
+    }
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamPageScreen teamId={activeTeamId} onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
   }
 
   if (screen === 'action-inbox' || screen === 'my-work' || screen === 'team-work') {

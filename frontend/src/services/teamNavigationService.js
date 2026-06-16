@@ -22,6 +22,12 @@ export function teamIdFromScreen(screen) {
   }
 }
 
+export function shouldHoldTeamScreenForAuth({ screen, authReady = false, user = null, cachedUser = null } = {}) {
+  if (!teamIdFromScreen(screen)) return false;
+  if (authReady) return false;
+  return !user?.id && !cachedUser?.id;
+}
+
 export function mergeReadableTeams(ownedTeams = [], memberTeams = []) {
   const byId = new Map();
   for (const team of ownedTeams || []) {
