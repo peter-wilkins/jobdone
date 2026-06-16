@@ -184,6 +184,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
   const hasManagedTeam = Boolean(team.id);
   const selectedOwnedTeamId = hasManagedTeam ? team.id : selectedTeamId;
   const editorTitle = isCreatingNewTeam || !hasManagedTeam ? 'Create Team' : `Edit ${team.name}`;
+  const firstReadableTeam = team?.id ? team : ownedTeams[0] || memberTeams[0]?.team || null;
 
   const startCreateTeam = () => {
     setTeam(DEFAULT_TEAM);
@@ -409,7 +410,7 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
             </h2>
             {user ? (
               <p className="mt-2 text-sm leading-5 text-gray-500">
-                You can do Team work from Action Inbox, but only the Team Owner can change settings, invites, Backlog Items, and approvals.
+                You can do Team work from the Team page, but only the Team Owner can change settings, invites, Backlog Items, and approvals.
               </p>
             ) : (
               <p className="mt-2 text-sm leading-5 text-gray-500">
@@ -418,10 +419,10 @@ export function TeamSetupScreen({ onBack, onNavigate, onTeamsChanged, user }) {
             )}
             <button
               type="button"
-              onClick={() => onNavigate?.(user ? 'action-inbox' : 'login')}
+              onClick={() => onNavigate?.(user && firstReadableTeam?.id ? teamScreenId(firstReadableTeam.id) : 'login')}
               className="mt-4 w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800"
             >
-              {user ? 'Go to Action Inbox' : 'Log in'}
+              {user ? 'Open Team' : 'Log in'}
             </button>
           </section>
         ) : (

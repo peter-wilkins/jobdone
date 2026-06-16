@@ -9,7 +9,6 @@ import { ShareTargetScreen } from './ShareTargetScreen';
 import { TeamSetupScreen } from './TeamSetupScreen';
 import { TeamReviewScreen } from './TeamReviewScreen';
 import { TeamPageScreen } from './TeamPageScreen';
-import { MyWorkScreen } from './MyWorkScreen';
 import { InviteScreen } from './InviteScreen';
 import { GlobalMenu } from './GlobalMenu';
 import { OnboardingScreen } from './OnboardingScreen';
@@ -41,8 +40,8 @@ function screenFromLocation() {
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
   if (hash.startsWith('team/')) return hash;
-  if (hash === 'my-work' || hash === 'team-work') return 'action-inbox';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'action-inbox', 'invite'].includes(hash)
+  if (hash === 'my-work' || hash === 'team-work' || hash === 'action-inbox') return 'home';
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'invite'].includes(hash)
     ? hash
     : 'home';
 }
@@ -418,10 +417,6 @@ function App() {
       );
     }
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<TeamPageScreen teamId={activeTeamId} onBack={() => navigateTo('home')} onNavigate={navigateTo} user={user} /></>;
-  }
-
-  if (screen === 'action-inbox' || screen === 'my-work' || screen === 'team-work') {
-    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<MyWorkScreen onBack={() => navigateTo('home')} /></>;
   }
 
   if (screen === 'invite') {

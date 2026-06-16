@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiService } from './services/apiService';
+import { teamScreenId } from './services/teamNavigationService';
 
 function inviteTokenFromLocation() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] || window.location.search);
@@ -14,8 +15,10 @@ export function InviteScreen({ onBack, onNavigate, user }) {
   const [error, setError] = useState(null);
   const acceptedRef = useRef(false);
 
-  function destinationFromInvite(rawDestination = 'my-work') {
-    if (rawDestination === 'my-work' || rawDestination === 'team-work') return 'action-inbox';
+  function destinationFromInvite(result = {}) {
+    if (result.team?.id) return teamScreenId(result.team.id);
+    const rawDestination = result.destination || 'home';
+    if (rawDestination === 'my-work' || rawDestination === 'team-work' || rawDestination === 'action-inbox') return 'home';
     return rawDestination;
   }
 
@@ -46,7 +49,7 @@ export function InviteScreen({ onBack, onNavigate, user }) {
     setError(null);
     try {
       const result = await apiService.acceptTeamInvite(token);
-      onNavigate?.(destinationFromInvite(result.destination));
+      onNavigate?.(destinationFromInvite(result));
     } catch (err) {
       acceptedRef.current = false;
       setError(err.message || 'Could not accept invite');

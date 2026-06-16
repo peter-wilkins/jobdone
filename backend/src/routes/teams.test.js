@@ -82,7 +82,8 @@ async function buildApp(deps = {}) {
       message: token === 'token-1' ? undefined : 'This invite is no longer available',
     }),
     acceptTeamInvite: async (token) => ({
-      destination: 'my-work',
+      destination: 'team',
+      team: { id: 'team-1', name: 'Dogfood Team' },
       alreadyAccepted: token === 'accepted-token',
     }),
     ...deps,
@@ -638,7 +639,7 @@ describe('Team setup routes', () => {
       requireAuth: async () => ({ email: 'worker@example.com' }),
       acceptTeamInvite: async (token, context) => {
         acceptArgs = { token, context };
-        return { destination: 'my-work', alreadyAccepted: token === 'accepted-token' };
+        return { destination: 'team', team: { id: 'team-1', name: 'Dogfood Team' }, alreadyAccepted: token === 'accepted-token' };
       },
     });
 
@@ -649,7 +650,8 @@ describe('Team setup routes', () => {
     const acceptRes = await app.inject({ method: 'POST', url: '/api/teams/invites/accepted-token/accept' });
     assert.equal(acceptRes.statusCode, 200);
     assert.deepEqual(acceptArgs, { token: 'accepted-token', context: { userEmail: 'worker@example.com' } });
-    assert.equal(JSON.parse(acceptRes.body).destination, 'my-work');
+    assert.equal(JSON.parse(acceptRes.body).destination, 'team');
+    assert.equal(JSON.parse(acceptRes.body).team.id, 'team-1');
     assert.equal(JSON.parse(acceptRes.body).alreadyAccepted, true);
   });
 

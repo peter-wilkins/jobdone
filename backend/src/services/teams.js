@@ -945,8 +945,9 @@ export async function acceptTeamInvite(token, { db = jobdoneDb, userEmail } = {}
     error.statusCode = 404;
     throw error;
   }
+  const team = await teamById(db, invite.team_id);
   if (invite.status === 'accepted' && invite.accepted_member_id) {
-    return { destination: 'my-work', alreadyAccepted: true };
+    return { destination: 'team', team: presentTeam(team), alreadyAccepted: true };
   }
 
   const timestamp = nowIso();
@@ -965,9 +966,10 @@ export async function acceptTeamInvite(token, { db = jobdoneDb, userEmail } = {}
     .single();
   if (inviteError) throw inviteError;
   return {
-    destination: 'my-work',
+    destination: 'team',
     alreadyAccepted: invite.status === 'accepted',
     invite: presentTeamInvite(acceptedInvite),
+    team: presentTeam(team),
     teamMember: presentTeamMember(member),
   };
 }
