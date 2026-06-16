@@ -328,7 +328,7 @@ export function HomeScreen({
     }
 
     try {
-      const state = await apiService.getMyWorkState();
+      const state = await apiService.getTeamWorkState();
       const teams = state.teams || (state.team ? [state.team] : []);
       const claimedItems = (state.inProgressItems || [])
         .filter(item => ['claimed', 'submitted', 'needs_more_evidence'].includes(item.status))

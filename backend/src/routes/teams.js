@@ -9,7 +9,7 @@ import {
   deleteOpenBacklogItem,
   getTeamReviewState,
   getTeamSetupState,
-  getMyWorkState,
+  getTeamWorkState,
   inspectTeamInvite,
   resendTeamInvite,
   revokeTeamInvite,
@@ -38,7 +38,7 @@ function teamIdFromRequest(request) {
 export async function registerTeamRoutes(fastify, deps = {}) {
   const getSetupState = deps.getTeamSetupState || getTeamSetupState;
   const getReviewState = deps.getTeamReviewState || getTeamReviewState;
-  const getWorkState = deps.getMyWorkState || deps.getTeamWorkState || getMyWorkState;
+  const getWorkState = deps.getTeamWorkState || getTeamWorkState;
   const updateTeam = deps.updateTeamSettings || updateTeamSettings;
   const createItem = deps.createBacklogItem || createBacklogItem;
   const createAndClaimItem = deps.createAndClaimBacklogItem || createAndClaimBacklogItem;
@@ -82,16 +82,6 @@ export async function registerTeamRoutes(fastify, deps = {}) {
       const user = await maybeAuth(request, reply);
       if (reply.sent) return reply;
       return await getReviewState({ ownerEmail: user?.email || null });
-    } catch (error) {
-      return errorReply(reply, error);
-    }
-  });
-
-  fastify.get('/api/my-work', async (request, reply) => {
-    try {
-      const user = await maybeAuth(request, reply);
-      if (reply.sent) return reply;
-      return await getWorkState({ userEmail: user?.email || null });
     } catch (error) {
       return errorReply(reply, error);
     }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createBacklogItem,
-  getMyWorkState,
+  getTeamWorkState,
   presentTeam,
   presentTeamInvite,
   validateTeamInput,
@@ -91,7 +91,7 @@ test('Team Work state filters signed-in work to the selected Team', async () => 
     },
   };
 
-  const state = await getMyWorkState({ db, userEmail: 'worker@example.com', teamId: 'team-2' });
+  const state = await getTeamWorkState({ db, userEmail: 'worker@example.com', teamId: 'team-2' });
 
   assert.deepEqual(backlogTeamFilter, ['team-2']);
   assert.equal(state.team.id, 'team-2');

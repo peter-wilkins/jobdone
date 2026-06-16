@@ -445,17 +445,6 @@ export class APIService {
     return response.json();
   }
 
-  async getMyWorkState() {
-    const response = await apiFetch(`${API_BASE_URL}/api/my-work`, {
-      headers: authHeader(),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}: Failed to load Action Inbox`);
-    }
-    return response.json();
-  }
-
   async getTeamWorkState(teamId) {
     const query = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
     const response = await apiFetch(`${API_BASE_URL}/api/teams/work${query}`, {

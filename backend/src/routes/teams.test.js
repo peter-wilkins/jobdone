@@ -12,7 +12,7 @@ async function buildApp(deps = {}) {
       openBacklogItems: [],
       submittedApprovalRequests: [],
     }),
-    getMyWorkState: async () => ({
+    getTeamWorkState: async () => ({
       team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false, approval_mode: 'auto' },
       inProgressItems: [],
       openBacklogItems: [],
@@ -180,11 +180,11 @@ describe('Team setup routes', () => {
     assert.equal(JSON.parse(res.body).error, 'Only the Team Owner can manage Team Setup.');
   });
 
-  test('returns team worker queue sections', async () => {
+  test('returns Team work context sections', async () => {
     let workContext;
     const app = await buildApp({
       optionalAuth: async () => ({ email: 'worker@example.com' }),
-      getMyWorkState: async (context) => {
+      getTeamWorkState: async (context) => {
         workContext = context;
         return {
           team: { id: 'team-1', name: 'Dogfood Team', template: 'high_trust', points_enabled: false },
@@ -195,7 +195,7 @@ describe('Team setup routes', () => {
       },
     });
 
-    const res = await app.inject({ method: 'GET', url: '/api/my-work' });
+    const res = await app.inject({ method: 'GET', url: '/api/teams/work' });
 
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
@@ -205,10 +205,10 @@ describe('Team setup routes', () => {
     assert.equal(body.openBacklogItems[0].team.name, 'Dogfood Team');
     assert.equal(body.approvedItems[0].status, 'approved');
     assert.equal(body.approvedItems[0].team.name, 'Dogfood Team');
-    assert.deepEqual(workContext, { userEmail: 'worker@example.com' });
+    assert.deepEqual(workContext, { userEmail: 'worker@example.com', teamId: null });
   });
 
-  test('keeps the old Team Work route as a compatibility alias', async () => {
+  test('returns empty Team work context for anonymous users without fallback data', async () => {
     const app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: '/api/teams/work' });
@@ -221,7 +221,7 @@ describe('Team setup routes', () => {
     let workContext;
     const app = await buildApp({
       optionalAuth: async () => ({ email: 'worker@example.com' }),
-      getMyWorkState: async (context) => {
+      getTeamWorkState: async (context) => {
         workContext = context;
         return {
           team: { id: context.teamId, name: 'Foo Team', template: 'high_trust', points_enabled: false },

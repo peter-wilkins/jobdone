@@ -629,7 +629,7 @@ export function isBacklogItemClaimedByEmail(row = {}, userEmail = null) {
   return normalizedEmail(row.claimed_by_email) === email;
 }
 
-export async function getMyWorkState({ db = jobdoneDb, teamId = null, userEmail = null } = {}) {
+export async function getTeamWorkState({ db = jobdoneDb, teamId = null, userEmail = null } = {}) {
   if (!db) return { team: null, teams: [], inProgressItems: [], openBacklogItems: [], approvedItems: [] };
   const teams = userEmail ? await teamsForWorkEmail(db, userEmail) : [await ensureDogfoodTeam(db)];
   const visibleTeams = teamId
