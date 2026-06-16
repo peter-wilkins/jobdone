@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
+import { CaptureContextControls } from './CaptureContextControls';
 import { EntryContextPills } from './EntryContextPills';
 import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { apiService } from './services/apiService';
@@ -113,6 +114,12 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
   const [busyApprovalId, setBusyApprovalId] = useState(null);
   const [claimErrors, setClaimErrors] = useState({});
   const [teamSearchText, setTeamSearchText] = useState('');
+  const [teamCaptureText, setTeamCaptureText] = useState('');
+  const [teamCaptureCandidates, setTeamCaptureCandidates] = useState({ contacts: [], locations: [], tags: [] });
+  const [teamCaptureLocation, setTeamCaptureLocation] = useState(null);
+  const [teamCaptureContact, setTeamCaptureContact] = useState(null);
+  const [teamCaptureLocationPanelOpen, setTeamCaptureLocationPanelOpen] = useState(false);
+  const [teamCaptureContactPanelOpen, setTeamCaptureContactPanelOpen] = useState(false);
   const teamCapturePhotos = usePhotoAttachments();
   const [isLoading, setIsLoading] = useState(() => !initialCache);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -238,6 +245,43 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       document.removeEventListener('visibilitychange', refreshIfVisible);
     };
   }, [loadRecentEntries, loadTeamState]);
+
+  useEffect(() => {
+    if (!team?.id) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const [localContacts, localLocations, localTags] = await Promise.all([
+          dbService.getContacts('confirmed'),
+          dbService.getLocations('confirmed'),
+          dbService.getTags('confirmed'),
+        ]);
+        const candidates = buildTeamCaptureCandidates({
+          contacts: localContacts,
+          locations: localLocations,
+          tags: localTags,
+          team,
+          backlogItems: [...inProgressItems, ...openBacklogItems],
+        });
+        const preExtraction = runTeamCapturePreExtraction({
+          captureText: teamCaptureText,
+          candidates,
+          userId: effectiveUser?.id || '',
+        });
+        const suggested = selectAutoAttachedContextClues({ preExtraction, candidates });
+        if (cancelled) return;
+        setTeamCaptureCandidates(candidates);
+        setTeamCaptureLocation(current => current || suggested.locations[0] || null);
+        setTeamCaptureContact(current => current || suggested.contacts[0] || null);
+      } catch (err) {
+        console.warn('[Team] Team capture clue suggestions unavailable:', err);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [effectiveUser?.id, inProgressItems, openBacklogItems, team, teamCaptureText]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -437,10 +481,15 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       } catch (extractionErr) {
         console.warn('[Team] Team capture extraction failed, saving without auto-attached clues:', extractionErr);
       }
-      const confirmedEntry = await dbService.confirmEntry(entryId, {
-        locations: extractedClues.locations,
-        contacts: extractedClues.contacts,
+      const reviewedClues = {
+        locations: teamCaptureLocation ? [teamCaptureLocation] : extractedClues.locations,
+        contacts: teamCaptureContact ? [teamCaptureContact] : extractedClues.contacts,
         tags: extractedClues.tags,
+      };
+      const confirmedEntry = await dbService.confirmEntry(entryId, {
+        locations: reviewedClues.locations,
+        contacts: reviewedClues.contacts,
+        tags: reviewedClues.tags,
         workContexts: [teamSnapshot],
       });
       entry = { ...entry, ...confirmedEntry };
@@ -460,6 +509,11 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
       setRecentEntries(previous => [entry, ...previous.filter(item => item.id !== entry.id)].slice(0, 50));
       await loadRecentEntries();
       teamCapturePhotos.reset();
+      setTeamCaptureText('');
+      setTeamCaptureLocation(null);
+      setTeamCaptureContact(null);
+      setTeamCaptureLocationPanelOpen(false);
+      setTeamCaptureContactPanelOpen(false);
       return entry;
     } catch (err) {
       throw new Error(err?.message || 'Could not save Team entry', { cause: err });
@@ -624,6 +678,36 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
                   requireText={false}
                   attachments={teamCapturePhotos.attachments}
                   rows={4}
+                  toolSlot={(
+                    <CaptureContextControls
+                      locationText={teamCaptureLocation?.label || teamCaptureLocation?.displayName || ''}
+                      locationPanelOpen={teamCaptureLocationPanelOpen}
+                      locationCandidates={teamCaptureCandidates.locations || []}
+                      onToggleLocation={() => setTeamCaptureLocationPanelOpen(open => !open)}
+                      onLocationTextChange={(nextText) => setTeamCaptureLocation(nextText ? {
+                        id: null,
+                        label: nextText,
+                        displayName: nextText,
+                        placeText: nextText,
+                      } : null)}
+                      onRemoveLocation={() => setTeamCaptureLocation(null)}
+                      onSelectLocationCandidate={(candidate) => {
+                        setTeamCaptureLocation(candidate);
+                        setTeamCaptureLocationPanelOpen(false);
+                      }}
+                      selectedContact={teamCaptureContact}
+                      contactPanelOpen={teamCaptureContactPanelOpen}
+                      contactCandidates={teamCaptureCandidates.contacts || []}
+                      contactPickerSupported={false}
+                      onOpenContact={() => setTeamCaptureContactPanelOpen(true)}
+                      onCloseContact={() => setTeamCaptureContactPanelOpen(false)}
+                      onRemoveContact={() => setTeamCaptureContact(null)}
+                      onSelectContactCandidate={(candidate) => {
+                        setTeamCaptureContact(candidate);
+                        setTeamCaptureContactPanelOpen(false);
+                      }}
+                    />
+                  )}
                   attachmentSlot={(
                     <PhotoAttachmentControls
                       attachments={teamCapturePhotos.attachments}
@@ -635,6 +719,7 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
                   )}
                   onConfirm={saveTeamCapture}
                   onReject={() => teamCapturePhotos.reset()}
+                  onTextChange={setTeamCaptureText}
                 />
               </section>
             ) : (

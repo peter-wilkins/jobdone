@@ -9,6 +9,7 @@ import { locationClueService } from './services/locationClueService';
 import { useOutsideDismiss } from './services/outsideDismissService';
 import { recallCoverageFromReplicaState, recallLocalEntriesWithCoverage } from './services/localRecallService';
 import { selectPrivateTimelineEntries } from './services/teamPageService';
+import { CaptureContextControls } from './CaptureContextControls';
 import {
   contactDraftFromManualInput,
   isContactPickerSupported,
@@ -1832,303 +1833,75 @@ export function HomeScreen({
                   )}
                 </div>
               )}
-              <div className="mb-3 flex flex-wrap gap-2">
-                {reviewLocations[entry.id] ? (
-                  <span className="inline-flex max-w-full items-center rounded bg-emerald-50 text-sm font-medium text-emerald-700" data-review-dismiss-root="location-trigger">
-                    <button
-                      type="button"
-                      onClick={() => toggleLocationPanel(entry.id)}
-                      className="min-w-0 px-2.5 py-1 text-left"
-                    >
-                      <span className="block truncate">{reviewLocations[entry.id]}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReviewLocations(prev => ({ ...prev, [entry.id]: '' }));
-                        setReviewLocationDrafts(prev => {
-                          const next = { ...prev };
-                          delete next[entry.id];
-                          return next;
-                        });
-                        persistReviewDraft(entry.id, {
-                          draftReviewLocationText: '',
-                          draftReviewLocationDraft: null,
-                        });
-                      }}
-                      className="px-2 py-1 text-emerald-500"
-                      aria-label="Remove Location"
-                    >
-                      x
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    data-review-dismiss-root="location-trigger"
-                    onClick={() => toggleLocationPanel(entry.id)}
-                    className="inline-flex items-center rounded border border-dashed border-emerald-300 px-2.5 py-1 text-sm text-emerald-700"
-                  >
-                    + Location
-                  </button>
-                )}
-                {selectedContact ? (
-                  <button
-                    type="button"
-                    data-review-dismiss-root="contact-trigger"
-                    onClick={() => {
-                      openContactCorrection(entry.id);
-                    }}
-                    className="inline-flex max-w-full items-center rounded bg-violet-50 px-2.5 py-1 text-sm font-medium text-violet-700"
-                    >
-                      <span className="truncate">{selectedContact.label}</span>
-                    </button>
-                ) : (
-                  <button
-                    type="button"
-                    data-review-dismiss-root="contact-trigger"
-                    onClick={() => openContactCorrection(entry.id)}
-                    className="inline-flex items-center rounded border border-dashed border-violet-300 px-2.5 py-1 text-sm text-violet-700"
-                  >
-                    + Contact
-                  </button>
-                )}
-              </div>
-
-              {locationPanelOpen && (
-                <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/30 p-3" data-review-dismiss-root="location-panel">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-emerald-900">Location</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleLocationPanel(entry.id)}
-                      className="text-sm text-emerald-700 underline"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <label className="mt-2 block">
-                    <input
-                      type="text"
-                      value={reviewLocations[entry.id] || ''}
-                      onChange={(event) => {
-                        const nextText = event.target.value;
-                        setReviewLocations(prev => ({ ...prev, [entry.id]: nextText }));
-                        setReviewLocationDrafts(prev => {
-                          const next = { ...prev };
-                          delete next[entry.id];
-                          return next;
-                        });
-                        persistReviewDraft(entry.id, {
-                          draftReviewLocationText: nextText,
-                          draftReviewLocationDraft: null,
-                        });
-                      }}
-                      placeholder="+ Location"
-                      className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500"
-                    />
-                  </label>
-                  {locationCandidates.length > 0 && (
-                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                      {locationCandidates.map(candidate => (
-                        <div
-                          key={candidate.id}
-                          className="shrink-0 rounded border border-emerald-200 bg-white px-2.5 py-1 text-emerald-700"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const draft = locationDraftFromCandidate(candidate);
-                              setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
-                              setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: draft }));
-                              setReviewLocationPanels(prev => ({ ...prev, [entry.id]: false }));
-                              persistReviewDraft(entry.id, {
-                                draftReviewLocationText: candidate.label,
-                                draftReviewLocationDraft: draft,
-                              });
-                            }}
-                            className="block max-w-56 text-left text-sm font-medium"
-                          >
-                            <span className="block truncate">{candidate.label}</span>
-                          </button>
-                          {renderCandidateSource(entry.id, 'location', candidate, 'text-emerald-600')}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {canStrengthenSelectedLocation && (
-                    <div className="mt-2 rounded border border-emerald-100 bg-emerald-50 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-emerald-900">Are you here now?</p>
-                        <button
-                          type="button"
-                          onClick={() => handleStrengthenLocationHere(entry)}
-                          className="shrink-0 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 transition"
-                        >
-                          Add map pin
-                        </button>
-                      </div>
-                      <p className="mt-1 text-xs text-emerald-700">This will save today&apos;s location to {selectedLocationDraft.displayName} when you confirm.</p>
-                    </div>
-                  )}
-                  {!reviewLocations[entry.id] && (
-                    <button
-                      type="button"
-                      onClick={() => handleUseCurrentLocation(entry)}
-                      className="mt-2 text-sm text-emerald-700 underline"
-                    >
-                      Use current location for suggestions
-                    </button>
-                  )}
-                  {locationPanelError && (
-                    <p className="mt-2 text-sm text-red-700">{locationPanelError}</p>
-                  )}
-                </div>
-              )}
-
-              {contactPanelOpen && (
-              <div className="mt-3 rounded border border-violet-100 bg-violet-50/30 p-3" data-review-dismiss-root="contact-panel">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-violet-900">Contact</span>
-                    <button
-                      type="button"
-                      onClick={() => resetContactCorrection(entry.id)}
-                      className="text-sm text-violet-700 underline"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  {selectedContact && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReviewContacts(prev => ({ ...prev, [entry.id]: null }));
-                        persistReviewDraft(entry.id, { draftReviewContactId: null });
-                      }}
-                      className="mt-2 text-sm text-violet-700 underline"
-                    >
-                      Remove Contact
-                    </button>
-                  )}
-                  {contactCandidates.length > 0 ? (
-                  <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
-                    {contactCandidates.map(candidate => (
-                      <div
-                        key={candidate.id}
-                        className={`shrink-0 rounded border bg-white px-2.5 py-1 ${
-                          reviewContacts[entry.id] === candidate.id
-                            ? 'border-violet-300 bg-violet-50 text-violet-700'
-                            : 'border-gray-200 text-gray-700'
-                        }`}
-                      >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReviewContacts(prev => ({ ...prev, [entry.id]: candidate.id }));
-                              resetContactCorrection(entry.id);
-                              persistReviewDraft(entry.id, { draftReviewContactId: candidate.id });
-                            }}
-                            className="block max-w-56 text-left text-sm font-medium"
-                          >
-                          <span className="block truncate">{candidate.label}</span>
-                        </button>
-                        {renderCandidateSource(entry.id, 'contact', candidate, 'text-violet-600')}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-1 text-sm text-gray-400">No Contact selected. This is fine if none applies.</p>
-                )}
-                  <div className="mt-3">
-                    <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={contactSearch}
-                          onChange={(event) => handleContactSearchChange(entry.id, event.target.value)}
-                          placeholder="Search saved Contacts"
-                          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
-                        />
-                      </div>
-
-                    {contactOptions.length > 0 && (
-                      <div className="mt-2 max-h-36 overflow-y-auto rounded border border-white bg-white">
-                        {contactOptions.map(candidate => (
-                          <button
-                            key={candidate.id}
-                            type="button"
-                            onClick={() => selectReviewContactCandidate(entry.id, candidate)}
-                            className="block w-full border-b border-gray-100 px-3 py-2 text-left text-sm text-gray-800 last:border-b-0 hover:bg-violet-50"
-                          >
-                            <span className="block font-medium">{candidate.label}</span>
-                            {(candidate.primaryPhone || candidate.primaryEmail) && (
-                              <span className="block text-xs text-gray-400">{candidate.primaryPhone || candidate.primaryEmail}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handlePickNativeContact(entry.id)}
-                        disabled={!isContactPickerSupported()}
-                        className="rounded bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-200 disabled:text-gray-500"
-                      >
-                        Pick from phone
-                      </button>
-                      {!isContactPickerSupported() && (
-                        <span className="self-center text-xs text-gray-500">Phone picker unavailable here.</span>
-                      )}
-                    </div>
-
-                    <div className="mt-3 grid gap-2">
-                      <input
-                        type="text"
-                        value={manualContact.displayName}
-                        onChange={(event) => setReviewManualContacts(prev => ({
-                          ...prev,
-                          [entry.id]: { ...(prev[entry.id] || {}), displayName: event.target.value },
-                        }))}
-                        placeholder="New Contact name"
-                        className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
-                      />
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <input
-                          type="tel"
-                          value={manualContact.phone}
-                          onChange={(event) => setReviewManualContacts(prev => ({
-                            ...prev,
-                            [entry.id]: { ...(prev[entry.id] || {}), phone: event.target.value },
-                          }))}
-                          placeholder="Phone"
-                          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
-                        />
-                        <input
-                          type="email"
-                          value={manualContact.email}
-                          onChange={(event) => setReviewManualContacts(prev => ({
-                            ...prev,
-                            [entry.id]: { ...(prev[entry.id] || {}), email: event.target.value },
-                          }))}
-                          placeholder="Email"
-                          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCreateManualContact(entry.id)}
-                        className="justify-self-start rounded border border-violet-200 bg-white px-3 py-2 text-sm font-medium text-violet-700"
-                      >
-                        Create Contact
-                      </button>
-                    </div>
-                    {contactPanelError && (
-                      <p className="mt-2 text-sm text-red-700">{contactPanelError}</p>
-                    )}
-                  </div>
-                </div>
-              )}
+              <CaptureContextControls
+                locationText={reviewLocations[entry.id] || ''}
+                locationPanelOpen={locationPanelOpen}
+                locationCandidates={locationCandidates}
+                locationError={locationPanelError}
+                canStrengthenLocation={canStrengthenSelectedLocation}
+                selectedLocationName={selectedLocationDraft?.displayName}
+                onToggleLocation={() => toggleLocationPanel(entry.id)}
+                onLocationTextChange={(nextText) => {
+                  setReviewLocations(prev => ({ ...prev, [entry.id]: nextText }));
+                  setReviewLocationDrafts(prev => {
+                    const next = { ...prev };
+                    delete next[entry.id];
+                    return next;
+                  });
+                  persistReviewDraft(entry.id, {
+                    draftReviewLocationText: nextText,
+                    draftReviewLocationDraft: null,
+                  });
+                }}
+                onRemoveLocation={() => {
+                  setReviewLocations(prev => ({ ...prev, [entry.id]: '' }));
+                  setReviewLocationDrafts(prev => {
+                    const next = { ...prev };
+                    delete next[entry.id];
+                    return next;
+                  });
+                  persistReviewDraft(entry.id, {
+                    draftReviewLocationText: '',
+                    draftReviewLocationDraft: null,
+                  });
+                }}
+                onSelectLocationCandidate={(candidate) => {
+                  const draft = locationDraftFromCandidate(candidate);
+                  setReviewLocations(prev => ({ ...prev, [entry.id]: candidate.label }));
+                  setReviewLocationDrafts(prev => ({ ...prev, [entry.id]: draft }));
+                  setReviewLocationPanels(prev => ({ ...prev, [entry.id]: false }));
+                  persistReviewDraft(entry.id, {
+                    draftReviewLocationText: candidate.label,
+                    draftReviewLocationDraft: draft,
+                  });
+                }}
+                onStrengthenLocation={() => handleStrengthenLocationHere(entry)}
+                onUseCurrentLocation={() => handleUseCurrentLocation(entry)}
+                renderLocationCandidateMeta={(candidate) => renderCandidateSource(entry.id, 'location', candidate, 'text-emerald-600')}
+                selectedContact={selectedContact}
+                contactPanelOpen={contactPanelOpen}
+                contactCandidates={contactCandidates}
+                contactOptions={contactOptions}
+                contactSearch={contactSearch}
+                manualContact={manualContact}
+                contactError={contactPanelError}
+                contactPickerSupported={isContactPickerSupported()}
+                onOpenContact={() => openContactCorrection(entry.id)}
+                onCloseContact={() => resetContactCorrection(entry.id)}
+                onRemoveContact={() => {
+                  setReviewContacts(prev => ({ ...prev, [entry.id]: null }));
+                  persistReviewDraft(entry.id, { draftReviewContactId: null });
+                }}
+                onSelectContactCandidate={(candidate) => selectReviewContactCandidate(entry.id, candidate)}
+                onContactSearchChange={(value) => handleContactSearchChange(entry.id, value)}
+                onPickNativeContact={() => handlePickNativeContact(entry.id)}
+                onManualContactChange={(nextManualContact) => setReviewManualContacts(prev => ({
+                  ...prev,
+                  [entry.id]: nextManualContact,
+                }))}
+                onCreateManualContact={() => handleCreateManualContact(entry.id)}
+                renderContactCandidateMeta={(candidate) => renderCandidateSource(entry.id, 'contact', candidate, 'text-violet-600')}
+              />
 
               {showTags && (
               <div className="mt-3">
