@@ -22,7 +22,8 @@ import { runPreExtraction } from './services/preExtractionService';
 import { captureContextService } from './services/captureContextService';
 import { classify } from './services/classifyService';
 import { setAppUpdateGuard } from './services/appUpdateGuardService';
-import { PhotoAttachmentControls, PhotoAttachmentThumb } from './PhotoAttachmentControls';
+import { EntryContextPills } from './EntryContextPills';
+import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import {
   createPendingPhotoAttachmentsFromFiles,
   hasFailedPhotoAttachments,
@@ -1577,19 +1578,6 @@ export function HomeScreen({
   };
 
   const renderEntry = (entry) => {
-    const primaryLocation = Array.isArray(entry.locations) && entry.locations.length > 0
-      ? entry.locations[0]
-      : null;
-    const primaryContact = Array.isArray(entry.contacts) && entry.contacts.length > 0
-      ? entry.contacts[0]
-      : null;
-    const entryTags = Array.isArray(entry.tags) && entry.tags.length > 0
-      ? entry.tags
-      : [];
-    const entryWorkContexts = Array.isArray(entry.workContexts) && entry.workContexts.length > 0
-      ? entry.workContexts
-      : [];
-
     if (entry.status === 'ready_for_review') {
       const { candidateSet, contact: selectedContact } = selectedPredictionCandidates(entry.id);
       const locationCandidates = candidateSet.locations || [];
@@ -2241,95 +2229,7 @@ export function HomeScreen({
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.createdAt))}</p>
-        {primaryLocation && (
-          <div className="mt-2">
-            <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-              <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
-            </span>
-          </div>
-        )}
-        {primaryContact && (
-          <div className="mt-2">
-            <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-              <span className="truncate">{primaryContact.displayName}</span>
-            </span>
-          </div>
-        )}
-        {confirmedPhotoAttachments.length > 0 && (
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            {confirmedPhotoAttachments.map(attachment => (
-              <PhotoAttachmentThumb key={attachment.id} attachment={attachment} />
-            ))}
-          </div>
-        )}
-        {entryWorkContexts.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {entryWorkContexts.map(context => (
-              <span key={context.id || context.label} className="inline-flex max-w-full items-center rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                <span className="truncate">{context.label || context.description}</span>
-              </span>
-            ))}
-          </div>
-        )}
-        {entryTags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {entryTags.map(tag => (
-              <span key={tag.id || tag.label} className="inline-flex max-w-full items-center rounded bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-                <span className="truncate">{tag.label}</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderLocationPill = (entry) => {
-    const primaryLocation = Array.isArray(entry.locations) && entry.locations.length > 0
-      ? entry.locations[0]
-      : null;
-
-    if (!primaryLocation) return null;
-
-    return (
-      <div className="mt-2">
-        <span className="inline-flex max-w-full items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-          <span className="truncate">{primaryLocation.displayName || primaryLocation.placeText}</span>
-        </span>
-      </div>
-    );
-  };
-
-  const renderContactPill = (entry) => {
-    const primaryContact = Array.isArray(entry.contacts) && entry.contacts.length > 0
-      ? entry.contacts[0]
-      : null;
-
-    if (!primaryContact?.displayName) return null;
-
-    return (
-      <div className="mt-2">
-        <span className="inline-flex max-w-full items-center rounded bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-          <span className="truncate">{primaryContact.displayName}</span>
-        </span>
-      </div>
-    );
-  };
-
-  const renderTagPills = (entry) => {
-    const tags = Array.isArray(entry.tags) && entry.tags.length > 0
-      ? entry.tags
-      : [];
-
-    if (!tags.length) return null;
-
-    return (
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {tags.map(tag => (
-          <span key={tag.id || tag.label} className="inline-flex max-w-full items-center rounded bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-            <span className="truncate">{tag.label}</span>
-          </span>
-        ))}
+        <EntryContextPills entry={entry} showPhotos />
       </div>
     );
   };
@@ -2450,9 +2350,7 @@ export function HomeScreen({
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{formatTime(new Date(entry.createdAt))}</p>
-                    {renderLocationPill(entry)}
-                    {renderContactPill(entry)}
-                    {renderTagPills(entry)}
+                    <EntryContextPills entry={entry} />
                   </div>
                 ))}
               </div>

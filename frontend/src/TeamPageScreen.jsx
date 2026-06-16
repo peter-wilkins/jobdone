@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
+import { EntryContextPills } from './EntryContextPills';
 import { PhotoAttachmentControls } from './PhotoAttachmentControls';
 import { apiService } from './services/apiService';
 import { authService } from './services/authService';
@@ -86,6 +87,7 @@ function TimelineItem({ entry }) {
       {timelineMeta && (
         <p className="mt-1 text-xs text-gray-500">{timelineMeta}</p>
       )}
+      <EntryContextPills entry={entry} showPhotos className="mt-2" />
       <p className="mt-1 text-xs text-gray-400">
         {entry.createdAt || entry.created_at || ''}
       </p>
@@ -608,14 +610,14 @@ export function TeamPageScreen({ teamId, onBack, onNavigate, user }) {
             {canCreateTimelineEntries ? (
               <section className="rounded border border-gray-200 px-3 py-3">
                 <div className="flex items-baseline justify-between border-b border-gray-100 pb-2">
-                  <h2 className="text-sm font-semibold text-gray-900">Team Entry</h2>
+                  <h2 className="text-sm font-semibold text-gray-900">Add to Timeline</h2>
                   <span className="text-xs text-gray-400">Timeline</span>
                 </div>
                 <CaptureComposer
                   draftKey={`team-capture:${team.id}`}
                   label={`Entry for ${team.name}`}
                   placeholder={`Capture an update for ${team.name}.`}
-                  helperText="Saved to this Team Timeline."
+                  helperText={`Saved to ${team.name}.`}
                   submitLabel="Save to Team"
                   discardLabel="Clear"
                   busy={isSavingTeamCapture}
