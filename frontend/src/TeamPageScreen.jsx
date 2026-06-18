@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaptureComposer } from './CaptureComposer';
 import { CaptureContextControls } from './CaptureContextControls';
 import { EntryContextPills } from './EntryContextPills';
-import { PhotoAttachmentControls } from './PhotoAttachmentControls';
+import { PhotoAttachmentControls, PhotoAttachmentWide } from './PhotoAttachmentControls';
 import { apiService } from './services/apiService';
 import { authService } from './services/authService';
 import { dbService } from './services/dbService';
@@ -82,13 +82,22 @@ function TimelineItem({ entry }) {
   const timelineMeta = [timelineContext?.label, timelineContext?.statusText]
     .filter(Boolean)
     .join(' · ');
+  const photoAttachments = (entry?.attachments || [])
+    .filter(attachment => attachment.kind === 'photo' && attachment.status === 'ready');
   return (
     <div className="py-3 border-b border-gray-100 last:border-b-0">
       <p className="text-sm text-gray-800 leading-5 max-h-16 overflow-hidden">{entryText(entry)}</p>
       {timelineMeta && (
         <p className="mt-1 text-xs text-gray-500">{timelineMeta}</p>
       )}
-      <EntryContextPills entry={entry} showPhotos className="mt-2" />
+      {photoAttachments.length > 0 && (
+        <div className="mt-3 grid gap-3">
+          {photoAttachments.map(attachment => (
+            <PhotoAttachmentWide key={attachment.id} attachment={attachment} />
+          ))}
+        </div>
+      )}
+      <EntryContextPills entry={entry} className="mt-2" />
       <p className="mt-1 text-xs text-gray-400">
         {entry.createdAt || entry.created_at || ''}
       </p>

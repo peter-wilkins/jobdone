@@ -89,5 +89,6 @@ test('photo compression falls back to saving the original Blob when compression 
   assert.equal(result.compressionStatus, 'fallback_original');
   assert.equal(result.compressionError, 'The source image could not be decoded.');
   assert.equal(result.blob instanceof Blob, true);
+  assert.equal(result.dataBase64, 'aW1hZ2UtYnl0ZXM=');
   assert.equal(result.originalBlob, null);
 });

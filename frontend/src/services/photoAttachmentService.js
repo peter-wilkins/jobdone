@@ -34,6 +34,16 @@ async function copyFileToStableBlob(file) {
   return new Blob([bytes], { type: file.type || 'image/jpeg' });
 }
 
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
 export function createPendingPhotoAttachments(files = [], existing = []) {
   const existingCount = (existing || []).filter(attachment => attachment?.kind === 'photo').length;
   const remainingSlots = Math.max(0, MAX_PHOTOS_PER_CAPTURE - existingCount);
@@ -89,6 +99,7 @@ export function compressPhotoAttachment(attachment, {
       ...attachment,
       status: 'ready',
       blob,
+      dataBase64: await blobToBase64(blob),
       mimeType: blob.type || originalBlob.type || 'image/jpeg',
       size: blob.size || originalBlob.size || 0,
       width: null,
@@ -117,6 +128,7 @@ export async function preparePhotoAttachment(attachment) {
       ...attachment,
       status: 'ready',
       blob,
+      dataBase64: await blobToBase64(blob),
       mimeType: blob.type || attachment.originalType || 'image/jpeg',
       size: blob.size || attachment.originalSize || 0,
       width: null,

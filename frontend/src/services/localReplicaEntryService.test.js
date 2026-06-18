@@ -177,6 +177,40 @@ test('Entry Local Replica materialization preserves local Photo blobs', () => {
   assert.equal(entry.attachments[0].compressionStatus, 'compressed');
 });
 
+test('Entry Local Replica payload keeps ready Photo bytes for timeline rendering on other devices', () => {
+  const payload = entryToLocalReplicaPayload({
+    id: 'entry-photo',
+    text: 'Gate repair photo',
+    createdAt: '2026-06-06T13:31:00.000Z',
+    attachments: [{
+      id: 'attachment-1',
+      kind: 'photo',
+      status: 'ready',
+      filename: 'gate.jpg',
+      mimeType: 'image/jpeg',
+      size: 11,
+      dataBase64: 'aW1hZ2UtYnl0ZXM=',
+    }],
+  });
+
+  assert.equal(payload.attachments[0].dataBase64, 'aW1hZ2UtYnl0ZXM=');
+
+  const entry = entryFromLocalReplicaObject({
+    id: 'entry-photo',
+    ownerKind: 'user',
+    ownerId: ACTOR_USER_ID,
+    collection: 'entries',
+    createdT: 1,
+    changedT: 1,
+    deletedT: null,
+    createdAt: '2026-06-06T13:31:00.000Z',
+    changedAt: '2026-06-06T13:31:00.000Z',
+    payloadJson: payload,
+  });
+
+  assert.equal(entry.attachments[0].dataBase64, 'aW1hZ2UtYnl0ZXM=');
+});
+
 test('Entry Local Replica attachment merge keeps replica metadata for remote-only attachments', () => {
   assert.deepEqual(
     mergeReplicaAttachments([], [{

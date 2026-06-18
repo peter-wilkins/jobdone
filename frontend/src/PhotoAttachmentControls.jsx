@@ -5,17 +5,27 @@ import {
   MAX_PHOTOS_PER_CAPTURE,
 } from './services/photoAttachmentService';
 
+export function photoAttachmentImageSrc(attachment, {
+  createObjectURL = typeof URL !== 'undefined' ? URL.createObjectURL?.bind(URL) : null,
+} = {}) {
+  const blob = attachment?.blob || attachment?.originalBlob;
+  if (blob && typeof createObjectURL === 'function') return createObjectURL(blob);
+  const dataBase64 = String(attachment?.dataBase64 || '').trim();
+  if (!dataBase64) return '';
+  const mimeType = attachment?.mimeType || attachment?.originalType || 'image/jpeg';
+  return `data:${mimeType};base64,${dataBase64}`;
+}
+
 export function PhotoAttachmentThumb({ attachment }) {
   const blob = attachment?.blob || attachment?.originalBlob;
   const src = useMemo(() => {
-    if (!blob || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return '';
-    return URL.createObjectURL(blob);
-  }, [blob]);
+    return photoAttachmentImageSrc(attachment);
+  }, [attachment]);
 
   useEffect(() => {
-    if (!src) return undefined;
+    if (!src || !blob) return undefined;
     return () => URL.revokeObjectURL(src);
-  }, [src]);
+  }, [blob, src]);
 
   if (!src) {
     return (
@@ -30,6 +40,34 @@ export function PhotoAttachmentThumb({ attachment }) {
       src={src}
       alt={attachment.originalName || 'Photo attachment'}
       className="h-12 w-12 shrink-0 rounded object-cover"
+    />
+  );
+}
+
+export function PhotoAttachmentWide({ attachment }) {
+  const blob = attachment?.blob || attachment?.originalBlob;
+  const src = useMemo(() => {
+    return photoAttachmentImageSrc(attachment);
+  }, [attachment]);
+
+  useEffect(() => {
+    if (!src || !blob) return undefined;
+    return () => URL.revokeObjectURL(src);
+  }, [blob, src]);
+
+  if (!src) {
+    return (
+      <div className="flex min-h-40 w-full items-center justify-center rounded bg-gray-100 text-sm font-medium text-gray-400">
+        Photo
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={attachment.originalName || attachment.filename || 'Photo attachment'}
+      className="w-full rounded object-cover"
     />
   );
 }

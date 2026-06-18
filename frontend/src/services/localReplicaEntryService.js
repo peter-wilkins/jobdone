@@ -48,6 +48,7 @@ export function entryToLocalReplicaPayload(entry = {}) {
       filename: attachment.filename || attachment.originalName || '',
       mimeType: attachment.mimeType || attachment.originalType || '',
       size: attachment.size || attachment.originalSize || 0,
+      dataBase64: attachment.dataBase64 || '',
     })),
     workContexts: compactArray(entry.workContexts),
   };
