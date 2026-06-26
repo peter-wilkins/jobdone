@@ -8,6 +8,7 @@ import { registerStructureRoutes } from './routes/structure.js';
 import { registerLocationRoutes } from './routes/locations.js';
 import { registerLocalReplicaRoutes } from './routes/localReplica.js';
 import { registerTeamRoutes } from './routes/teams.js';
+import { registerWaterWalkRoutes } from './routes/waterWalk.js';
 import { registerRequestIdHooks } from './services/requestId.js';
 import { BUILD_ID_HEADER, registerBuildInfoHooks } from './services/buildInfo.js';
 import { createCorsOriginValidator } from './services/cors.js';
@@ -34,6 +35,7 @@ export function createApp(options = {}) {
   fastify.register(registerLocationRoutes);
   fastify.register(registerLocalReplicaRoutes);
   fastify.register(registerTeamRoutes);
+  fastify.register(registerWaterWalkRoutes);
 
   fastify.get('/health', async () => ({
     status: 'ok',

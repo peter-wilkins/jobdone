@@ -4,6 +4,7 @@ import { teamScreenId } from './services/teamNavigationService';
 
 const MENU_ITEMS = [
   { screen: 'team-setup', label: 'Create Team' },
+  { screen: 'water-walk', label: 'Water Walk' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
   { screen: 'onboarding', label: 'Onboarding' },

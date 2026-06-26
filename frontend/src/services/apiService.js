@@ -259,6 +259,14 @@ export class APIService {
     return response.json();
   }
 
+  async getWaterWalkCandidates() {
+    const response = await apiFetch(`${API_BASE_URL}/api/water-walk/candidates`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) await throwApiError(response, 'Water Walk candidates are unavailable');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

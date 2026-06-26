@@ -10,6 +10,7 @@ import { TeamSetupScreen } from './TeamSetupScreen';
 import { TeamReviewScreen } from './TeamReviewScreen';
 import { TeamPageScreen } from './TeamPageScreen';
 import { InviteScreen } from './InviteScreen';
+import { WaterWalkScreen } from './WaterWalkScreen';
 import { GlobalMenu } from './GlobalMenu';
 import { OnboardingScreen } from './OnboardingScreen';
 import { authService, consumeAuthErrorFromLocation } from './services/authService';
@@ -41,7 +42,7 @@ function screenFromLocation() {
   if (pathname === '/invite') return 'invite';
   if (hash.startsWith('team/')) return hash;
   if (hash === 'my-work' || hash === 'team-work' || hash === 'action-inbox') return 'home';
-  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'invite'].includes(hash)
+  return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'invite', 'water-walk'].includes(hash)
     ? hash
     : 'home';
 }
@@ -374,6 +375,10 @@ function App() {
 
   if (screen === 'locations') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<LocationsScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
+  }
+
+  if (screen === 'water-walk') {
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<WaterWalkScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
   }
 
   if (screen === 'share-target') {
