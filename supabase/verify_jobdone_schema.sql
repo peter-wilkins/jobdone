@@ -20,7 +20,8 @@ where table_schema in ('jobdone', 'public')
     'team_members',
     'team_invites',
     'backlog_items',
-    'approval_requests'
+    'approval_requests',
+    'farm_datasets'
   )
 order by table_ref;
 
@@ -46,7 +47,8 @@ where schemaname in ('jobdone', 'public')
     'team_members',
     'team_invites',
     'backlog_items',
-    'approval_requests'
+    'approval_requests',
+    'farm_datasets'
   )
 order by table_ref;
 

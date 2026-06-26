@@ -7,8 +7,11 @@ import {
   preparePhotoAttachment,
 } from './services/photoAttachmentService';
 import { apiService } from './services/apiService';
+import { parseWaterWalkDataset } from './contracts/waterWalkDataset';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
+const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
+const WATER_WALK_META_STORAGE_KEY = 'jobdone.waterWalk.meta.v1';
 const OBSERVATIONS_STORAGE_KEY = 'jobdone.waterWalk.observations.v1';
 const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
 
@@ -49,6 +52,12 @@ function loadJsonArray(key) {
   return Array.isArray(parsed) ? parsed : [];
 }
 
+function loadJsonObject(key) {
+  if (typeof window === 'undefined') return {};
+  const parsed = safeJsonParse(window.localStorage.getItem(key) || '{}', {});
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
 function normalizeCandidate(raw = {}) {
   const latitude = Number(raw.latitude ?? raw.lat ?? raw.centre?.[0] ?? raw.center?.[0]);
   const longitude = Number(raw.longitude ?? raw.lon ?? raw.lng ?? raw.centre?.[1] ?? raw.center?.[1]);
@@ -77,12 +86,84 @@ function normalizeCandidateList(value) {
     .sort((a, b) => (b.score - a.score) || a.title.localeCompare(b.title));
 }
 
-function boundsFor(candidates) {
-  if (!candidates.length) {
+function normalizeArea(raw = {}) {
+  const title = String(raw.title || raw.name || raw.fieldName || '').trim();
+  const rings = Array.isArray(raw.rings) ? raw.rings
+    .map(ring => Array.isArray(ring)
+      ? ring
+        .map(point => {
+          const latitude = Number(point?.[0]);
+          const longitude = Number(point?.[1]);
+          return Number.isFinite(latitude) && Number.isFinite(longitude) ? [latitude, longitude] : null;
+        })
+        .filter(Boolean)
+      : [])
+    .filter(ring => ring.length >= 3)
+    : [];
+  if (!title || !rings.length) return null;
+  const centre = Array.isArray(raw.centre)
+    ? [Number(raw.centre[0]), Number(raw.centre[1])]
+    : null;
+  return {
+    id: String(raw.id || `${title}-area`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+    title,
+    sourceFieldName: raw.sourceFieldName || title,
+    areaType: raw.areaType || 'context',
+    priority: raw.priority || 'context',
+    soilTextureCode: raw.soilTextureCode || null,
+    soilTextureLabel: raw.soilTextureLabel || null,
+    numericClayPercent: Number.isFinite(Number(raw.numericClayPercent)) ? Number(raw.numericClayPercent) : null,
+    confidence: ['low', 'medium', 'high'].includes(raw.confidence) ? raw.confidence : 'low',
+    note: raw.note || '',
+    rings,
+    centre: centre?.every(Number.isFinite) ? centre : null,
+  };
+}
+
+function normalizeAreaList(value) {
+  const raw = Array.isArray(value) ? value : value?.areas;
+  return (Array.isArray(raw) ? raw : [])
+    .map(normalizeArea)
+    .filter(Boolean)
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function normalizeDataset(value) {
+  const dataset = {
+    projectId: value?.projectId || 'dewlish-water-walk',
+    generatedAt: value?.generatedAt,
+    sourceNotes: Array.isArray(value?.sourceNotes) ? value.sourceNotes.map(String) : [],
+    candidates: normalizeCandidateList(value),
+    areas: normalizeAreaList(value),
+    unmappedClayRichFields: Array.isArray(value?.unmappedClayRichFields) ? value.unmappedClayRichFields.map(String) : [],
+  };
+  const parsed = parseWaterWalkDataset(dataset);
+  if (!parsed.success) throw new Error(parsed.error || 'Invalid Water Walk dataset');
+  return parsed.data;
+}
+
+function loadCachedDataset() {
+  try {
+    return normalizeDataset({
+      ...loadJsonObject(WATER_WALK_META_STORAGE_KEY),
+      candidates: loadJsonArray(CANDIDATES_STORAGE_KEY),
+      areas: loadJsonArray(AREAS_STORAGE_KEY),
+    });
+  } catch {
+    return normalizeDataset({ candidates: [], areas: [] });
+  }
+}
+
+function boundsFor(candidates, areas = []) {
+  const points = [
+    ...candidates.map(candidate => [candidate.latitude, candidate.longitude]),
+    ...areas.flatMap(area => area.rings.flat()),
+  ];
+  if (!points.length) {
     return { minLat: 0, maxLat: 1, minLon: 0, maxLon: 1 };
   }
-  const latitudes = candidates.map(candidate => candidate.latitude);
-  const longitudes = candidates.map(candidate => candidate.longitude);
+  const latitudes = points.map(point => point[0]);
+  const longitudes = points.map(point => point[1]);
   const minLat = Math.min(...latitudes);
   const maxLat = Math.max(...latitudes);
   const minLon = Math.min(...longitudes);
@@ -99,6 +180,17 @@ function projectPoint(candidate, bounds) {
   const x = 8 + ((candidate.longitude - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * 84;
   const y = 92 - ((candidate.latitude - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * 84;
   return { x, y };
+}
+
+function projectLatLon(point, bounds) {
+  return projectPoint({ latitude: point[0], longitude: point[1] }, bounds);
+}
+
+function areaPath(area, bounds) {
+  return area.rings.map(ring => ring.map((point, index) => {
+    const projected = projectLatLon(point, bounds);
+    return `${index === 0 ? 'M' : 'L'}${projected.x.toFixed(2)} ${projected.y.toFixed(2)}`;
+  }).join(' ') + ' Z').join(' ');
 }
 
 function distanceMetres(a, b) {
@@ -158,6 +250,8 @@ function observationId() {
 export function WaterWalkScreen({ onBack, onRecord, user }) {
   const isAllowedUser = WATER_WALK_EMAILS.has(String(user?.email || '').trim().toLowerCase());
   const [candidates, setCandidates] = useState([]);
+  const [areas, setAreas] = useState([]);
+  const [datasetMeta, setDatasetMeta] = useState(() => loadJsonObject(WATER_WALK_META_STORAGE_KEY));
   const [observations, setObservations] = useState(() => loadJsonArray(OBSERVATIONS_STORAGE_KEY));
   const [selectedId, setSelectedId] = useState('');
   const [routeSelection, setRouteSelection] = useState(new Set());
@@ -170,9 +264,20 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
   const [importStatus, setImportStatus] = useState('');
   const [exportStatus, setExportStatus] = useState('');
 
-  const saveCandidates = useCallback(nextCandidates => {
-    setCandidates(nextCandidates);
-    window.localStorage.setItem(CANDIDATES_STORAGE_KEY, JSON.stringify(nextCandidates));
+  const saveDataset = useCallback(dataset => {
+    const nextDataset = normalizeDataset(dataset);
+    const nextMeta = {
+      projectId: nextDataset.projectId,
+      generatedAt: nextDataset.generatedAt || null,
+      sourceNotes: nextDataset.sourceNotes,
+      unmappedClayRichFields: nextDataset.unmappedClayRichFields,
+    };
+    setCandidates(nextDataset.candidates);
+    setAreas(nextDataset.areas);
+    setDatasetMeta(nextMeta);
+    window.localStorage.setItem(CANDIDATES_STORAGE_KEY, JSON.stringify(nextDataset.candidates));
+    window.localStorage.setItem(AREAS_STORAGE_KEY, JSON.stringify(nextDataset.areas));
+    window.localStorage.setItem(WATER_WALK_META_STORAGE_KEY, JSON.stringify(nextMeta));
   }, []);
 
   const saveObservations = nextObservations => {
@@ -186,6 +291,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
       queueMicrotask(() => {
         if (cancelled) return;
         setCandidates([]);
+        setAreas([]);
         setImportStatus(user ? 'Water Walk is not enabled for this account.' : 'Log in as poppetew@gmail.com to load private Water Walk pins.');
       });
       return () => {
@@ -193,33 +299,42 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
       };
     }
 
-    const cached = loadJsonArray(CANDIDATES_STORAGE_KEY).map(normalizeCandidate).filter(Boolean);
-    if (cached.length) {
+    const cachedDataset = loadCachedDataset();
+    if (cachedDataset.candidates.length || cachedDataset.areas.length) {
       queueMicrotask(() => {
         if (cancelled) return;
-        setCandidates(cached);
-        setImportStatus(`Loaded ${cached.length} cached private pins.`);
+        setCandidates(cachedDataset.candidates);
+        setAreas(cachedDataset.areas);
+        setDatasetMeta({
+          projectId: cachedDataset.projectId,
+          generatedAt: cachedDataset.generatedAt || null,
+          sourceNotes: cachedDataset.sourceNotes,
+          unmappedClayRichFields: cachedDataset.unmappedClayRichFields,
+        });
+        setImportStatus(`Loaded ${cachedDataset.candidates.length} cached private pins and ${cachedDataset.areas.length} cached areas.`);
       });
     }
 
     apiService.getWaterWalkCandidates()
       .then(payload => {
         if (cancelled) return;
-        const loaded = normalizeCandidateList(payload);
-        if (!loaded.length) {
-          setImportStatus('Water Walk returned no pins.');
+        const loaded = normalizeDataset(payload);
+        if (!loaded.candidates.length && !loaded.areas.length) {
+          setImportStatus('Water Walk returned no pins or areas.');
           return;
         }
-        saveCandidates(loaded);
-        setImportStatus(`Loaded ${loaded.length} private pins from JobDone.`);
+        saveDataset(loaded);
+        setImportStatus(`Loaded ${loaded.candidates.length} private pins and ${loaded.areas.length} areas from JobDone.`);
       })
       .catch(error => {
-        if (!cancelled && !cached.length) setImportStatus(error?.message || 'Could not load private Water Walk pins.');
+        if (!cancelled && !cachedDataset.candidates.length && !cachedDataset.areas.length) {
+          setImportStatus(error?.message || 'Could not load private Water Walk dataset.');
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [isAllowedUser, user, saveCandidates]);
+  }, [isAllowedUser, user, saveDataset]);
 
   const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || candidates[0] || null;
   const effectiveRouteSelection = routeSelection.size
@@ -228,20 +343,26 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
   const selectedRouteCandidates = candidates.filter(candidate => effectiveRouteSelection.has(candidate.id));
   const routeStart = currentLocation ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude } : selectedRouteCandidates[0] || null;
   const route = routeNearestNext(selectedRouteCandidates, routeStart);
-  const mapBounds = useMemo(() => boundsFor(candidates), [candidates]);
+  const mapBounds = useMemo(() => boundsFor(candidates, areas), [candidates, areas]);
 
   const importCandidates = () => {
     const parsed = safeJsonParse(importText, null);
-    const nextCandidates = normalizeCandidateList(parsed);
-    if (!nextCandidates.length) {
-      setImportStatus('No valid pins found. Paste an array or {"candidates": [...]} JSON.');
+    let nextDataset;
+    try {
+      nextDataset = normalizeDataset(parsed);
+    } catch (error) {
+      setImportStatus(error?.message || 'Invalid Water Walk JSON.');
       return;
     }
-    saveCandidates(nextCandidates);
-    setSelectedId(nextCandidates[0].id);
-    setRouteSelection(new Set(nextCandidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id)));
+    if (!nextDataset.candidates.length && !nextDataset.areas.length) {
+      setImportStatus('No valid pins or areas found. Paste {"candidates":[...],"areas":[...]} JSON.');
+      return;
+    }
+    saveDataset(nextDataset);
+    setSelectedId(nextDataset.candidates[0]?.id || '');
+    setRouteSelection(new Set(nextDataset.candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id)));
     setImportText('');
-    setImportStatus(`Imported ${nextCandidates.length} pins.`);
+    setImportStatus(`Imported ${nextDataset.candidates.length} pins and ${nextDataset.areas.length} areas.`);
   };
 
   const locateMe = () => {
@@ -333,7 +454,11 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
     const payload = {
       schemaVersion: 'jobdone.waterWalkExport.v1',
       exportedAt: new Date().toISOString(),
+      projectId: datasetMeta.projectId || 'dewlish-water-walk',
+      sourceNotes: datasetMeta.sourceNotes || [],
       candidates,
+      areas,
+      unmappedClayRichFields: datasetMeta.unmappedClayRichFields || [],
       observations,
     };
     const text = JSON.stringify(payload, null, 2);
@@ -382,23 +507,36 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
           </section>
         )}
 
-        {isAllowedUser && (candidates.length === 0 ? (
+        {isAllowedUser && (candidates.length === 0 && areas.length === 0 ? (
           <section className="rounded border border-amber-200 bg-amber-50 p-4">
             <h2 className="text-base font-semibold text-amber-950">No water-walk pins loaded</h2>
             <p className="mt-1 text-sm text-amber-900">
-              {importStatus || 'Private pins have not loaded yet.'}
+              {importStatus || 'Private Water Walk data has not loaded yet.'}
             </p>
           </section>
         ) : (
           <section className="overflow-hidden rounded border border-stone-200 bg-white">
             <div className="border-b border-stone-100 px-4 py-3">
               <h2 className="text-sm font-semibold">Candidate map</h2>
-              <p className="text-xs text-gray-500">Simplified pin map. Use GPS and ground truth outside.</p>
+              <p className="text-xs text-gray-500">Simplified pins and clay-rich areas. Use GPS and ground truth outside.</p>
             </div>
             <svg viewBox="0 0 100 100" className="block h-72 w-full bg-[#edf2e8]" role="img" aria-label="Candidate pin map">
               <rect x="0" y="0" width="100" height="100" fill="#edf2e8" />
               <path d="M5 78 C25 64, 35 70, 54 55 S75 38, 94 22" fill="none" stroke="#bfd0b8" strokeWidth="1.4" />
               <path d="M8 28 C27 20, 45 30, 65 18 S84 18, 94 12" fill="none" stroke="#d7c8a6" strokeWidth="1" strokeDasharray="2 2" />
+              {areas.map(area => (
+                <path
+                  key={area.id}
+                  d={areaPath(area, mapBounds)}
+                  fill={area.areaType === 'clay_rich_texture_class' ? '#7c3f1d' : '#315f72'}
+                  fillOpacity={area.areaType === 'clay_rich_texture_class' ? '0.20' : '0.12'}
+                  stroke={area.areaType === 'clay_rich_texture_class' ? '#7c3f1d' : '#315f72'}
+                  strokeOpacity="0.72"
+                  strokeWidth="0.7"
+                >
+                  <title>{area.title}</title>
+                </path>
+              ))}
               {candidates.map(candidate => {
                   const point = projectPoint(candidate, mapBounds);
                   const isSelected = candidate.id === selectedCandidate?.id;
@@ -458,6 +596,47 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
                 </ul>
               </div>
             </div>
+          </section>
+        )}
+
+        {isAllowedUser && areas.length > 0 && (
+          <section className="rounded border border-stone-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">Clay-rich areas</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Based on SMP texture code hZCL, Heavy Silty Clay Loam. The spreadsheet scan did not find numeric clay above 30%; highest numeric clay found was 25.35% in 8 Acres.
+                </p>
+              </div>
+              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-semibold text-stone-700">
+                {areas.length} areas
+              </span>
+            </div>
+            {datasetMeta.sourceNotes?.length > 0 && (
+              <ul className="mt-3 list-disc pl-5 text-sm text-gray-600">
+                {datasetMeta.sourceNotes.map(noteText => <li key={noteText}>{noteText}</li>)}
+              </ul>
+            )}
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {areas.map(area => (
+                <div key={area.id} className="rounded border border-stone-100 bg-stone-50 px-3 py-2">
+                  <p className="text-sm font-medium">{area.title}</p>
+                  <p className="mt-1 text-xs text-gray-500">{area.soilTextureCode || 'texture'} {area.soilTextureLabel || ''}</p>
+                  {area.note && <p className="mt-1 text-xs text-gray-600">{area.note}</p>}
+                </div>
+              ))}
+            </div>
+            {datasetMeta.unmappedClayRichFields?.length > 0 && (
+              <details className="mt-3 rounded border border-amber-100 bg-amber-50 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium text-amber-950">
+                  {datasetMeta.unmappedClayRichFields.length} clay-rich fields not mapped yet
+                </summary>
+                <p className="mt-1 text-xs text-amber-900">
+                  These appeared in the SMP texture data but did not match the available KML field names cleanly.
+                </p>
+                <p className="mt-2 text-xs text-amber-900">{datasetMeta.unmappedClayRichFields.join(', ')}</p>
+              </details>
+            )}
           </section>
         )}
 
@@ -600,7 +779,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
             onChange={event => setImportText(event.target.value)}
             rows={8}
             className="mt-3 w-full rounded border border-gray-300 px-3 py-2 font-mono text-xs"
-            placeholder='Paste {"candidates":[...]} JSON'
+            placeholder='Paste {"candidates":[...],"areas":[...]} JSON'
           />
           <div className="mt-3 flex items-center gap-3">
             <button type="button" onClick={importCandidates} className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white">

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
-import { normalizeCandidatePayload, registerWaterWalkRoutes } from './waterWalk.js';
+import { loadCandidates, normalizeCandidatePayload, registerWaterWalkRoutes } from './waterWalk.js';
 
 function buildApp({ email = 'poppetew@gmail.com', loadCandidates = async () => [] } = {}) {
   const app = Fastify({ logger: false });
@@ -14,45 +14,95 @@ function buildApp({ email = 'poppetew@gmail.com', loadCandidates = async () => [
 }
 
 test('normalizeCandidatePayload accepts RegenOS field-style candidate data', () => {
-  const candidates = normalizeCandidatePayload({
+  const payload = normalizeCandidatePayload({
     candidates: [
       {
-        name: 'Higher Kitehill',
-        centre: [50.78, -2.33],
+        name: 'North Test Field',
+        centre: [51.5, -0.12],
         priority: 'high',
         score: 12,
         clues: ['high runoff risk'],
       },
     ],
+    areas: [
+      {
+        title: '8 Acres',
+        rings: [[[50.1, -2.1], [50.2, -2.1], [50.2, -2.2], [50.1, -2.1]]],
+        soilTextureCode: 'hZCL',
+      },
+    ],
+    unmappedClayRichFields: ['River Meadow'],
   });
 
-  assert.equal(candidates.length, 1);
-  assert.equal(candidates[0].title, 'Higher Kitehill');
-  assert.equal(candidates[0].latitude, 50.78);
-  assert.equal(candidates[0].longitude, -2.33);
-  assert.deepEqual(candidates[0].whyInteresting, ['high runoff risk']);
+  assert.equal(payload.candidates.length, 1);
+  assert.equal(payload.candidates[0].title, 'North Test Field');
+  assert.equal(payload.candidates[0].latitude, 51.5);
+  assert.equal(payload.candidates[0].longitude, -0.12);
+  assert.deepEqual(payload.candidates[0].whyInteresting, ['high runoff risk']);
+  assert.equal(payload.areas.length, 1);
+  assert.equal(payload.areas[0].soilTextureCode, 'hZCL');
+  assert.deepEqual(payload.unmappedClayRichFields, ['River Meadow']);
 });
 
 test('Water Walk candidates are available to allowed account', async () => {
   const app = buildApp({
-    loadCandidates: async () => [
-      {
-        id: 'candidate-1',
-        title: 'Private candidate',
-        latitude: 50,
-        longitude: -2,
-        priority: 'high',
-        score: 10,
-        whyInteresting: ['test clue'],
-        lookFor: ['wet ground'],
-        evidencePrompt: 'Take photo',
-      },
-    ],
+    loadCandidates: async () => ({
+      candidates: [
+        {
+          id: 'candidate-1',
+          title: 'Private candidate',
+          latitude: 50,
+          longitude: -2,
+          priority: 'high',
+          score: 10,
+          whyInteresting: ['test clue'],
+          lookFor: ['wet ground'],
+          evidencePrompt: 'Take photo',
+        },
+      ],
+      areas: [],
+      unmappedClayRichFields: [],
+    }),
   });
 
   const response = await app.inject({ method: 'GET', url: '/api/water-walk/candidates' });
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().candidates[0].title, 'Private candidate');
+});
+
+test('loadCandidates reads validated dataset from database before local fallback', async () => {
+  const payload = await loadCandidates({
+    db: {
+      query: async () => ({
+        data: [
+          {
+            payload: {
+              candidates: [
+                {
+                  id: 'db-candidate',
+                  title: 'DB candidate',
+                  latitude: 50,
+                  longitude: -2,
+                  priority: 'high',
+                  score: 8,
+                  whyInteresting: ['database source'],
+                  lookFor: ['ditch'],
+                  evidencePrompt: 'Check database source.',
+                },
+              ],
+              areas: [],
+              unmappedClayRichFields: [],
+            },
+          },
+        ],
+        error: null,
+      }),
+    },
+    envJson: JSON.stringify({ candidates: [] }),
+    filePath: 'missing-private-water-walk.json',
+  });
+
+  assert.equal(payload.candidates[0].id, 'db-candidate');
 });
 
 test('Water Walk candidates are forbidden for other accounts', async () => {

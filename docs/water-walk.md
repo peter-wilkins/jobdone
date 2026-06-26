@@ -11,8 +11,8 @@ Peter can walk a farm, visit candidate water/restoration locations, and capture:
 - GPS location
 - timestamped local observations
 
-The first version is deliberately simple. It uses ranked location pins, not noisy
-field boundary polygons.
+The first version is deliberately simple. It uses ranked location pins plus a
+small number of simplified context polygons, not noisy field boundary polygons.
 
 ## Private Dewlish data
 
@@ -32,11 +32,38 @@ account is:
 poppetew@gmail.com
 ```
 
-Candidate data comes from either:
+Dataset data is validated with the shared Zod contract in:
 
-- `JOBDONE_WATER_WALK_CANDIDATES_JSON`
-- `JOBDONE_WATER_WALK_CANDIDATES_PATH`
-- ignored local fallback: `local/water-walk/dewlish-candidates.json`
+```text
+shared/contracts/waterWalkDataset.js
+```
+
+The backend loads the dataset in this order:
+
+1. `jobdone.farm_datasets` row where `farm_id = dewlish` and `dataset_kind = water_walk`
+2. `JOBDONE_WATER_WALK_CANDIDATES_JSON`
+3. `JOBDONE_WATER_WALK_CANDIDATES_PATH`
+4. ignored local fallback: `local/water-walk/dewlish-candidates.json`
+
+Use this script to refresh the Supabase JSON blob from the ignored local file:
+
+```bash
+npm run water-walk:upsert
+```
+
+The JSON shape is:
+
+- `projectId`
+- `generatedAt`
+- `sourceNotes`
+- `candidates`
+- `areas`
+- `unmappedClayRichFields`
+
+Clay-rich areas currently mean "SMP texture class hZCL - Heavy Silty Clay Loam".
+They are not confirmed numeric clay percentages above 30%. The spreadsheet scan
+found no numeric `Clay (%) > 30`; the highest numeric clay reading found was
+25.35% in 8 Acres.
 
 ## MVP route planning
 
