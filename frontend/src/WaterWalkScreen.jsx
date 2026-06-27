@@ -394,6 +394,19 @@ function BudgetSummary({ budget }) {
           Biggest unknown: {budget.unknowns[0]}
         </p>
       )}
+      {budget.actualMargin?.amount !== null && budget.actualMargin?.amount !== undefined && (
+        <div className="mt-2 rounded border border-emerald-200 bg-white/70 px-2 py-1.5 text-xs text-emerald-950">
+          Actual margin {formatBudgetMoney(budget.actualMargin.amount, budget.actualMargin.currency)}
+          {budget.variance?.marginDelta !== null && budget.variance?.marginDelta !== undefined
+            ? ` (${budget.variance.marginDelta >= 0 ? '+' : ''}${formatBudgetMoney(budget.variance.marginDelta, budget.actualMargin.currency)} vs estimate)`
+            : ''}
+        </div>
+      )}
+      {budget.outcomeReview?.lessonForNextTime && (
+        <p className="mt-2 text-xs text-emerald-900">
+          Lesson: {budget.outcomeReview.lessonForNextTime}
+        </p>
+      )}
     </div>
   );
 }
@@ -1503,6 +1516,105 @@ export function WaterWalkScreen({ routeHash, user }) {
                 : `Grant estimate uses ${formatBudgetMoney(selectedBudgetOption.grantAmountPerUnit, selectedBudgetOption.currency)} per ${selectedBudgetOption.unit}.`}
             </p>
           </div>
+
+          <details className="rounded border border-blue-100 bg-blue-50 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-blue-950">Actuals and learning</summary>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium text-gray-700">Actual grant</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={budgetForm.actualGrantIncome}
+                  onChange={event => updateBudgetForm({ actualGrantIncome: event.target.value })}
+                  className="rounded border border-gray-300 px-3 py-2"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium text-gray-700">Actual cash</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={budgetForm.actualCashCost}
+                  onChange={event => updateBudgetForm({ actualCashCost: event.target.value })}
+                  className="rounded border border-gray-300 px-3 py-2"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium text-gray-700">Actual internal</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={budgetForm.actualInternalCost}
+                  onChange={event => updateBudgetForm({ actualInternalCost: event.target.value })}
+                  className="rounded border border-gray-300 px-3 py-2"
+                />
+              </label>
+            </div>
+            <div className="mt-3 rounded border border-blue-100 bg-white p-2 text-xs text-blue-950">
+              Actual margin: <strong>{formatBudgetMoney(budgetCalculation.actualMargin, selectedBudgetOption.currency)}</strong>
+              {budgetCalculation.variance.marginDelta !== null && (
+                <span> · Margin variance: <strong>{budgetCalculation.variance.marginDelta >= 0 ? '+' : ''}{formatBudgetMoney(budgetCalculation.variance.marginDelta, selectedBudgetOption.currency)}</strong></span>
+              )}
+            </div>
+            <label className="mt-3 grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Lifecycle stage</span>
+              <select
+                value={budgetForm.lifecycleStage}
+                onChange={event => updateBudgetForm({ lifecycleStage: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              >
+                <option value="first_estimate">First estimate</option>
+                <option value="planned_estimate">Planned estimate</option>
+                <option value="in_progress">In progress</option>
+                <option value="actuals_entered">Actuals entered</option>
+                <option value="reviewed">Reviewed</option>
+              </select>
+            </label>
+            <label className="mt-3 grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">What went better?</span>
+              <textarea
+                value={budgetForm.wentBetterText}
+                onChange={event => updateBudgetForm({ wentBetterText: event.target.value })}
+                rows={2}
+                className="rounded border border-gray-300 px-3 py-2"
+                placeholder="One per line: free material, faster access, better grant result..."
+              />
+            </label>
+            <label className="mt-3 grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">What went worse?</span>
+              <textarea
+                value={budgetForm.wentWorseText}
+                onChange={event => updateBudgetForm({ wentWorseText: event.target.value })}
+                rows={2}
+                className="rounded border border-gray-300 px-3 py-2"
+                placeholder="One per line: extra labour, access problem, bought materials..."
+              />
+            </label>
+            <label className="mt-3 grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Why did it differ?</span>
+              <textarea
+                value={budgetForm.varianceExplanation}
+                onChange={event => updateBudgetForm({ varianceExplanation: event.target.value })}
+                rows={2}
+                className="rounded border border-gray-300 px-3 py-2"
+                placeholder="Explain the difference between estimate and actual."
+              />
+            </label>
+            <label className="mt-3 grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Lesson for next time</span>
+              <textarea
+                value={budgetForm.lessonForNextTime}
+                onChange={event => updateBudgetForm({ lessonForNextTime: event.target.value })}
+                rows={2}
+                className="rounded border border-gray-300 px-3 py-2"
+                placeholder="What should future budgets assume differently?"
+              />
+            </label>
+          </details>
 
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">

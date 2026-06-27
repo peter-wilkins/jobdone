@@ -277,6 +277,20 @@ For a selected candidate pin or observation, the app should be able to show:
 - confidence: low, medium, high
 - landowner judgement: worth exploring, needs quote/adviser, or not worth it
 
+Over the life cycle of the job, the budget record should keep both estimates
+and actuals:
+
+- estimated grant income, cash cost, internal cost, and margin
+- actual grant income, cash cost, internal cost, and margin
+- variance between estimate and actual
+- what went better than planned
+- what went worse than planned
+- why the estimate changed
+- lesson for next time
+
+This turns each completed job into better local estimating knowledge, rather
+than just a one-off decision.
+
 Water Walk observations should capture budget clues while the user is already in
 the field:
 

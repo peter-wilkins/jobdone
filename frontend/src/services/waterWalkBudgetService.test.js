@@ -20,6 +20,26 @@ test('grant job budget calculates rough margin for known payment option', () => 
   assert.equal(result.margin, 572.78);
 });
 
+test('grant job budget calculates actuals and variance against estimates', () => {
+  const result = calculateGrantJobBudget({
+    optionId: 'uk-england.capital-grants-2026/rp32-small-leaky-woody-dams',
+    quantity: 1,
+    cashCost: 80,
+    internalCost: 180,
+    actualGrantIncome: 461.39,
+    actualCashCost: 60,
+    actualInternalCost: 240,
+  });
+
+  assert.equal(result.actualMargin, 161.39);
+  assert.deepEqual(result.variance, {
+    grantIncomeDelta: 0,
+    cashCostDelta: -20,
+    internalCostDelta: 60,
+    marginDelta: -40,
+  });
+});
+
 test('grant job budget keeps unknown grant payment visible', () => {
   const result = calculateGrantJobBudget({
     optionId: 'uk-england.capital-grants-2026/wn12-create-or-restore-ponds-up-to-2ha',
@@ -48,15 +68,30 @@ test('grant job budget record preserves assumptions and target link', () => {
       labourNotes: 'Half day.',
       materialsNotes: 'Use nearby brash.',
       unknownsText: 'CSF support needed\nConsent check',
+      actualGrantIncome: 461.39,
+      actualCashCost: 60,
+      actualInternalCost: 240,
+      lifecycleStage: 'actuals_entered',
+      wentBetterText: 'Woody material was already stacked nearby.',
+      wentWorseText: 'Machine access took longer than expected.',
+      varianceExplanation: 'Less cash cost but more internal time.',
+      lessonForNextTime: 'Budget extra tractor time for wet gateways.',
     },
     now: '2026-06-27T20:00:00.000Z',
   });
 
+  assert.equal(record.schemaVersion, 'jobdone.waterWalkGrantJobBudget.v2');
   assert.equal(record.targetType, 'candidate');
   assert.equal(record.targetId, 'pin-1');
   assert.equal(record.marginEstimate.amount, 201.39);
+  assert.equal(record.actualMargin.amount, 161.39);
+  assert.equal(record.variance.marginDelta, -40);
   assert.deepEqual(record.unknowns, ['CSF support needed', 'Consent check']);
   assert.equal(record.resourceNotes.materials, 'Use nearby brash.');
+  assert.equal(record.lifecycleStage, 'actuals_entered');
+  assert.deepEqual(record.outcomeReview.wentBetterThanPlanned, ['Woody material was already stacked nearby.']);
+  assert.deepEqual(record.outcomeReview.wentWorseThanPlanned, ['Machine access took longer than expected.']);
+  assert.equal(record.outcomeReview.lessonForNextTime, 'Budget extra tractor time for wet gateways.');
 });
 
 test('grant job budget upsert replaces existing records', () => {

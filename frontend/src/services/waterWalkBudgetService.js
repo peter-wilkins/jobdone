@@ -27,6 +27,7 @@ export const GRANT_JOB_OPTIONS = [
 
 export const BUDGET_CONFIDENCE = ['low', 'medium', 'high'];
 export const LANDOWNER_JUDGEMENTS = ['worth_exploring', 'needs_quote_or_adviser', 'not_worth_it'];
+export const BUDGET_LIFECYCLE_STAGES = ['first_estimate', 'planned_estimate', 'in_progress', 'actuals_entered', 'reviewed'];
 
 export function grantJobOptionById(optionId) {
   return GRANT_JOB_OPTIONS.find(option => option.id === optionId) || GRANT_JOB_OPTIONS[0];
@@ -54,6 +55,9 @@ export function calculateGrantJobBudget({
   quantity = 1,
   cashCost = 0,
   internalCost = 0,
+  actualGrantIncome = '',
+  actualCashCost = '',
+  actualInternalCost = '',
 }) {
   const option = grantJobOptionById(optionId);
   const safeQuantity = positiveNumberOrDefault(quantity);
@@ -65,6 +69,18 @@ export function calculateGrantJobBudget({
   const margin = grantIncome === null
     ? null
     : Number((grantIncome - safeCashCost - safeInternalCost).toFixed(2));
+  const hasActualGrantIncome = actualGrantIncome !== '' && actualGrantIncome !== null && actualGrantIncome !== undefined;
+  const hasActualCashCost = actualCashCost !== '' && actualCashCost !== null && actualCashCost !== undefined;
+  const hasActualInternalCost = actualInternalCost !== '' && actualInternalCost !== null && actualInternalCost !== undefined;
+  const actualGrant = hasActualGrantIncome ? numberOrZero(actualGrantIncome) : null;
+  const actualCash = hasActualCashCost ? numberOrZero(actualCashCost) : null;
+  const actualInternal = hasActualInternalCost ? numberOrZero(actualInternalCost) : null;
+  const actualMargin = actualGrant === null
+    ? null
+    : Number((actualGrant - (actualCash || 0) - (actualInternal || 0)).toFixed(2));
+  const delta = (actual, estimate) => (
+    actual === null || estimate === null ? null : Number((actual - estimate).toFixed(2))
+  );
 
   return {
     option,
@@ -73,6 +89,16 @@ export function calculateGrantJobBudget({
     cashCost: safeCashCost,
     internalCost: safeInternalCost,
     margin,
+    actualGrantIncome: actualGrant,
+    actualCashCost: actualCash,
+    actualInternalCost: actualInternal,
+    actualMargin,
+    variance: {
+      grantIncomeDelta: delta(actualGrant, grantIncome),
+      cashCostDelta: delta(actualCash, safeCashCost),
+      internalCostDelta: delta(actualInternal, safeInternalCost),
+      marginDelta: delta(actualMargin, margin),
+    },
   };
 }
 
@@ -88,9 +114,12 @@ export function buildGrantJobBudgetRecord({
   const landownerJudgement = LANDOWNER_JUDGEMENTS.includes(form.landownerJudgement)
     ? form.landownerJudgement
     : 'needs_quote_or_adviser';
+  const lifecycleStage = BUDGET_LIFECYCLE_STAGES.includes(form.lifecycleStage)
+    ? form.lifecycleStage
+    : 'first_estimate';
 
   return {
-    schemaVersion: 'jobdone.waterWalkGrantJobBudget.v1',
+    schemaVersion: 'jobdone.waterWalkGrantJobBudget.v2',
     id: existing?.id || `water-walk-budget-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
@@ -126,6 +155,23 @@ export function buildGrantJobBudgetRecord({
       currency: calculation.option.currency,
       confidence,
     },
+    actualGrantIncome: {
+      amount: calculation.actualGrantIncome,
+      currency: calculation.option.currency,
+    },
+    actualCashCost: {
+      amount: calculation.actualCashCost,
+      currency: calculation.option.currency,
+    },
+    actualInternalCost: {
+      amount: calculation.actualInternalCost,
+      currency: calculation.option.currency,
+    },
+    actualMargin: {
+      amount: calculation.actualMargin,
+      currency: calculation.option.currency,
+    },
+    variance: calculation.variance,
     resourceNotes: {
       machinery: String(form.machineryNotes || '').trim(),
       labour: String(form.labourNotes || '').trim(),
@@ -134,6 +180,13 @@ export function buildGrantJobBudgetRecord({
     unknowns: splitLines(form.unknownsText),
     confidence,
     landownerJudgement,
+    lifecycleStage,
+    outcomeReview: {
+      wentBetterThanPlanned: splitLines(form.wentBetterText),
+      wentWorseThanPlanned: splitLines(form.wentWorseText),
+      varianceExplanation: String(form.varianceExplanation || '').trim(),
+      lessonForNextTime: String(form.lessonForNextTime || '').trim(),
+    },
   };
 }
 
@@ -154,12 +207,20 @@ export function budgetToForm(budget = null) {
       quantity: 1,
       cashCost: 0,
       internalCost: 0,
+      actualGrantIncome: '',
+      actualCashCost: '',
+      actualInternalCost: '',
       confidence: 'low',
       landownerJudgement: 'needs_quote_or_adviser',
+      lifecycleStage: 'first_estimate',
       machineryNotes: '',
       labourNotes: '',
       materialsNotes: '',
       unknownsText: '',
+      wentBetterText: '',
+      wentWorseText: '',
+      varianceExplanation: '',
+      lessonForNextTime: '',
     };
   }
 
@@ -168,12 +229,20 @@ export function budgetToForm(budget = null) {
     quantity: budget.quantity?.amount || 1,
     cashCost: budget.cashCostEstimate?.amount || 0,
     internalCost: budget.internalCostEstimate?.amount || 0,
+    actualGrantIncome: budget.actualGrantIncome?.amount ?? '',
+    actualCashCost: budget.actualCashCost?.amount ?? '',
+    actualInternalCost: budget.actualInternalCost?.amount ?? '',
     confidence: budget.confidence || 'low',
     landownerJudgement: budget.landownerJudgement || 'needs_quote_or_adviser',
+    lifecycleStage: budget.lifecycleStage || 'first_estimate',
     machineryNotes: budget.resourceNotes?.machinery || '',
     labourNotes: budget.resourceNotes?.labour || '',
     materialsNotes: budget.resourceNotes?.materials || '',
     unknownsText: Array.isArray(budget.unknowns) ? budget.unknowns.join('\n') : '',
+    wentBetterText: Array.isArray(budget.outcomeReview?.wentBetterThanPlanned) ? budget.outcomeReview.wentBetterThanPlanned.join('\n') : '',
+    wentWorseText: Array.isArray(budget.outcomeReview?.wentWorseThanPlanned) ? budget.outcomeReview.wentWorseThanPlanned.join('\n') : '',
+    varianceExplanation: budget.outcomeReview?.varianceExplanation || '',
+    lessonForNextTime: budget.outcomeReview?.lessonForNextTime || '',
   };
 }
 
