@@ -11,6 +11,7 @@ import {
 import { apiService } from './services/apiService';
 import { parseWaterWalkDataset } from './contracts/waterWalkDataset';
 import { waterWalkBoundsKey } from './waterWalkViewport';
+import { waterWalkSiteFromHash } from './waterWalkSites';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
 const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
@@ -84,6 +85,29 @@ function loadJsonObject(key) {
   if (typeof window === 'undefined') return {};
   const parsed = safeJsonParse(window.localStorage.getItem(key) || '{}', {});
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+function siteStorageKey(baseKey, siteId) {
+  return `${baseKey}.${siteId || 'dewlish'}`;
+}
+
+function storageKeysForSite(siteId) {
+  return {
+    candidates: siteStorageKey(CANDIDATES_STORAGE_KEY, siteId),
+    areas: siteStorageKey(AREAS_STORAGE_KEY, siteId),
+    meta: siteStorageKey(WATER_WALK_META_STORAGE_KEY, siteId),
+    observations: siteStorageKey(OBSERVATIONS_STORAGE_KEY, siteId),
+  };
+}
+
+function emptyDatasetForSite(site) {
+  return normalizeDataset({
+    projectId: site.projectId,
+    sourceNotes: site.sourceNotes || [],
+    candidates: [],
+    areas: [],
+    unmappedClayRichFields: [],
+  });
 }
 
 function normalizeCandidate(raw = {}) {
@@ -196,15 +220,17 @@ function normalizeDataset(value) {
   return parsed.data;
 }
 
-function loadCachedDataset() {
+function loadCachedDataset(storageKeys, site) {
   try {
     return normalizeDataset({
-      ...loadJsonObject(WATER_WALK_META_STORAGE_KEY),
-      candidates: loadJsonArray(CANDIDATES_STORAGE_KEY),
-      areas: loadJsonArray(AREAS_STORAGE_KEY),
+      ...loadJsonObject(storageKeys.meta),
+      projectId: loadJsonObject(storageKeys.meta).projectId || site.projectId,
+      sourceNotes: loadJsonObject(storageKeys.meta).sourceNotes || site.sourceNotes || [],
+      candidates: loadJsonArray(storageKeys.candidates),
+      areas: loadJsonArray(storageKeys.areas),
     });
   } catch {
-    return normalizeDataset({ candidates: [], areas: [] });
+    return emptyDatasetForSite(site);
   }
 }
 
@@ -271,7 +297,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate }) {
+function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, onSelectCandidate }) {
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const overlayLayerRef = useRef(null);
@@ -348,7 +374,27 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
       boundsPoints.push([candidate.latitude, candidate.longitude]);
     });
 
-    const boundsKey = waterWalkBoundsKey(candidates, areas);
+    if (currentLocation) {
+      const accuracy = Number(currentLocation.accuracyMetres || 0);
+      const locationMarker = L.circleMarker([currentLocation.latitude, currentLocation.longitude], {
+        radius: 7,
+        color: '#111827',
+        fillColor: '#f97316',
+        fillOpacity: 0.95,
+        weight: 2,
+      });
+      locationMarker.bindPopup(`
+        <strong>Current GPS</strong><br />
+        ${accuracy ? `Accuracy about ${escapeHtml(Math.round(accuracy))} m` : 'Captured location'}
+      `);
+      locationMarker.addTo(overlayLayer);
+      boundsPoints.push([currentLocation.latitude, currentLocation.longitude]);
+    }
+
+    const currentLocationKey = currentLocation
+      ? `gps:${currentLocation.latitude.toFixed(6)},${currentLocation.longitude.toFixed(6)}`
+      : '';
+    const boundsKey = `${waterWalkBoundsKey(candidates, areas)}::${currentLocationKey}`;
     if (boundsPoints.length && boundsKey !== fittedBoundsKeyRef.current) {
       fittedBoundsKeyRef.current = boundsKey;
       map.fitBounds(L.latLngBounds(boundsPoints).pad(0.08), {
@@ -356,24 +402,32 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
         maxZoom: 16,
       });
     }
-  }, [areas, candidates, onSelectCandidate, selectedCandidate]);
+  }, [areas, candidates, currentLocation, onSelectCandidate, selectedCandidate]);
 
   return (
     <div
       ref={mapElementRef}
-      className="h-[22rem] w-full bg-stone-100 sm:h-[28rem]"
+      className="h-[58vh] min-h-[20rem] w-full max-w-full bg-stone-100 sm:h-[70vh]"
       role="application"
       aria-label="Interactive water walk map"
     />
   );
 }
 
-export function WaterWalkScreen({ onBack, onRecord, user }) {
+export function WaterWalkScreen({ routeHash, user }) {
+  const site = useMemo(() => waterWalkSiteFromHash(routeHash || window.location.hash), [routeHash]);
+  const storageKeys = useMemo(() => storageKeysForSite(site.id), [site.id]);
   const isAllowedUser = WATER_WALK_EMAILS.has(String(user?.email || '').trim().toLowerCase());
+  const canUseSite = !site.private || isAllowedUser;
   const [candidates, setCandidates] = useState([]);
   const [areas, setAreas] = useState([]);
-  const [datasetMeta, setDatasetMeta] = useState(() => loadJsonObject(WATER_WALK_META_STORAGE_KEY));
-  const [observations, setObservations] = useState(() => loadJsonArray(OBSERVATIONS_STORAGE_KEY));
+  const [datasetMeta, setDatasetMeta] = useState(() => ({
+    projectId: site.projectId,
+    generatedAt: null,
+    sourceNotes: site.sourceNotes || [],
+    unmappedClayRichFields: [],
+  }));
+  const [observations, setObservations] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [routeSelection, setRouteSelection] = useState(new Set());
   const [note, setNote] = useState('');
@@ -396,31 +450,51 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
     setCandidates(nextDataset.candidates);
     setAreas(nextDataset.areas);
     setDatasetMeta(nextMeta);
-    window.localStorage.setItem(CANDIDATES_STORAGE_KEY, JSON.stringify(nextDataset.candidates));
-    window.localStorage.setItem(AREAS_STORAGE_KEY, JSON.stringify(nextDataset.areas));
-    window.localStorage.setItem(WATER_WALK_META_STORAGE_KEY, JSON.stringify(nextMeta));
-  }, []);
+    window.localStorage.setItem(storageKeys.candidates, JSON.stringify(nextDataset.candidates));
+    window.localStorage.setItem(storageKeys.areas, JSON.stringify(nextDataset.areas));
+    window.localStorage.setItem(storageKeys.meta, JSON.stringify(nextMeta));
+  }, [storageKeys]);
 
   const saveObservations = nextObservations => {
     setObservations(nextObservations);
-    window.localStorage.setItem(OBSERVATIONS_STORAGE_KEY, JSON.stringify(nextObservations));
+    window.localStorage.setItem(storageKeys.observations, JSON.stringify(nextObservations));
   };
 
   useEffect(() => {
     let cancelled = false;
-    if (!isAllowedUser) {
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSelectedId('');
+      setRouteSelection(new Set());
+      setImportStatus('');
+      setExportStatus('');
+      setCurrentLocation(null);
+      setGpsStatus('');
+      setNote('');
+      setPhotoAttachments([]);
+      setPhotoError('');
+      setObservations(loadJsonArray(storageKeys.observations));
+    });
+
+    if (!canUseSite) {
       queueMicrotask(() => {
         if (cancelled) return;
         setCandidates([]);
         setAreas([]);
-        setImportStatus(user ? 'Water Walk is not enabled for this account.' : 'Log in as poppetew@gmail.com to load private Water Walk pins.');
+        setDatasetMeta({
+          projectId: site.projectId,
+          generatedAt: null,
+          sourceNotes: site.sourceNotes || [],
+          unmappedClayRichFields: [],
+        });
+        setImportStatus(user ? `${site.label} is not enabled for this account.` : `Log in as poppetew@gmail.com to load ${site.label}.`);
       });
       return () => {
         cancelled = true;
       };
     }
 
-    const cachedDataset = loadCachedDataset();
+    const cachedDataset = loadCachedDataset(storageKeys, site);
     if (cachedDataset.candidates.length || cachedDataset.areas.length) {
       queueMicrotask(() => {
         if (cancelled) return;
@@ -432,8 +506,22 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
           sourceNotes: cachedDataset.sourceNotes,
           unmappedClayRichFields: cachedDataset.unmappedClayRichFields,
         });
-        setImportStatus(`Loaded ${cachedDataset.candidates.length} cached private pins and ${cachedDataset.areas.length} cached areas.`);
+        setImportStatus(`Loaded ${cachedDataset.candidates.length} cached ${site.label} pins and ${cachedDataset.areas.length} cached areas.`);
       });
+    }
+
+    if (!site.remote) {
+      if (!cachedDataset.candidates.length && !cachedDataset.areas.length) {
+        const localDataset = emptyDatasetForSite(site);
+        queueMicrotask(() => {
+          if (cancelled) return;
+          saveDataset(localDataset);
+          setImportStatus(`${site.label} is ready. Capture GPS to start mapping observations.`);
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
     }
 
     apiService.getWaterWalkCandidates()
@@ -445,7 +533,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
           return;
         }
         saveDataset(loaded);
-        setImportStatus(`Loaded ${loaded.candidates.length} private pins and ${loaded.areas.length} areas from JobDone.`);
+        setImportStatus(`Loaded ${loaded.candidates.length} ${site.label} pins and ${loaded.areas.length} areas from JobDone.`);
       })
       .catch(error => {
         if (!cancelled && !cachedDataset.candidates.length && !cachedDataset.areas.length) {
@@ -455,9 +543,21 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
     return () => {
       cancelled = true;
     };
-  }, [isAllowedUser, user, saveDataset]);
+  }, [canUseSite, user, saveDataset, site, storageKeys]);
 
   const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || candidates[0] || null;
+  const observationTarget = selectedCandidate || (currentLocation ? {
+    id: `${site.id}-gps-observation`,
+    title: `${site.label} observation`,
+    latitude: currentLocation.latitude,
+    longitude: currentLocation.longitude,
+    priority: 'background',
+    theme: 'soil_doctor',
+    score: 0,
+    whyInteresting: ['GPS-based field note'],
+    lookFor: ['soil condition', 'water movement', 'plant cover', 'microclimate', 'possible next action'],
+    evidencePrompt: 'Capture photos and notes for this spot. The pin is your current GPS location.',
+  } : null);
   const effectiveRouteSelection = routeSelection.size
     ? routeSelection
     : new Set(candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id));
@@ -531,7 +631,10 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
   };
 
   const saveObservation = () => {
-    if (!selectedCandidate) return;
+    if (!observationTarget) {
+      setPhotoError('Capture GPS first, or select a pin.');
+      return;
+    }
     if (hasPendingPhotoAttachments(photoAttachments)) {
       setPhotoError('Wait for photos to finish preparing.');
       return;
@@ -544,13 +647,15 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
       schemaVersion: 'jobdone.waterWalkObservation.v1',
       id: observationId(),
       createdAt: new Date().toISOString(),
-      candidateId: selectedCandidate.id,
-      candidateTitle: selectedCandidate.title,
+      siteId: site.id,
+      siteLabel: site.label,
+      candidateId: observationTarget.id,
+      candidateTitle: observationTarget.title,
       note: note.trim(),
       location: currentLocation,
       candidateLocation: {
-        latitude: selectedCandidate.latitude,
-        longitude: selectedCandidate.longitude,
+        latitude: observationTarget.latitude,
+        longitude: observationTarget.longitude,
       },
       photos: serializableAttachments(photoAttachments),
       syncStatus: 'local_only',
@@ -574,7 +679,9 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
     const payload = {
       schemaVersion: 'jobdone.waterWalkExport.v1',
       exportedAt: new Date().toISOString(),
-      projectId: datasetMeta.projectId || 'dewlish-water-walk',
+      siteId: site.id,
+      siteLabel: site.label,
+      projectId: datasetMeta.projectId || site.projectId,
       sourceNotes: datasetMeta.sourceNotes || [],
       candidates,
       areas,
@@ -591,54 +698,24 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 text-gray-900">
-      <header className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded border border-gray-200 text-gray-600"
-            title="Back"
-            aria-label="Back"
-          >
-            ←
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold leading-5">Water Walk</h1>
-            <p className="text-xs text-gray-500">Offline notes, photos, GPS, and candidate pins</p>
-          </div>
-          <button
-            type="button"
-            onClick={onRecord}
-            className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white"
-          >
-            Record
-          </button>
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-4xl gap-4 px-4 py-4">
-        {!isAllowedUser && (
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
+      <main className="grid w-full max-w-full gap-3 overflow-x-hidden px-2 py-2 sm:mx-auto sm:max-w-4xl sm:px-4">
+        {!canUseSite && (
           <section className="rounded border border-amber-200 bg-amber-50 p-4">
             <h2 className="text-base font-semibold text-amber-950">Private Water Walk</h2>
             <p className="mt-1 text-sm text-amber-900">
-              This page is enabled for poppetew@gmail.com. Log in with that account to see the private Dewlish pins.
+              {site.label} is enabled for poppetew@gmail.com. Log in with that account to see the private pins.
             </p>
           </section>
         )}
 
-        {isAllowedUser && (candidates.length === 0 && areas.length === 0 ? (
-          <section className="rounded border border-amber-200 bg-amber-50 p-4">
-            <h2 className="text-base font-semibold text-amber-950">No water-walk pins loaded</h2>
-            <p className="mt-1 text-sm text-amber-900">
-              {importStatus || 'Private Water Walk data has not loaded yet.'}
-            </p>
-          </section>
-        ) : (
-          <section className="overflow-hidden rounded border border-stone-200 bg-white">
-            <div className="border-b border-stone-100 px-4 py-3">
-              <h2 className="text-sm font-semibold">Candidate map</h2>
-              <p className="text-xs text-gray-500">OpenStreetMap base layer with private pins and clay-rich areas.</p>
+        {canUseSite && (
+          <section className="min-w-0 overflow-hidden rounded border border-stone-200 bg-white">
+            <div className="border-b border-stone-100 px-3 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 pr-12">
+                <span className="truncate text-sm font-semibold">{site.label}</span>
+                {importStatus && <span className="truncate text-xs text-gray-500">{importStatus}</span>}
+              </div>
               <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-medium text-gray-600">
                 {Object.entries(CANDIDATE_THEME).map(([themeKey, theme]) => (
                   <span key={themeKey} className="inline-flex items-center gap-1">
@@ -652,24 +729,25 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
               candidates={candidates}
               areas={areas}
               selectedCandidate={selectedCandidate}
+              currentLocation={currentLocation}
               onSelectCandidate={setSelectedId}
             />
           </section>
-        ))}
+        )}
 
-        {isAllowedUser && selectedCandidate && (
+        {canUseSite && observationTarget && (
           <section className="rounded border border-stone-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold">{selectedCandidate.title}</h2>
-                <p className="mt-1 text-sm text-gray-500">Score {selectedCandidate.score}</p>
+                <h2 className="text-lg font-semibold">{observationTarget.title}</h2>
+                <p className="mt-1 text-sm text-gray-500">Score {observationTarget.score}</p>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CANDIDATE_THEME[selectedCandidate.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
-                  {CANDIDATE_THEME[selectedCandidate.theme]?.label || CANDIDATE_THEME.water_restoration.label}
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CANDIDATE_THEME[observationTarget.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
+                  {CANDIDATE_THEME[observationTarget.theme]?.label || CANDIDATE_THEME.water_restoration.label}
                 </span>
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${PRIORITY[selectedCandidate.priority]?.className || PRIORITY.background.className}`}>
-                  {PRIORITY[selectedCandidate.priority]?.label || 'Check'}
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${PRIORITY[observationTarget.priority]?.className || PRIORITY.background.className}`}>
+                  {PRIORITY[observationTarget.priority]?.label || 'Check'}
                 </span>
               </div>
             </div>
@@ -677,20 +755,20 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
               <div>
                 <h3 className="text-xs font-semibold uppercase text-gray-500">Why here</h3>
                 <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
-                  {selectedCandidate.whyInteresting.map(item => <li key={item}>{item}</li>)}
+                  {observationTarget.whyInteresting.map(item => <li key={item}>{item}</li>)}
                 </ul>
               </div>
               <div>
                 <h3 className="text-xs font-semibold uppercase text-gray-500">Look for</h3>
                 <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
-                  {selectedCandidate.lookFor.map(item => <li key={item}>{item}</li>)}
+                  {observationTarget.lookFor.map(item => <li key={item}>{item}</li>)}
                 </ul>
               </div>
             </div>
           </section>
         )}
 
-        {isAllowedUser && areas.length > 0 && (
+        {canUseSite && areas.length > 0 && (
           <section className="rounded border border-stone-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -731,7 +809,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
           </section>
         )}
 
-        {isAllowedUser && (
+        {canUseSite && (
         <section className="rounded border border-stone-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -761,10 +839,12 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
         </section>
         )}
 
-        {isAllowedUser && (
+        {canUseSite && (
         <section className="rounded border border-stone-200 bg-white p-4">
           <h2 className="text-base font-semibold">Add observation</h2>
-          <p className="mt-1 text-sm text-gray-500">{selectedCandidate?.evidencePrompt}</p>
+          <p className="mt-1 text-sm text-gray-500">
+            {observationTarget?.evidencePrompt || 'Capture GPS first, then add photos and notes for this site.'}
+          </p>
           <div className="mt-3 grid gap-3">
             <textarea
               value={note}
@@ -790,7 +870,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
               <button
                 type="button"
                 onClick={saveObservation}
-                disabled={!selectedCandidate || hasPendingPhotoAttachments(photoAttachments) || hasFailedPhotoAttachments(photoAttachments)}
+                disabled={!observationTarget || hasPendingPhotoAttachments(photoAttachments) || hasFailedPhotoAttachments(photoAttachments)}
                 className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
               >
                 Save observation
@@ -800,7 +880,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
         </section>
         )}
 
-        {isAllowedUser && (
+        {canUseSite && candidates.length > 0 && (
         <section className="rounded border border-stone-200 bg-white p-4">
           <h2 className="text-base font-semibold">Pins</h2>
           <div className="mt-3 grid gap-2">
@@ -829,7 +909,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
         </section>
         )}
 
-        {isAllowedUser && (
+        {canUseSite && (
         <section className="rounded border border-stone-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -865,7 +945,7 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
         </section>
         )}
 
-        {isAllowedUser && (
+        {canUseSite && (
         <details className="rounded border border-stone-200 bg-white p-4">
           <summary className="cursor-pointer text-base font-semibold">Import private pins</summary>
           <textarea

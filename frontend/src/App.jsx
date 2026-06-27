@@ -56,6 +56,7 @@ function App() {
   const [screen, setScreen] = useState(screenFromLocation);
   const [canAutoStartHome] = useState(isPlainHomeOpen);
   const [user, setUser] = useState(null);
+  const [routeHash, setRouteHash] = useState(() => window.location.hash || '');
   const [refreshKey, setRefreshKey] = useState(0);
   const [recordRequestId, setRecordRequestId] = useState(0);
   const [crashNotice, setCrashNotice] = useState(null);
@@ -220,6 +221,7 @@ function App() {
   useEffect(() => {
     const handlePopState = () => {
       const nextScreen = screenFromLocation();
+      setRouteHash(window.location.hash || '');
       diagnosticService.record('screen_open', { screen: nextScreen, source: 'history' });
       if (nextScreen === 'home') {
         setRecordRequestId(0);
@@ -242,9 +244,11 @@ function App() {
       if (window.location.hash !== targetHash) {
         window.history.pushState({ screen: newScreen }, '', targetHash);
       }
+      setRouteHash(targetHash);
     } else if (screenKey === 'home' && screen !== 'home') {
       // Going back to home - replace state
       window.history.replaceState({}, '', '/');
+      setRouteHash('');
     }
     setScreen(screenKey);
   };
@@ -359,7 +363,7 @@ function App() {
   ) : null;
   const globalMenu = screen === 'home'
     ? null
-    : <GlobalMenu currentScreen={screen} onNavigate={navigateTo} user={user} teams={readableTeams} />;
+    : <GlobalMenu currentScreen={screen} currentHash={routeHash} onNavigate={navigateTo} user={user} teams={readableTeams} />;
 
   if (screen === 'feedback') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<FeedbackScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} /></>;
@@ -378,7 +382,7 @@ function App() {
   }
 
   if (screen === 'water-walk') {
-    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<WaterWalkScreen onBack={() => navigateTo('home')} onRecord={startRecordingFromShortcut} user={user} /></>;
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}{globalMenu}<WaterWalkScreen routeHash={routeHash} user={user} /></>;
   }
 
   if (screen === 'share-target') {

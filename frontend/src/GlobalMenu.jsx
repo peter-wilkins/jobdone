@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { useOutsideDismiss } from './services/outsideDismissService';
 import { teamScreenId } from './services/teamNavigationService';
+import { WATER_WALK_SITES } from './waterWalkSites';
 
 const MENU_ITEMS = [
   { screen: 'team-setup', label: 'Create Team' },
-  { screen: 'water-walk', label: 'Water Walk' },
   { screen: 'contacts', label: 'Contacts' },
   { screen: 'locations', label: 'Locations' },
   { screen: 'onboarding', label: 'Onboarding' },
@@ -16,6 +16,7 @@ export function GlobalMenu({
   onNavigate,
   user,
   teams = [],
+  currentHash = '',
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
@@ -26,8 +27,9 @@ export function GlobalMenu({
     setIsOpen(false);
     onNavigate(screen);
   };
+  const currentRoute = String(currentHash || '').replace(/^#/, '') || currentScreen;
   return (
-    <div className="fixed top-3 right-3 z-50" ref={menuRef}>
+    <div className="fixed right-3 top-10 z-[1000]" ref={menuRef}>
       <button
         type="button"
         onClick={() => setIsOpen(open => !open)}
@@ -79,6 +81,23 @@ export function GlobalMenu({
               })}
             </div>
           )}
+          <div className="border-b border-gray-100 py-1">
+            <p className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Sites</p>
+            {WATER_WALK_SITES.map(site => (
+              <button
+                key={site.id}
+                type="button"
+                onClick={() => goTo(site.screen)}
+                className={`w-full text-left px-4 py-2.5 text-sm transition ${
+                  currentRoute === site.screen
+                    ? 'bg-gray-100 text-gray-900 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className="block truncate">{site.label}</span>
+              </button>
+            ))}
+          </div>
           <div className="border-t border-gray-200">
             {MENU_ITEMS.map(item => (
               <button
