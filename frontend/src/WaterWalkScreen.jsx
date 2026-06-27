@@ -266,6 +266,7 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
     });
     L.tileLayer(tileConfig.url, {
       attribution: tileConfig.attribution,
+      crossOrigin: true,
       maxZoom: tileConfig.maxZoom,
     }).addTo(map);
     overlayLayerRef.current = L.layerGroup().addTo(map);
