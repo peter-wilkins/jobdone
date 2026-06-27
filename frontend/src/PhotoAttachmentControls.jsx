@@ -5,7 +5,7 @@ import {
   MAX_PHOTOS_PER_CAPTURE,
 } from './services/photoAttachmentService';
 
-export function photoAttachmentImageSrc(attachment, {
+function photoAttachmentImageSrc(attachment, {
   createObjectURL = typeof URL !== 'undefined' ? URL.createObjectURL?.bind(URL) : null,
 } = {}) {
   const blob = attachment?.blob || attachment?.originalBlob;
@@ -78,8 +78,10 @@ export function PhotoAttachmentControls({
   onRemove,
   error = '',
   disabled = false,
+  showCameraButton = false,
 }) {
   const inputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const photoAttachments = (attachments || []).filter(attachment => attachment.kind === 'photo');
   const canAddPhotos = canAddMorePhotos(attachments);
 
@@ -96,15 +98,40 @@ export function PhotoAttachmentControls({
           event.target.value = '';
         }}
       />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={disabled || !canAddPhotos}
-        className="inline-flex h-8 items-center rounded border border-dashed border-gray-300 px-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400"
-      >
-        Photo
-        <span className="ml-1 text-xs text-gray-400">{photoAttachments.length}/{MAX_PHOTOS_PER_CAPTURE}</span>
-      </button>
+      {showCameraButton && (
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(event) => {
+            void onAddFiles?.(event.target.files);
+            event.target.value = '';
+          }}
+        />
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled || !canAddPhotos}
+          className="inline-flex h-8 items-center rounded border border-dashed border-gray-300 px-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400"
+        >
+          Photo
+          <span className="ml-1 text-xs text-gray-400">{photoAttachments.length}/{MAX_PHOTOS_PER_CAPTURE}</span>
+        </button>
+        {showCameraButton && (
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={disabled || !canAddPhotos}
+            className="inline-flex h-8 items-center rounded border border-gray-300 px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:border-gray-200 disabled:text-gray-400"
+          >
+            Camera
+          </button>
+        )}
+      </div>
       {photoAttachments.length > 0 && (
         <div className="mt-2 grid gap-2">
           {photoAttachments.map(attachment => (

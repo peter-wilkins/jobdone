@@ -6,6 +6,11 @@ export const WATER_WALK_SITES = [
     projectId: 'dewlish-water-walk',
     remote: true,
     private: true,
+    defaultView: {
+      latitude: 50.788,
+      longitude: -2.33,
+      zoom: 14,
+    },
   },
   {
     id: '85-dover-road',
@@ -14,6 +19,11 @@ export const WATER_WALK_SITES = [
     projectId: '85-dover-road-water-walk',
     remote: false,
     private: false,
+    defaultView: {
+      latitude: 50.61,
+      longitude: -2.46,
+      zoom: 16,
+    },
     sourceNotes: ['Home garden test site. Coordinates come from captured GPS, not hard-coded address data.'],
   },
 ];

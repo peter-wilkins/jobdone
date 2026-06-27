@@ -12,6 +12,7 @@ import { apiService } from './services/apiService';
 import { parseWaterWalkDataset } from './contracts/waterWalkDataset';
 import { waterWalkBoundsKey } from './waterWalkViewport';
 import { waterWalkSiteFromHash } from './waterWalkSites';
+import { Modal } from './Modal';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
 const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
@@ -21,6 +22,7 @@ const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
 const ENV = import.meta.env || {};
 const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const DEFAULT_MAP_VIEW = { latitude: 50.61, longitude: -2.46, zoom: 14 };
 const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
 const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY
   ? `https://api.os.uk/maps/raster/v1/zxy/${OS_MAPS_LAYER}/{z}/{x}/{y}.png?key=${ENV.VITE_OS_MAPS_API_KEY}`
@@ -288,6 +290,18 @@ function observationId() {
   return `water-walk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function observationLocation(observation) {
+  const location = observation?.location || observation?.candidateLocation;
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return {
+    latitude,
+    longitude,
+    accuracyMetres: Number(location?.accuracyMetres || 0) || null,
+  };
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -297,12 +311,23 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, onSelectCandidate }) {
+function WaterWalkMap({
+  candidates,
+  areas,
+  observations,
+  selectedCandidate,
+  selectedObservation,
+  currentLocation,
+  defaultView,
+  onSelectCandidate,
+  onSelectObservation,
+}) {
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const overlayLayerRef = useRef(null);
   const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
+  const initialView = defaultView || DEFAULT_MAP_VIEW;
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return undefined;
@@ -318,7 +343,7 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, o
       maxZoom: tileConfig.maxZoom,
     }).addTo(map);
     overlayLayerRef.current = L.layerGroup().addTo(map);
-    map.setView([51.5, -0.12], 13);
+    map.setView([initialView.latitude, initialView.longitude], initialView.zoom || 14);
     mapRef.current = map;
 
     return () => {
@@ -326,7 +351,7 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, o
       mapRef.current = null;
       overlayLayerRef.current = null;
     };
-  }, [tileConfig]);
+  }, [initialView.latitude, initialView.longitude, initialView.zoom, tileConfig]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -374,6 +399,27 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, o
       boundsPoints.push([candidate.latitude, candidate.longitude]);
     });
 
+    observations.forEach(observation => {
+      const location = observationLocation(observation);
+      if (!location) return;
+      const isSelected = observation.id === selectedObservation?.id;
+      const marker = L.circleMarker([location.latitude, location.longitude], {
+        radius: isSelected ? 7 : 5,
+        color: isSelected ? '#111827' : '#f8fafc',
+        fillColor: '#0f766e',
+        fillOpacity: 0.95,
+        weight: isSelected ? 2 : 1,
+      });
+      marker.bindPopup(`
+        <strong>${escapeHtml(observation.candidateTitle || 'Observation')}</strong><br />
+        ${escapeHtml(new Date(observation.createdAt).toLocaleString())}<br />
+        ${escapeHtml((observation.note || '').slice(0, 120))}
+      `);
+      marker.on('click', () => onSelectObservation(observation.id));
+      marker.addTo(overlayLayer);
+      boundsPoints.push([location.latitude, location.longitude]);
+    });
+
     if (currentLocation) {
       const accuracy = Number(currentLocation.accuracyMetres || 0);
       const locationMarker = L.circleMarker([currentLocation.latitude, currentLocation.longitude], {
@@ -394,15 +440,30 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, currentLocation, o
     const currentLocationKey = currentLocation
       ? `gps:${currentLocation.latitude.toFixed(6)},${currentLocation.longitude.toFixed(6)}`
       : '';
-    const boundsKey = `${waterWalkBoundsKey(candidates, areas)}::${currentLocationKey}`;
+    const observationsKey = observations
+      .map(observation => {
+        const location = observationLocation(observation);
+        return location ? `${observation.id}:${location.latitude.toFixed(6)},${location.longitude.toFixed(6)}` : '';
+      })
+      .filter(Boolean)
+      .join('|');
+    const boundsKey = `${waterWalkBoundsKey(candidates, areas)}::${observationsKey}::${currentLocationKey}`;
     if (boundsPoints.length && boundsKey !== fittedBoundsKeyRef.current) {
       fittedBoundsKeyRef.current = boundsKey;
       map.fitBounds(L.latLngBounds(boundsPoints).pad(0.08), {
         animate: false,
         maxZoom: 16,
       });
+    } else if (!boundsPoints.length && initialView) {
+      const defaultKey = `default:${initialView.latitude}:${initialView.longitude}:${initialView.zoom || 14}`;
+      if (defaultKey !== fittedBoundsKeyRef.current) {
+        fittedBoundsKeyRef.current = defaultKey;
+        map.setView([initialView.latitude, initialView.longitude], initialView.zoom || 14, {
+          animate: false,
+        });
+      }
     }
-  }, [areas, candidates, currentLocation, onSelectCandidate, selectedCandidate]);
+  }, [areas, candidates, currentLocation, initialView, observations, onSelectCandidate, onSelectObservation, selectedCandidate, selectedObservation]);
 
   return (
     <div
@@ -429,6 +490,8 @@ export function WaterWalkScreen({ routeHash, user }) {
   }));
   const [observations, setObservations] = useState([]);
   const [selectedId, setSelectedId] = useState('');
+  const [selectedObservationId, setSelectedObservationId] = useState('');
+  const [isObservationDialogOpen, setIsObservationDialogOpen] = useState(false);
   const [routeSelection, setRouteSelection] = useState(new Set());
   const [note, setNote] = useState('');
   const [photoAttachments, setPhotoAttachments] = useState([]);
@@ -465,6 +528,8 @@ export function WaterWalkScreen({ routeHash, user }) {
     queueMicrotask(() => {
       if (cancelled) return;
       setSelectedId('');
+      setSelectedObservationId('');
+      setIsObservationDialogOpen(false);
       setRouteSelection(new Set());
       setImportStatus('');
       setExportStatus('');
@@ -545,7 +610,8 @@ export function WaterWalkScreen({ routeHash, user }) {
     };
   }, [canUseSite, user, saveDataset, site, storageKeys]);
 
-  const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || candidates[0] || null;
+  const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || null;
+  const selectedObservation = observations.find(observation => observation.id === selectedObservationId) || null;
   const observationTarget = selectedCandidate || (currentLocation ? {
     id: `${site.id}-gps-observation`,
     title: `${site.label} observation`,
@@ -565,6 +631,16 @@ export function WaterWalkScreen({ routeHash, user }) {
   const routeStart = currentLocation ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude } : selectedRouteCandidates[0] || null;
   const route = routeNearestNext(selectedRouteCandidates, routeStart);
 
+  const selectCandidate = useCallback(candidateId => {
+    setSelectedId(candidateId);
+    setSelectedObservationId('');
+  }, []);
+
+  const selectObservation = useCallback(observationIdValue => {
+    setSelectedObservationId(observationIdValue);
+    setSelectedId('');
+  }, []);
+
   const importCandidates = () => {
     const parsed = safeJsonParse(importText, null);
     let nextDataset;
@@ -579,7 +655,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       return;
     }
     saveDataset(nextDataset);
-    setSelectedId(nextDataset.candidates[0]?.id || '');
+    selectCandidate(nextDataset.candidates[0]?.id || '');
     setRouteSelection(new Set(nextDataset.candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id)));
     setImportText('');
     setImportStatus(`Imported ${nextDataset.candidates.length} pins and ${nextDataset.areas.length} areas.`);
@@ -661,9 +737,13 @@ export function WaterWalkScreen({ routeHash, user }) {
       syncStatus: 'local_only',
     };
     saveObservations([observation, ...observations]);
+    setSelectedObservationId(observation.id);
+    setSelectedId('');
+    setCurrentLocation(null);
     setNote('');
     setPhotoAttachments([]);
     setPhotoError('');
+    setIsObservationDialogOpen(false);
   };
 
   const toggleRouteCandidate = candidateId => {
@@ -697,6 +777,12 @@ export function WaterWalkScreen({ routeHash, user }) {
     }
   };
 
+  const openObservationDialog = () => {
+    setIsObservationDialogOpen(true);
+    setPhotoError('');
+    if (!selectedCandidate && !currentLocation) locateMe();
+  };
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
       <main className="grid w-full max-w-full gap-3 overflow-x-hidden px-2 py-2 sm:mx-auto sm:max-w-4xl sm:px-4">
@@ -728,10 +814,35 @@ export function WaterWalkScreen({ routeHash, user }) {
             <WaterWalkMap
               candidates={candidates}
               areas={areas}
+              observations={observations}
               selectedCandidate={selectedCandidate}
+              selectedObservation={selectedObservation}
               currentLocation={currentLocation}
-              onSelectCandidate={setSelectedId}
+              defaultView={site.defaultView}
+              onSelectCandidate={selectCandidate}
+              onSelectObservation={selectObservation}
             />
+          </section>
+        )}
+
+        {canUseSite && selectedObservation && (
+          <section className="rounded border border-teal-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold">Observation</h2>
+                <p className="mt-1 truncate text-sm font-medium text-gray-900">{selectedObservation.candidateTitle}</p>
+                <p className="mt-1 text-xs text-gray-500">{new Date(selectedObservation.createdAt).toLocaleString()}</p>
+              </div>
+              <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">
+                {selectedObservation.photos?.length || 0} photos
+              </span>
+            </div>
+            {selectedObservation.note && <p className="mt-3 text-sm text-gray-700">{selectedObservation.note}</p>}
+            {selectedObservation.photos?.length > 0 && (
+              <div className="mt-3 flex gap-2 overflow-auto">
+                {selectedObservation.photos.map(photo => <PhotoAttachmentThumb key={photo.id} attachment={photo} />)}
+              </div>
+            )}
           </section>
         )}
 
@@ -829,54 +940,13 @@ export function WaterWalkScreen({ routeHash, user }) {
             {route.map((candidate, index) => (
               <li key={candidate.id} className="flex items-center gap-3 rounded border border-gray-100 bg-stone-50 px-3 py-2">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">{index + 1}</span>
-                <button type="button" onClick={() => setSelectedId(candidate.id)} className="min-w-0 flex-1 text-left">
+                <button type="button" onClick={() => selectCandidate(candidate.id)} className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium">{candidate.title}</span>
                   <span className="block text-xs text-gray-500">{index === 0 ? 'Start' : formatDistance(candidate.routeDistanceMetres)}</span>
                 </button>
               </li>
             ))}
           </ol>
-        </section>
-        )}
-
-        {canUseSite && (
-        <section className="rounded border border-stone-200 bg-white p-4">
-          <h2 className="text-base font-semibold">Add observation</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            {observationTarget?.evidencePrompt || 'Capture GPS first, then add photos and notes for this site.'}
-          </p>
-          <div className="mt-3 grid gap-3">
-            <textarea
-              value={note}
-              onChange={event => setNote(event.target.value)}
-              rows={4}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-              placeholder="What did you see here?"
-            />
-            <PhotoAttachmentControls
-              attachments={photoAttachments}
-              onAddFiles={addPhotoAttachments}
-              onRemove={removePhotoAttachment}
-              error={photoError}
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={locateMe}
-                className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
-              >
-                Capture GPS
-              </button>
-              <button
-                type="button"
-                onClick={saveObservation}
-                disabled={!observationTarget || hasPendingPhotoAttachments(photoAttachments) || hasFailedPhotoAttachments(photoAttachments)}
-                className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
-              >
-                Save observation
-              </button>
-            </div>
-          </div>
         </section>
         )}
 
@@ -893,7 +963,7 @@ export function WaterWalkScreen({ routeHash, user }) {
                   className="h-4 w-4"
                   aria-label={`Include ${candidate.title} in route`}
                 />
-                <button type="button" onClick={() => setSelectedId(candidate.id)} className="min-w-0 flex-1 text-left">
+                <button type="button" onClick={() => selectCandidate(candidate.id)} className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium">{candidate.title}</span>
                   <span className="block truncate text-xs text-gray-500">{candidate.whyInteresting.slice(0, 2).join('; ')}</span>
                 </button>
@@ -964,6 +1034,63 @@ export function WaterWalkScreen({ routeHash, user }) {
         </details>
         )}
       </main>
+
+      {canUseSite && (
+        <button
+          type="button"
+          onClick={openObservationDialog}
+          className="fixed bottom-6 right-6 z-[1000] flex h-14 w-14 items-center justify-center rounded-full bg-gray-900 text-white shadow-lg transition hover:bg-gray-800"
+          title="Add observation"
+          aria-label="Add observation"
+        >
+          <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      )}
+
+      <Modal
+        open={canUseSite && isObservationDialogOpen}
+        title="Add observation"
+        description={observationTarget?.evidencePrompt || 'Capture GPS first, then add photos and notes for this site.'}
+        onClose={() => setIsObservationDialogOpen(false)}
+        closeLabel="Close"
+      >
+            <div className="grid gap-3">
+              <textarea
+                value={note}
+                onChange={event => setNote(event.target.value)}
+                rows={4}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                placeholder="What did you see here?"
+              />
+              <PhotoAttachmentControls
+                attachments={photoAttachments}
+                onAddFiles={addPhotoAttachments}
+                onRemove={removePhotoAttachment}
+                error={photoError}
+                showCameraButton
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={locateMe}
+                  className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+                >
+                  Capture GPS
+                </button>
+                <button
+                  type="button"
+                  onClick={saveObservation}
+                  disabled={!observationTarget || hasPendingPhotoAttachments(photoAttachments) || hasFailedPhotoAttachments(photoAttachments)}
+                  className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
+                >
+                  Save observation
+                </button>
+              </div>
+              {gpsStatus && <p className="text-sm text-gray-600">{gpsStatus}</p>}
+            </div>
+      </Modal>
     </div>
   );
 }

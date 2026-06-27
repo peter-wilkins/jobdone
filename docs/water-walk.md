@@ -142,3 +142,8 @@ Later work can turn saved observations into:
 - JobDone team work items
 - evidence packs
 - RegenOS grant/planning inputs
+
+Sites should eventually become Team-owned resources. A Team can own zero or
+more Sites, and Team members should be able to see the Site data and add
+observations according to their Team permissions. The current MVP keeps Sites as
+frontend route/config choices while the field workflow is still being tested.
