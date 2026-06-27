@@ -97,6 +97,10 @@ It supports ZXY raster tiles and Leaflet, but needs an OS Data Hub project key.
 Putting that key directly in a public frontend exposes it to the browser; for
 production, prefer a small backend tile proxy or restricted key setup.
 
+OS Data Hub projects can have both an API key and an API secret. The current
+frontend-only tile path needs the API key, not the secret. Keep the API secret in
+`backend/.env` as `OS_MAPS_API_SECRET` for a later server-side proxy/OAuth path.
+
 Use the EPSG:3857 / Web Mercator ZXY layers with the current Leaflet map:
 
 - `Outdoor_3857`
