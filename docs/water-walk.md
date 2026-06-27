@@ -256,6 +256,41 @@ Later work can turn saved observations into:
 - JobDone team work items
 - evidence packs
 - RegenOS grant/planning inputs
+- rough grant job budgets
+
+## Grant job budgeting
+
+Water Walk should eventually help a landowner decide whether a possible grant
+job is economically worth exploring.
+
+The first version should be rough and editable, not falsely precise.
+
+For a selected candidate pin or observation, the app should be able to show:
+
+- possible intervention, for example pond or leaky dam
+- possible grant option
+- likely grant income
+- likely cash costs
+- likely internal labour and machinery costs
+- nearby materials that might reduce costs
+- biggest unknowns
+- confidence: low, medium, high
+- landowner judgement: worth exploring, needs quote/adviser, or not worth it
+
+Water Walk observations should capture budget clues while the user is already in
+the field:
+
+- machinery access
+- ground wetness
+- available gates/tracks
+- rough dimensions
+- likely labour difficulty
+- nearby woody material, stone, soil, or other usable materials
+- whether woodland or hedge work could supply dam material
+- downstream risk or consent concerns
+
+RegenOS owns the grant/intervention model. JobDone owns the user-facing capture
+and editing flow.
 
 Sites should eventually become Team-owned resources. A Team can own zero or
 more Sites, and Team members should be able to see the Site data and add
