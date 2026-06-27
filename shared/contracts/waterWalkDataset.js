@@ -25,7 +25,7 @@ export function buildWaterWalkDatasetSchemas(z) {
     latitude: z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
     priority: z.enum(['high', 'medium', 'low', 'background']),
-    theme: z.enum(['water_restoration', 'soil_doctor', 'syntropic_agroforestry']).default('water_restoration'),
+    theme: z.enum(['water_restoration', 'soil_doctor', 'syntropic_agroforestry', 'historic_water']).default('water_restoration'),
     score: z.number(),
     whyInteresting: z.array(z.string()).default([]),
     lookFor: z.array(z.string()).default([]),

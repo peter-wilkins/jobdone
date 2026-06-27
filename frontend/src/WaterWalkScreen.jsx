@@ -67,6 +67,11 @@ const CANDIDATE_THEME = {
     fill: '#16803b',
     className: 'border-green-200 bg-green-50 text-green-800',
   },
+  historic_water: {
+    label: 'Historic',
+    fill: '#0f766e',
+    className: 'border-teal-200 bg-teal-50 text-teal-800',
+  },
 };
 
 function safeJsonParse(value, fallback) {

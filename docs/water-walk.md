@@ -64,7 +64,8 @@ Candidate pins have two separate classifications:
 
 - `priority`: high, medium, low, or background; this says how strongly the
   location should be considered for a field walk.
-- `theme`: water restoration, soil doctor, or syntropic agroforestry; this
+- `theme`: water restoration, soil doctor, syntropic agroforestry, or historic
+  water; this
   drives the map pin colour.
 
 Clay-rich areas currently mean "SMP texture class hZCL - Heavy Silty Clay Loam".
@@ -84,6 +85,41 @@ Soil Doctor pins highlight low organic matter, heavier clay, high pH,
 compaction, or crop-risk clues for inspection. Syntropic agroforestry pins
 highlight margins, cover strips, and woodland-edge reference points. They are
 observation prompts, not planting recommendations.
+
+Historic water pins highlight possible old wells, springs, spring boxes, pumps,
+or mapped water-source clues. They are "go and verify" prompts, not proof that
+water still emerges there.
+
+## Historic water-source imports
+
+Searches for old springs and wells must be site-bounded by default:
+
+- Dewlish: use the private site/farm geometry when available, then search within
+  a modest buffer around it. If only a centre point is available, keep the radius
+  small enough for a useful field walk.
+- 85 Dover Road: use a tight local radius around the site default view or the
+  first captured GPS anchor. Do not pull in all Weymouth/Dorset records.
+
+Good first sources:
+
+- British Geological Survey GeoIndex Water Wells: water wells, springs and water
+  boreholes from the National Well Record Archive.
+- OpenStreetMap Overpass: `natural=spring`, `man_made=water_well`,
+  `man_made=spring_box`, and cautiously `amenity=drinking_water`.
+- Dorset Historic Environment Record / Heritage Gateway: named historic wells,
+  holy wells, village pumps, and waterworks where records are available.
+- Historic Ordnance Survey maps via National Library of Scotland: useful for
+  visual/manual review of labels such as `Spr` and `Well`, but treat extracted
+  points as low-confidence until field checked.
+
+Imported historic-water candidates should include:
+
+- source name and URL
+- source record id where available
+- confidence: low, medium, high
+- date or map epoch where available
+- evidence prompt asking the walker to check for wet ground, seepage, stonework,
+  pipes, vegetation change, hollow ways, or old water infrastructure
 
 ## MVP route planning
 
