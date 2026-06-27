@@ -78,6 +78,29 @@ That is enough for the first walk:
 
 Only add more routing complexity if field use proves this is not enough.
 
+## Map tiles
+
+The Water Walk page uses Leaflet with OpenStreetMap raster tiles by default.
+This gives pan, zoom, small pins, and polygon overlays without committing private
+farm data into the frontend bundle.
+
+Tile source configuration:
+
+- default: `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
+- override URL: `VITE_WATER_WALK_TILE_URL`
+- override attribution: `VITE_WATER_WALK_TILE_ATTRIBUTION`
+- Ordnance Survey shortcut: set `VITE_OS_MAPS_API_KEY` and optionally
+  `VITE_OS_MAPS_LAYER`, for example `Outdoor_3857`
+
+OS Maps API through OS Data Hub is the likely better basemap for field detail.
+It supports ZXY raster tiles and Leaflet, but needs an OS Data Hub project key.
+Putting that key directly in a public frontend exposes it to the browser; for
+production, prefer a small backend tile proxy or restricted key setup.
+
+Do not add offline/preload tile downloads against `tile.openstreetmap.org`.
+If offline field maps become necessary, use a tile provider that explicitly
+allows offline use, OS Data Hub terms that cover it, or self-hosted tiles.
+
 ## Later
 
 Later work can turn saved observations into:

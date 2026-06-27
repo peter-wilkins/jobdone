@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { PhotoAttachmentControls, PhotoAttachmentThumb } from './PhotoAttachmentControls';
 import {
   createPendingPhotoAttachmentsFromFiles,
@@ -14,6 +16,13 @@ const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
 const WATER_WALK_META_STORAGE_KEY = 'jobdone.waterWalk.meta.v1';
 const OBSERVATIONS_STORAGE_KEY = 'jobdone.waterWalk.observations.v1';
 const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
+const ENV = import.meta.env || {};
+const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
+const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY
+  ? `https://api.os.uk/maps/raster/v1/zxy/${OS_MAPS_LAYER}/{z}/{x}/{y}.png?key=${ENV.VITE_OS_MAPS_API_KEY}`
+  : '';
 
 const PRIORITY = {
   high: {
@@ -128,6 +137,30 @@ function normalizeAreaList(value) {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
+function waterWalkTileConfig() {
+  if (ENV.VITE_WATER_WALK_TILE_URL) {
+    return {
+      url: ENV.VITE_WATER_WALK_TILE_URL,
+      attribution: ENV.VITE_WATER_WALK_TILE_ATTRIBUTION || DEFAULT_OSM_ATTRIBUTION,
+      maxZoom: Number(ENV.VITE_WATER_WALK_TILE_MAX_ZOOM || 19),
+    };
+  }
+
+  if (OS_MAPS_TILE_URL) {
+    return {
+      url: OS_MAPS_TILE_URL,
+      attribution: ENV.VITE_OS_MAPS_ATTRIBUTION || 'Contains OS data &copy; Crown copyright and database rights',
+      maxZoom: Number(ENV.VITE_OS_MAPS_MAX_ZOOM || 20),
+    };
+  }
+
+  return {
+    url: DEFAULT_OSM_TILE_URL,
+    attribution: DEFAULT_OSM_ATTRIBUTION,
+    maxZoom: 19,
+  };
+}
+
 function normalizeDataset(value) {
   const dataset = {
     projectId: value?.projectId || 'dewlish-water-walk',
@@ -152,45 +185,6 @@ function loadCachedDataset() {
   } catch {
     return normalizeDataset({ candidates: [], areas: [] });
   }
-}
-
-function boundsFor(candidates, areas = []) {
-  const points = [
-    ...candidates.map(candidate => [candidate.latitude, candidate.longitude]),
-    ...areas.flatMap(area => area.rings.flat()),
-  ];
-  if (!points.length) {
-    return { minLat: 0, maxLat: 1, minLon: 0, maxLon: 1 };
-  }
-  const latitudes = points.map(point => point[0]);
-  const longitudes = points.map(point => point[1]);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLon = Math.min(...longitudes);
-  const maxLon = Math.max(...longitudes);
-  return {
-    minLat,
-    maxLat: maxLat === minLat ? maxLat + 0.001 : maxLat,
-    minLon,
-    maxLon: maxLon === minLon ? maxLon + 0.001 : maxLon,
-  };
-}
-
-function projectPoint(candidate, bounds) {
-  const x = 8 + ((candidate.longitude - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * 84;
-  const y = 92 - ((candidate.latitude - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * 84;
-  return { x, y };
-}
-
-function projectLatLon(point, bounds) {
-  return projectPoint({ latitude: point[0], longitude: point[1] }, bounds);
-}
-
-function areaPath(area, bounds) {
-  return area.rings.map(ring => ring.map((point, index) => {
-    const projected = projectLatLon(point, bounds);
-    return `${index === 0 ? 'M' : 'L'}${projected.x.toFixed(2)} ${projected.y.toFixed(2)}`;
-  }).join(' ') + ' Z').join(' ');
 }
 
 function distanceMetres(a, b) {
@@ -245,6 +239,113 @@ function serializableAttachments(attachments = []) {
 
 function observationId() {
   return `water-walk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate }) {
+  const mapElementRef = useRef(null);
+  const mapRef = useRef(null);
+  const overlayLayerRef = useRef(null);
+  const tileConfig = useMemo(() => waterWalkTileConfig(), []);
+
+  useEffect(() => {
+    if (!mapElementRef.current || mapRef.current) return undefined;
+
+    const map = L.map(mapElementRef.current, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      attributionControl: true,
+    });
+    L.tileLayer(tileConfig.url, {
+      attribution: tileConfig.attribution,
+      maxZoom: tileConfig.maxZoom,
+    }).addTo(map);
+    overlayLayerRef.current = L.layerGroup().addTo(map);
+    map.setView([51.5, -0.12], 13);
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      overlayLayerRef.current = null;
+    };
+  }, [tileConfig]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const overlayLayer = overlayLayerRef.current;
+    if (!map || !overlayLayer) return;
+
+    overlayLayer.clearLayers();
+    const boundsPoints = [];
+
+    areas.forEach(area => {
+      const colour = area.areaType === 'clay_rich_texture_class' ? '#7c3f1d' : '#315f72';
+      const polygon = L.polygon(area.rings, {
+        color: colour,
+        fillColor: colour,
+        fillOpacity: area.areaType === 'clay_rich_texture_class' ? 0.18 : 0.10,
+        opacity: 0.78,
+        weight: 1,
+      });
+      polygon.bindPopup(`
+        <strong>${escapeHtml(area.title)}</strong><br />
+        ${escapeHtml(area.soilTextureCode || 'area')} ${escapeHtml(area.soilTextureLabel || '')}<br />
+        ${escapeHtml(area.note || '')}
+      `);
+      polygon.addTo(overlayLayer);
+      area.rings.flat().forEach(point => boundsPoints.push(point));
+    });
+
+    candidates.forEach(candidate => {
+      const isSelected = candidate.id === selectedCandidate?.id;
+      const marker = L.circleMarker([candidate.latitude, candidate.longitude], {
+        radius: isSelected ? 7 : 4.5,
+        color: isSelected ? '#111827' : '#ffffff',
+        fillColor: PRIORITY[candidate.priority]?.fill || PRIORITY.background.fill,
+        fillOpacity: 0.95,
+        weight: isSelected ? 2 : 1,
+      });
+      marker.bindPopup(`
+        <strong>${escapeHtml(candidate.title)}</strong><br />
+        Score ${escapeHtml(candidate.score)}<br />
+        ${escapeHtml(candidate.whyInteresting.slice(0, 2).join('; '))}
+      `);
+      marker.on('click', () => onSelectCandidate(candidate.id));
+      marker.addTo(overlayLayer);
+      boundsPoints.push([candidate.latitude, candidate.longitude]);
+    });
+
+    if (boundsPoints.length) {
+      map.fitBounds(L.latLngBounds(boundsPoints).pad(0.08), {
+        animate: false,
+        maxZoom: 16,
+      });
+    }
+  }, [areas, candidates, onSelectCandidate, selectedCandidate]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedCandidate) return;
+    map.panTo([selectedCandidate.latitude, selectedCandidate.longitude], { animate: true });
+  }, [selectedCandidate]);
+
+  return (
+    <div
+      ref={mapElementRef}
+      className="h-[22rem] w-full bg-stone-100 sm:h-[28rem]"
+      role="application"
+      aria-label="Interactive water walk map"
+    />
+  );
 }
 
 export function WaterWalkScreen({ onBack, onRecord, user }) {
@@ -343,7 +444,6 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
   const selectedRouteCandidates = candidates.filter(candidate => effectiveRouteSelection.has(candidate.id));
   const routeStart = currentLocation ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude } : selectedRouteCandidates[0] || null;
   const route = routeNearestNext(selectedRouteCandidates, routeStart);
-  const mapBounds = useMemo(() => boundsFor(candidates, areas), [candidates, areas]);
 
   const importCandidates = () => {
     const parsed = safeJsonParse(importText, null);
@@ -518,56 +618,14 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
           <section className="overflow-hidden rounded border border-stone-200 bg-white">
             <div className="border-b border-stone-100 px-4 py-3">
               <h2 className="text-sm font-semibold">Candidate map</h2>
-              <p className="text-xs text-gray-500">Simplified pins and clay-rich areas. Use GPS and ground truth outside.</p>
+              <p className="text-xs text-gray-500">OpenStreetMap base layer with private pins and clay-rich areas.</p>
             </div>
-            <svg viewBox="0 0 100 100" className="block h-72 w-full bg-[#edf2e8]" role="img" aria-label="Candidate pin map">
-              <rect x="0" y="0" width="100" height="100" fill="#edf2e8" />
-              <path d="M5 78 C25 64, 35 70, 54 55 S75 38, 94 22" fill="none" stroke="#bfd0b8" strokeWidth="1.4" />
-              <path d="M8 28 C27 20, 45 30, 65 18 S84 18, 94 12" fill="none" stroke="#d7c8a6" strokeWidth="1" strokeDasharray="2 2" />
-              {areas.map(area => (
-                <path
-                  key={area.id}
-                  d={areaPath(area, mapBounds)}
-                  fill={area.areaType === 'clay_rich_texture_class' ? '#7c3f1d' : '#315f72'}
-                  fillOpacity={area.areaType === 'clay_rich_texture_class' ? '0.20' : '0.12'}
-                  stroke={area.areaType === 'clay_rich_texture_class' ? '#7c3f1d' : '#315f72'}
-                  strokeOpacity="0.72"
-                  strokeWidth="0.7"
-                >
-                  <title>{area.title}</title>
-                </path>
-              ))}
-              {candidates.map(candidate => {
-                  const point = projectPoint(candidate, mapBounds);
-                  const isSelected = candidate.id === selectedCandidate?.id;
-                  return (
-                  <g
-                    key={candidate.id}
-                    role="button"
-                    tabIndex="0"
-                      onClick={() => setSelectedId(candidate.id)}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' || event.key === ' ') setSelectedId(candidate.id);
-                    }}
-                      aria-label={candidate.title}
-                    >
-                      <circle
-                        cx={point.x}
-                        cy={point.y}
-                        r={isSelected ? 4.5 : 3.2}
-                        fill={PRIORITY[candidate.priority]?.fill || PRIORITY.background.fill}
-                        stroke={isSelected ? '#111827' : '#ffffff'}
-                        strokeWidth={isSelected ? 1.4 : 0.8}
-                      />
-                    {isSelected && (
-                      <text x={Math.min(point.x + 4, 78)} y={Math.max(point.y - 4, 8)} fontSize="3.2" fill="#111827" fontWeight="700">
-                        {candidate.title}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
+            <WaterWalkMap
+              candidates={candidates}
+              areas={areas}
+              selectedCandidate={selectedCandidate}
+              onSelectCandidate={setSelectedId}
+            />
           </section>
         ))}
 
