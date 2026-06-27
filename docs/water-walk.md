@@ -97,6 +97,16 @@ It supports ZXY raster tiles and Leaflet, but needs an OS Data Hub project key.
 Putting that key directly in a public frontend exposes it to the browser; for
 production, prefer a small backend tile proxy or restricted key setup.
 
+Use the EPSG:3857 / Web Mercator ZXY layers with the current Leaflet map:
+
+- `Outdoor_3857`
+- `Road_3857`
+- `Light_3857`
+
+Do not use the `*_27700` ZXY endpoint in the current implementation. British
+National Grid tiles need extra projection support, so they are a later job if
+the 3857 OS layers are not detailed enough.
+
 Do not add offline/preload tile downloads against `tile.openstreetmap.org`.
 If offline field maps become necessary, use a tile provider that explicitly
 allows offline use, OS Data Hub terms that cover it, or self-hosted tiles.
