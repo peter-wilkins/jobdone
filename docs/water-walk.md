@@ -60,6 +60,28 @@ The JSON shape is:
 - `areas`
 - `unmappedClayRichFields`
 
+## Map model
+
+Keep these concepts separate:
+
+- **Base maps**: the map Peter reads while walking, for example OSM, OS Outdoor,
+  or later a LiDAR-derived raster/contour basemap.
+- **Analysis layers**: optional overlays that explain landscape context, for
+  example LiDAR contours, slope, flow accumulation, surface-water flood risk,
+  soil class, habitat, or source-protection zones.
+- **Candidate pins**: low-friction prompts for a field walk. They say "this
+  might be worth checking", not "do work here".
+- **Observation pins**: what Peter actually saw, photographed, or noted on the
+  ground.
+
+LiDAR should enter the app first as an analysis layer, not as pins. A contour or
+hillshade layer can help Peter read the land directly. Later, if field use proves
+it helps, a separate analysis step can derive candidate pins from LiDAR features
+such as hollows, flow convergence, breaks of slope, possible old channels, or
+potential bund/pond sites. Those derived pins should stay low-confidence because
+shape is only one factor; access, soil, existing drains, ecology, land use, and
+what is actually visible on the ground can matter more.
+
 Candidate pins have two separate classifications:
 
 - `priority`: high, medium, low, or background; this says how strongly the
@@ -170,6 +192,22 @@ the 3857 OS layers are not detailed enough.
 Do not add offline/preload tile downloads against `tile.openstreetmap.org`.
 If offline field maps become necessary, use a tile provider that explicitly
 allows offline use, OS Data Hub terms that cover it, or self-hosted tiles.
+
+## LiDAR layer direction
+
+The first LiDAR slice should produce a bounded, site-specific visual layer:
+
+1. Download only the Environment Agency LiDAR DTM tiles that intersect the site
+   scope.
+2. Generate a local contour or hillshade raster/vector layer for inspection.
+3. Serve or import that layer as an optional Water Walk analysis overlay.
+4. Do not generate candidate pins until Peter has used the layer in the field and
+   confirmed what visual cues are actually helpful.
+
+Useful source:
+
+- Environment Agency LiDAR Composite DTM, 1m where available:
+  `https://environment.data.gov.uk/dataset/13787b9a-26a4-4775-8523-806d13af58fc`
 
 ## Later
 
