@@ -26,12 +26,14 @@
     "logs:backend": "bash scripts/tail-backend-prod-logs.sh",
     "water-walk:import:bgs": "node scripts/import-bgs-water-wells.js",
     "water-walk:import:osm": "node scripts/import-osm-historic-water.js",
+    "water-walk:contours": "node scripts/generate-water-walk-contours.js",
     "water-walk:upsert": "node scripts/upsert-water-walk-dataset.js --target staging",
     "water-walk:upsert:production": "node scripts/upsert-water-walk-dataset.js --target production",
     "auth:emails:dry-run": "node scripts/apply-supabase-auth-email-templates.js",
     "auth:emails:apply": "node scripts/apply-supabase-auth-email-templates.js --apply"
   },
   "devDependencies": {
+    "proj4": "^2.20.9",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
   }

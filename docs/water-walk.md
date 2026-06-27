@@ -203,11 +203,26 @@ The first LiDAR slice is an app-visible WMS overlay:
 
 This keeps LiDAR as an analysis layer, not a candidate-pin generator.
 
-The next LiDAR slice can produce a bounded, site-specific local layer:
+The second LiDAR slice is a generated Dewlish contour layer:
+
+- source: Environment Agency LiDAR Composite DTM 1m WCS
+- generator: `npm run water-walk:contours`
+- default interval: `2m`
+- default scale factor: `0.02`, roughly a 50m inspection grid
+- output: `frontend/public/water-walk/dewlish-contours-2m.geojson`
+- toggle: `Contours 2m`
+- bounds: mapped Dewlish areas first; wider candidate/search pins are fallback
+
+Contours are generated rather than consumed from a fixed service so the interval
+can change by job. Broad route planning may use 2m contours; a tighter pond,
+check-dam, or dam-wall inspection could regenerate a smaller layer at 1m or
+0.5m intervals.
+
+The next LiDAR slice can produce a tighter bounded local layer:
 
 1. Download only the Environment Agency LiDAR DTM tiles that intersect the site
    scope.
-2. Generate a local contour or hillshade raster/vector layer for inspection.
+2. Generate a local contour or slope/flow raster/vector layer for inspection.
 3. Serve or import that layer as an optional Water Walk analysis overlay.
 4. Do not generate candidate pins until Peter has used the layer in the field and
    confirmed what visual cues are actually helpful.

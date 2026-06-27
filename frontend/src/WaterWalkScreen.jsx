@@ -26,6 +26,9 @@ const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/c
 const DEFAULT_MAP_VIEW = { latitude: 50.61, longitude: -2.46, zoom: 14 };
 const EA_LIDAR_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/13787b9a-26a4-4775-8523-806d13af58fc/wms';
 const EA_LIDAR_HILLSHADE_LAYER = 'Lidar_Composite_Hillshade_DTM_1m';
+const CONTOUR_LAYER_BY_SITE = {
+  dewlish: '/water-walk/dewlish-contours-2m.geojson',
+};
 const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
 const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY
   ? `https://api.os.uk/maps/raster/v1/zxy/${OS_MAPS_LAYER}/{z}/{x}/{y}.png?key=${ENV.VITE_OS_MAPS_API_KEY}`
@@ -324,6 +327,8 @@ function WaterWalkMap({
   areas,
   observations,
   showLidarHillshade,
+  showContours,
+  contourGeoJson,
   selectedCandidate,
   selectedObservation,
   currentLocation,
@@ -335,6 +340,7 @@ function WaterWalkMap({
   const mapRef = useRef(null);
   const overlayLayerRef = useRef(null);
   const lidarLayerRef = useRef(null);
+  const contourLayerRef = useRef(null);
   const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
   const initialView = defaultView || DEFAULT_MAP_VIEW;
@@ -361,6 +367,7 @@ function WaterWalkMap({
       mapRef.current = null;
       overlayLayerRef.current = null;
       lidarLayerRef.current = null;
+      contourLayerRef.current = null;
     };
   }, [initialView.latitude, initialView.longitude, initialView.zoom, tileConfig]);
 
@@ -387,6 +394,32 @@ function WaterWalkMap({
       lidarLayerRef.current = null;
     }
   }, [showLidarHillshade]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (contourLayerRef.current) {
+      map.removeLayer(contourLayerRef.current);
+      contourLayerRef.current = null;
+    }
+
+    if (!showContours || !contourGeoJson) return;
+
+    contourLayerRef.current = L.geoJSON(contourGeoJson, {
+      interactive: false,
+      style: feature => {
+        const elevation = Number(feature?.properties?.elevationMetres || 0);
+        const major = elevation % 10 === 0;
+        return {
+          color: major ? '#4f3928' : '#735f4d',
+          opacity: major ? 0.72 : 0.42,
+          weight: major ? 1.15 : 0.7,
+        };
+      },
+    }).addTo(map);
+    bringLayerGroupToFront(overlayLayerRef.current);
+  }, [contourGeoJson, showContours]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -537,6 +570,9 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [importStatus, setImportStatus] = useState('');
   const [exportStatus, setExportStatus] = useState('');
   const [showLidarHillshade, setShowLidarHillshade] = useState(false);
+  const [showContours, setShowContours] = useState(false);
+  const [contourGeoJson, setContourGeoJson] = useState(null);
+  const [contourStatus, setContourStatus] = useState('');
 
   const saveDataset = useCallback(dataset => {
     const nextDataset = normalizeDataset(dataset);
@@ -569,6 +605,9 @@ export function WaterWalkScreen({ routeHash, user }) {
       setRouteSelection(new Set());
       setImportStatus('');
       setExportStatus('');
+      setShowContours(false);
+      setContourGeoJson(null);
+      setContourStatus('');
       setCurrentLocation(null);
       setGpsStatus('');
       setNote('');
@@ -645,6 +684,39 @@ export function WaterWalkScreen({ routeHash, user }) {
       cancelled = true;
     };
   }, [canUseSite, user, saveDataset, site, storageKeys]);
+
+  useEffect(() => {
+    if (!showContours) return undefined;
+    const contourUrl = CONTOUR_LAYER_BY_SITE[site.id];
+    if (!contourUrl) {
+      return undefined;
+    }
+    if (contourGeoJson) return undefined;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setContourStatus('Loading contours...');
+    });
+    fetch(contourUrl)
+      .then(response => {
+        if (!response.ok) throw new Error(`Contour layer failed: ${response.status}`);
+        return response.json();
+      })
+      .then(payload => {
+        if (cancelled) return;
+        setContourGeoJson(payload);
+        const interval = payload?.properties?.intervalMetres || 2;
+        setContourStatus(`${interval}m contours loaded.`);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setContourStatus(error.message || 'Could not load contour layer.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contourGeoJson, showContours, site.id]);
 
   const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || null;
   const selectedObservation = observations.find(observation => observation.id === selectedObservationId) || null;
@@ -857,6 +929,20 @@ export function WaterWalkScreen({ routeHash, user }) {
                   />
                   LiDAR hillshade
                 </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showContours}
+                    onChange={event => setShowContours(event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  Contours 2m
+                </label>
+                {(contourStatus || (showContours && !CONTOUR_LAYER_BY_SITE[site.id])) && (
+                  <span className="text-[11px] text-gray-500">
+                    {contourStatus || 'No contour layer for this site yet.'}
+                  </span>
+                )}
               </div>
             </div>
             <WaterWalkMap
@@ -864,6 +950,8 @@ export function WaterWalkScreen({ routeHash, user }) {
               areas={areas}
               observations={observations}
               showLidarHillshade={showLidarHillshade}
+              showContours={showContours}
+              contourGeoJson={contourGeoJson}
               selectedCandidate={selectedCandidate}
               selectedObservation={selectedObservation}
               currentLocation={currentLocation}
