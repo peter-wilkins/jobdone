@@ -14,11 +14,22 @@ import { waterWalkBoundsKey } from './waterWalkViewport';
 import { bringLayerGroupToFront } from './waterWalkLeafletLayers';
 import { waterWalkSiteFromHash } from './waterWalkSites';
 import { Modal } from './Modal';
+import {
+  GRANT_JOB_OPTIONS,
+  budgetForTarget,
+  budgetToForm,
+  buildGrantJobBudgetRecord,
+  calculateGrantJobBudget,
+  formatBudgetMoney,
+  grantJobOptionById,
+  upsertBudget,
+} from './services/waterWalkBudgetService';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
 const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
 const WATER_WALK_META_STORAGE_KEY = 'jobdone.waterWalk.meta.v1';
 const OBSERVATIONS_STORAGE_KEY = 'jobdone.waterWalk.observations.v1';
+const BUDGETS_STORAGE_KEY = 'jobdone.waterWalk.grantJobBudgets.v1';
 const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
 const ENV = import.meta.env || {};
 const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -112,6 +123,7 @@ function storageKeysForSite(siteId) {
     areas: siteStorageKey(AREAS_STORAGE_KEY, siteId),
     meta: siteStorageKey(WATER_WALK_META_STORAGE_KEY, siteId),
     observations: siteStorageKey(OBSERVATIONS_STORAGE_KEY, siteId),
+    budgets: siteStorageKey(BUDGETS_STORAGE_KEY, siteId),
   };
 }
 
@@ -315,6 +327,24 @@ function observationLocation(observation) {
   };
 }
 
+function budgetTargetFromCandidate(candidate) {
+  if (!candidate) return null;
+  return {
+    type: 'candidate',
+    id: candidate.id,
+    title: candidate.title,
+  };
+}
+
+function budgetTargetFromObservation(observation) {
+  if (!observation) return null;
+  return {
+    type: 'observation',
+    id: observation.id,
+    title: observation.candidateTitle || 'Observation',
+  };
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -322,6 +352,50 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function BudgetSummary({ budget }) {
+  if (!budget) return null;
+
+  const judgementLabels = {
+    worth_exploring: 'Worth exploring',
+    needs_quote_or_adviser: 'Needs quote/adviser',
+    not_worth_it: 'Not worth it',
+  };
+
+  return (
+    <div className="mt-3 rounded border border-emerald-100 bg-emerald-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-emerald-950">{budget.fundingOptionName}</p>
+        <span className="rounded-full border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-800">
+          {judgementLabels[budget.landownerJudgement] || 'Needs review'}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-emerald-950 sm:grid-cols-4">
+        <div>
+          <span className="block text-emerald-700">Grant</span>
+          <strong>{formatBudgetMoney(budget.grantIncomeEstimate?.amount, budget.grantIncomeEstimate?.currency)}</strong>
+        </div>
+        <div>
+          <span className="block text-emerald-700">Cash</span>
+          <strong>{formatBudgetMoney(budget.cashCostEstimate?.amount, budget.cashCostEstimate?.currency)}</strong>
+        </div>
+        <div>
+          <span className="block text-emerald-700">Internal</span>
+          <strong>{formatBudgetMoney(budget.internalCostEstimate?.amount, budget.internalCostEstimate?.currency)}</strong>
+        </div>
+        <div>
+          <span className="block text-emerald-700">Margin</span>
+          <strong>{formatBudgetMoney(budget.marginEstimate?.amount, budget.marginEstimate?.currency)}</strong>
+        </div>
+      </div>
+      {budget.unknowns?.length > 0 && (
+        <p className="mt-2 text-xs text-emerald-900">
+          Biggest unknown: {budget.unknowns[0]}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function WaterWalkMap({
@@ -587,9 +661,14 @@ export function WaterWalkScreen({ routeHash, user }) {
     unmappedClayRichFields: [],
   }));
   const [observations, setObservations] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedObservationId, setSelectedObservationId] = useState('');
   const [isObservationDialogOpen, setIsObservationDialogOpen] = useState(false);
+  const [isBudgetDialogOpen, setIsBudgetDialogOpen] = useState(false);
+  const [budgetTarget, setBudgetTarget] = useState(null);
+  const [budgetForm, setBudgetForm] = useState(() => budgetToForm());
+  const [budgetStatus, setBudgetStatus] = useState('');
   const [routeSelection, setRouteSelection] = useState(new Set());
   const [note, setNote] = useState('');
   const [photoAttachments, setPhotoAttachments] = useState([]);
@@ -626,6 +705,11 @@ export function WaterWalkScreen({ routeHash, user }) {
     window.localStorage.setItem(storageKeys.observations, JSON.stringify(nextObservations));
   };
 
+  const saveBudgets = nextBudgets => {
+    setBudgets(nextBudgets);
+    window.localStorage.setItem(storageKeys.budgets, JSON.stringify(nextBudgets));
+  };
+
   useEffect(() => {
     let cancelled = false;
     queueMicrotask(() => {
@@ -633,6 +717,10 @@ export function WaterWalkScreen({ routeHash, user }) {
       setSelectedId('');
       setSelectedObservationId('');
       setIsObservationDialogOpen(false);
+      setIsBudgetDialogOpen(false);
+      setBudgetTarget(null);
+      setBudgetForm(budgetToForm());
+      setBudgetStatus('');
       setRouteSelection(new Set());
       setImportStatus('');
       setExportStatus('');
@@ -646,6 +734,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       setPhotoAttachments([]);
       setPhotoError('');
       setObservations(loadJsonArray(storageKeys.observations));
+      setBudgets(loadJsonArray(storageKeys.budgets));
     });
 
     if (!canUseSite) {
@@ -752,6 +841,10 @@ export function WaterWalkScreen({ routeHash, user }) {
 
   const selectedCandidate = candidates.find(candidate => candidate.id === selectedId) || null;
   const selectedObservation = observations.find(observation => observation.id === selectedObservationId) || null;
+  const selectedCandidateBudgetTarget = budgetTargetFromCandidate(selectedCandidate);
+  const selectedObservationBudgetTarget = budgetTargetFromObservation(selectedObservation);
+  const selectedCandidateBudget = budgetForTarget(budgets, selectedCandidateBudgetTarget);
+  const selectedObservationBudget = budgetForTarget(budgets, selectedObservationBudgetTarget);
   const observationTarget = selectedCandidate || (currentLocation ? {
     id: `${site.id}-gps-observation`,
     title: `${site.label} observation`,
@@ -780,6 +873,36 @@ export function WaterWalkScreen({ routeHash, user }) {
     setSelectedObservationId(observationIdValue);
     setSelectedId('');
   }, []);
+
+  const updateBudgetForm = patch => {
+    setBudgetForm(current => ({ ...current, ...patch }));
+  };
+
+  const openBudgetDialog = target => {
+    if (!target) return;
+    const existing = budgetForTarget(budgets, target);
+    setBudgetTarget(target);
+    setBudgetForm(budgetToForm(existing));
+    setBudgetStatus('');
+    setIsBudgetDialogOpen(true);
+  };
+
+  const saveBudget = () => {
+    if (!budgetTarget) {
+      setBudgetStatus('Select a pin or observation first.');
+      return;
+    }
+    const existing = budgetForTarget(budgets, budgetTarget);
+    const budget = buildGrantJobBudgetRecord({
+      existing,
+      site,
+      target: budgetTarget,
+      form: budgetForm,
+    });
+    saveBudgets(upsertBudget(budgets, budget));
+    setBudgetStatus('Budget saved locally.');
+    setIsBudgetDialogOpen(false);
+  };
 
   const importCandidates = () => {
     const parsed = safeJsonParse(importText, null);
@@ -907,6 +1030,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       areas,
       unmappedClayRichFields: datasetMeta.unmappedClayRichFields || [],
       observations,
+      budgets,
     };
     const text = JSON.stringify(payload, null, 2);
     try {
@@ -922,6 +1046,9 @@ export function WaterWalkScreen({ routeHash, user }) {
     setPhotoError('');
     if (!selectedCandidate && !currentLocation) locateMe();
   };
+
+  const budgetCalculation = useMemo(() => calculateGrantJobBudget(budgetForm), [budgetForm]);
+  const selectedBudgetOption = grantJobOptionById(budgetForm.optionId);
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
@@ -1022,6 +1149,14 @@ export function WaterWalkScreen({ routeHash, user }) {
                 {selectedObservation.photos.map(photo => <PhotoAttachmentThumb key={photo.id} attachment={photo} />)}
               </div>
             )}
+            <BudgetSummary budget={selectedObservationBudget} />
+            <button
+              type="button"
+              onClick={() => openBudgetDialog(selectedObservationBudgetTarget)}
+              className="mt-3 rounded border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900"
+            >
+              {selectedObservationBudget ? 'Edit budget' : 'Add budget'}
+            </button>
           </section>
         )}
 
@@ -1041,6 +1176,21 @@ export function WaterWalkScreen({ routeHash, user }) {
                 </span>
               </div>
             </div>
+            {selectedCandidateBudgetTarget && (
+              <>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openBudgetDialog(selectedCandidateBudgetTarget)}
+                    className="rounded border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900"
+                  >
+                    {selectedCandidateBudget ? 'Edit budget' : 'Add budget'}
+                  </button>
+                  {budgetStatus && <span className="self-center text-sm text-gray-500">{budgetStatus}</span>}
+                </div>
+                <BudgetSummary budget={selectedCandidateBudget} />
+              </>
+            )}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
                 <h3 className="text-xs font-semibold uppercase text-gray-500">Why here</h3>
@@ -1269,6 +1419,177 @@ export function WaterWalkScreen({ routeHash, user }) {
               </div>
               {gpsStatus && <p className="text-sm text-gray-600">{gpsStatus}</p>}
             </div>
+      </Modal>
+
+      <Modal
+        open={canUseSite && isBudgetDialogOpen}
+        title="Grant job budget"
+        description={budgetTarget ? `Rough estimate for ${budgetTarget.title}. Keep assumptions visible; do not fake precision.` : 'Select a pin or observation first.'}
+        onClose={() => setIsBudgetDialogOpen(false)}
+        closeLabel="Close"
+      >
+        <div className="grid gap-3">
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Possible grant job</span>
+            <select
+              value={budgetForm.optionId}
+              onChange={event => updateBudgetForm({ optionId: event.target.value })}
+              className="rounded border border-gray-300 px-3 py-2"
+            >
+              {GRANT_JOB_OPTIONS.map(option => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-3 gap-2">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Quantity</span>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={budgetForm.quantity}
+                onChange={event => updateBudgetForm({ quantity: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Cash cost</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={budgetForm.cashCost}
+                onChange={event => updateBudgetForm({ cashCost: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Internal cost</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={budgetForm.internalCost}
+                onChange={event => updateBudgetForm({ internalCost: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              />
+            </label>
+          </div>
+
+          <div className="rounded border border-stone-200 bg-stone-50 p-3">
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div>
+                <span className="block text-xs text-gray-500">Grant</span>
+                <strong>{formatBudgetMoney(budgetCalculation.grantIncome, selectedBudgetOption.currency)}</strong>
+              </div>
+              <div>
+                <span className="block text-xs text-gray-500">Cash</span>
+                <strong>{formatBudgetMoney(budgetCalculation.cashCost, selectedBudgetOption.currency)}</strong>
+              </div>
+              <div>
+                <span className="block text-xs text-gray-500">Internal</span>
+                <strong>{formatBudgetMoney(budgetCalculation.internalCost, selectedBudgetOption.currency)}</strong>
+              </div>
+              <div>
+                <span className="block text-xs text-gray-500">Margin</span>
+                <strong>{formatBudgetMoney(budgetCalculation.margin, selectedBudgetOption.currency)}</strong>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedBudgetOption.grantAmountPerUnit === null
+                ? 'Grant payment is unknown in the current seed data.'
+                : `Grant estimate uses ${formatBudgetMoney(selectedBudgetOption.grantAmountPerUnit, selectedBudgetOption.currency)} per ${selectedBudgetOption.unit}.`}
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Confidence</span>
+              <select
+                value={budgetForm.confidence}
+                onChange={event => updateBudgetForm({ confidence: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium text-gray-700">Judgement</span>
+              <select
+                value={budgetForm.landownerJudgement}
+                onChange={event => updateBudgetForm({ landownerJudgement: event.target.value })}
+                className="rounded border border-gray-300 px-3 py-2"
+              >
+                <option value="worth_exploring">Worth exploring</option>
+                <option value="needs_quote_or_adviser">Needs quote/adviser</option>
+                <option value="not_worth_it">Not worth it</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Machinery / access</span>
+            <textarea
+              value={budgetForm.machineryNotes}
+              onChange={event => updateBudgetForm({ machineryNotes: event.target.value })}
+              rows={2}
+              className="rounded border border-gray-300 px-3 py-2"
+              placeholder="Farm digger, tractor access, wet ground, gate nearby..."
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Labour</span>
+            <textarea
+              value={budgetForm.labourNotes}
+              onChange={event => updateBudgetForm({ labourNotes: event.target.value })}
+              rows={2}
+              className="rounded border border-gray-300 px-3 py-2"
+              placeholder="How many people, how many hours, contractor likely?"
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Materials nearby</span>
+            <textarea
+              value={budgetForm.materialsNotes}
+              onChange={event => updateBudgetForm({ materialsNotes: event.target.value })}
+              rows={2}
+              className="rounded border border-gray-300 px-3 py-2"
+              placeholder="Brash from woodland, stone pile, spoil use, bought materials..."
+            />
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-gray-700">Unknowns</span>
+            <textarea
+              value={budgetForm.unknownsText}
+              onChange={event => updateBudgetForm({ unknownsText: event.target.value })}
+              rows={3}
+              className="rounded border border-gray-300 px-3 py-2"
+              placeholder="One per line: consent, adviser support, contractor quote..."
+            />
+          </label>
+
+          {budgetStatus && <p className="text-sm text-gray-600">{budgetStatus}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={saveBudget}
+              className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white"
+            >
+              Save budget
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBudgetDialogOpen(false)}
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
