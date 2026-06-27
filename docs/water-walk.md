@@ -351,6 +351,12 @@ JobDone can automate evidence packs and reminders. It should not pretend to
 submit Rural Payments applications or claims unless an official API or authorised
 agent route exists.
 
+The current app slice generates a local-first grant lifecycle checklist from a
+Water Walk budget. It is stored beside the site data, exported with Water Walk
+JSON, and keeps checklist completion state when the budget is edited. It does
+not create Team work items yet; that should wait until Sites are Team-owned and
+the lifecycle task model has been tested in the field.
+
 Sites should eventually become Team-owned resources. A Team can own zero or
 more Sites, and Team members should be able to see the Site data and add
 observations according to their Team permissions. The current MVP keeps Sites as

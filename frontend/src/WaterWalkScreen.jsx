@@ -24,12 +24,21 @@ import {
   grantJobOptionById,
   upsertBudget,
 } from './services/waterWalkBudgetService';
+import {
+  LIFECYCLE_PHASE_LABELS,
+  buildGrantLifecycleRecord,
+  lifecycleForBudget,
+  lifecycleProgress,
+  toggleLifecycleTask,
+  upsertLifecycle,
+} from './services/waterWalkGrantLifecycleService';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
 const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
 const WATER_WALK_META_STORAGE_KEY = 'jobdone.waterWalk.meta.v1';
 const OBSERVATIONS_STORAGE_KEY = 'jobdone.waterWalk.observations.v1';
 const BUDGETS_STORAGE_KEY = 'jobdone.waterWalk.grantJobBudgets.v1';
+const LIFECYCLES_STORAGE_KEY = 'jobdone.waterWalk.grantLifecycles.v1';
 const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
 const ENV = import.meta.env || {};
 const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -124,6 +133,7 @@ function storageKeysForSite(siteId) {
     meta: siteStorageKey(WATER_WALK_META_STORAGE_KEY, siteId),
     observations: siteStorageKey(OBSERVATIONS_STORAGE_KEY, siteId),
     budgets: siteStorageKey(BUDGETS_STORAGE_KEY, siteId),
+    lifecycles: siteStorageKey(LIFECYCLES_STORAGE_KEY, siteId),
   };
 }
 
@@ -411,6 +421,75 @@ function BudgetSummary({ budget }) {
   );
 }
 
+function LifecycleSummary({ budget, lifecycle, onGenerate, onToggleTask }) {
+  if (!budget) return null;
+
+  if (!lifecycle) {
+    return (
+      <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-3">
+        <p className="text-sm font-semibold text-amber-950">Grant lifecycle</p>
+        <p className="mt-1 text-xs text-amber-900">
+          Generate the application, agreement, delivery, claim, and maintenance checklist before treating this as real work.
+        </p>
+        <button
+          type="button"
+          onClick={() => onGenerate(budget)}
+          className="mt-2 rounded border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-950"
+        >
+          Generate lifecycle tasks
+        </button>
+      </div>
+    );
+  }
+
+  const progress = lifecycleProgress(lifecycle);
+  const tasksByPhase = lifecycle.tasks.reduce((grouped, task) => {
+    const phase = task.phase || 'other';
+    return {
+      ...grouped,
+      [phase]: [...(grouped[phase] || []), task],
+    };
+  }, {});
+
+  return (
+    <details className="mt-3 rounded border border-blue-200 bg-blue-50 p-3">
+      <summary className="cursor-pointer text-sm font-semibold text-blue-950">
+        Grant lifecycle {progress.label}
+      </summary>
+      <p className="mt-2 rounded border border-blue-200 bg-white/80 p-2 text-xs font-medium text-blue-950">
+        {lifecycle.caution}
+      </p>
+      <div className="mt-3 grid gap-3">
+        {Object.entries(tasksByPhase).map(([phase, tasks]) => (
+          <div key={phase} className="rounded border border-blue-100 bg-white p-2">
+            <h3 className="text-xs font-semibold uppercase text-blue-800">
+              {LIFECYCLE_PHASE_LABELS[phase] || phase}
+            </h3>
+            <div className="mt-2 grid gap-2">
+              {tasks.map(task => (
+                <label key={task.id} className="flex items-start gap-2 text-sm text-blue-950">
+                  <input
+                    type="checkbox"
+                    checked={task.completed}
+                    onChange={event => onToggleTask(lifecycle, task.id, event.target.checked)}
+                    className="mt-1 h-4 w-4 shrink-0"
+                  />
+                  <span>
+                    <span className={task.completed ? 'font-medium line-through decoration-blue-500' : 'font-medium'}>
+                      {task.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-blue-800">{task.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function WaterWalkMap({
   candidates,
   areas,
@@ -675,6 +754,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   }));
   const [observations, setObservations] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [lifecycles, setLifecycles] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedObservationId, setSelectedObservationId] = useState('');
   const [isObservationDialogOpen, setIsObservationDialogOpen] = useState(false);
@@ -682,6 +762,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [budgetTarget, setBudgetTarget] = useState(null);
   const [budgetForm, setBudgetForm] = useState(() => budgetToForm());
   const [budgetStatus, setBudgetStatus] = useState('');
+  const [lifecycleStatus, setLifecycleStatus] = useState('');
   const [routeSelection, setRouteSelection] = useState(new Set());
   const [note, setNote] = useState('');
   const [photoAttachments, setPhotoAttachments] = useState([]);
@@ -723,6 +804,11 @@ export function WaterWalkScreen({ routeHash, user }) {
     window.localStorage.setItem(storageKeys.budgets, JSON.stringify(nextBudgets));
   };
 
+  const saveLifecycles = nextLifecycles => {
+    setLifecycles(nextLifecycles);
+    window.localStorage.setItem(storageKeys.lifecycles, JSON.stringify(nextLifecycles));
+  };
+
   useEffect(() => {
     let cancelled = false;
     queueMicrotask(() => {
@@ -734,6 +820,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       setBudgetTarget(null);
       setBudgetForm(budgetToForm());
       setBudgetStatus('');
+      setLifecycleStatus('');
       setRouteSelection(new Set());
       setImportStatus('');
       setExportStatus('');
@@ -748,6 +835,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       setPhotoError('');
       setObservations(loadJsonArray(storageKeys.observations));
       setBudgets(loadJsonArray(storageKeys.budgets));
+      setLifecycles(loadJsonArray(storageKeys.lifecycles));
     });
 
     if (!canUseSite) {
@@ -858,6 +946,8 @@ export function WaterWalkScreen({ routeHash, user }) {
   const selectedObservationBudgetTarget = budgetTargetFromObservation(selectedObservation);
   const selectedCandidateBudget = budgetForTarget(budgets, selectedCandidateBudgetTarget);
   const selectedObservationBudget = budgetForTarget(budgets, selectedObservationBudgetTarget);
+  const selectedCandidateLifecycle = lifecycleForBudget(lifecycles, selectedCandidateBudget);
+  const selectedObservationLifecycle = lifecycleForBudget(lifecycles, selectedObservationBudget);
   const observationTarget = selectedCandidate || (currentLocation ? {
     id: `${site.id}-gps-observation`,
     title: `${site.label} observation`,
@@ -913,8 +1003,35 @@ export function WaterWalkScreen({ routeHash, user }) {
       form: budgetForm,
     });
     saveBudgets(upsertBudget(budgets, budget));
+    const existingLifecycle = lifecycleForBudget(lifecycles, existing || budget);
+    if (existingLifecycle) {
+      const updatedLifecycle = buildGrantLifecycleRecord({
+        existing: existingLifecycle,
+        site,
+        budget,
+      });
+      saveLifecycles(upsertLifecycle(lifecycles, updatedLifecycle));
+    }
     setBudgetStatus('Budget saved locally.');
     setIsBudgetDialogOpen(false);
+  };
+
+  const generateLifecycleForBudget = budget => {
+    if (!budget) return;
+    const existing = lifecycleForBudget(lifecycles, budget);
+    const lifecycle = buildGrantLifecycleRecord({
+      existing,
+      site,
+      budget,
+    });
+    saveLifecycles(upsertLifecycle(lifecycles, lifecycle));
+    setLifecycleStatus(`Lifecycle tasks ready for ${budget.targetTitle}.`);
+  };
+
+  const toggleLifecycleTaskForRecord = (lifecycle, taskId, completed) => {
+    const updated = toggleLifecycleTask(lifecycle, taskId, completed);
+    if (!updated) return;
+    saveLifecycles(upsertLifecycle(lifecycles, updated));
   };
 
   const importCandidates = () => {
@@ -1044,6 +1161,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       unmappedClayRichFields: datasetMeta.unmappedClayRichFields || [],
       observations,
       budgets,
+      lifecycles,
     };
     const text = JSON.stringify(payload, null, 2);
     try {
@@ -1163,6 +1281,13 @@ export function WaterWalkScreen({ routeHash, user }) {
               </div>
             )}
             <BudgetSummary budget={selectedObservationBudget} />
+            <LifecycleSummary
+              budget={selectedObservationBudget}
+              lifecycle={selectedObservationLifecycle}
+              onGenerate={generateLifecycleForBudget}
+              onToggleTask={toggleLifecycleTaskForRecord}
+            />
+            {lifecycleStatus && <p className="mt-2 text-sm text-gray-500">{lifecycleStatus}</p>}
             <button
               type="button"
               onClick={() => openBudgetDialog(selectedObservationBudgetTarget)}
@@ -1202,6 +1327,13 @@ export function WaterWalkScreen({ routeHash, user }) {
                   {budgetStatus && <span className="self-center text-sm text-gray-500">{budgetStatus}</span>}
                 </div>
                 <BudgetSummary budget={selectedCandidateBudget} />
+                <LifecycleSummary
+                  budget={selectedCandidateBudget}
+                  lifecycle={selectedCandidateLifecycle}
+                  onGenerate={generateLifecycleForBudget}
+                  onToggleTask={toggleLifecycleTaskForRecord}
+                />
+                {lifecycleStatus && <p className="mt-2 text-sm text-gray-500">{lifecycleStatus}</p>}
               </>
             )}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
