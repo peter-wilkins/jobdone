@@ -10,6 +10,7 @@ import {
 } from './services/photoAttachmentService';
 import { apiService } from './services/apiService';
 import { parseWaterWalkDataset } from './contracts/waterWalkDataset';
+import { waterWalkBoundsKey } from './waterWalkViewport';
 
 const CANDIDATES_STORAGE_KEY = 'jobdone.waterWalk.candidates.v1';
 const AREAS_STORAGE_KEY = 'jobdone.waterWalk.areas.v1';
@@ -254,6 +255,7 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const overlayLayerRef = useRef(null);
+  const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
 
   useEffect(() => {
@@ -325,19 +327,15 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
       boundsPoints.push([candidate.latitude, candidate.longitude]);
     });
 
-    if (boundsPoints.length) {
+    const boundsKey = waterWalkBoundsKey(candidates, areas);
+    if (boundsPoints.length && boundsKey !== fittedBoundsKeyRef.current) {
+      fittedBoundsKeyRef.current = boundsKey;
       map.fitBounds(L.latLngBounds(boundsPoints).pad(0.08), {
         animate: false,
         maxZoom: 16,
       });
     }
   }, [areas, candidates, onSelectCandidate, selectedCandidate]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !selectedCandidate) return;
-    map.panTo([selectedCandidate.latitude, selectedCandidate.longitude], { animate: true });
-  }, [selectedCandidate]);
 
   return (
     <div
