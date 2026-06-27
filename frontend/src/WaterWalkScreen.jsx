@@ -48,6 +48,24 @@ const PRIORITY = {
   },
 };
 
+const CANDIDATE_THEME = {
+  water_restoration: {
+    label: 'Water',
+    fill: '#2563eb',
+    className: 'border-blue-200 bg-blue-50 text-blue-800',
+  },
+  soil_doctor: {
+    label: 'Soil',
+    fill: '#7c3aed',
+    className: 'border-violet-200 bg-violet-50 text-violet-800',
+  },
+  syntropic_agroforestry: {
+    label: 'Syntropic',
+    fill: '#16803b',
+    className: 'border-green-200 bg-green-50 text-green-800',
+  },
+};
+
 function safeJsonParse(value, fallback) {
   try {
     return JSON.parse(value);
@@ -75,12 +93,14 @@ function normalizeCandidate(raw = {}) {
   const title = String(raw.title || raw.name || raw.fieldName || '').trim();
   if (!title) return null;
   const priority = ['high', 'medium', 'low', 'background'].includes(raw.priority) ? raw.priority : 'background';
+  const theme = Object.prototype.hasOwnProperty.call(CANDIDATE_THEME, raw.theme) ? raw.theme : 'water_restoration';
   return {
     id: String(raw.id || `${title}-${latitude.toFixed(5)}-${longitude.toFixed(5)}`).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     title,
     latitude,
     longitude,
     priority,
+    theme,
     score: Number(raw.score || 0),
     whyInteresting: Array.isArray(raw.whyInteresting) ? raw.whyInteresting : Array.isArray(raw.clues) ? raw.clues : [],
     lookFor: Array.isArray(raw.lookFor) ? raw.lookFor : ['wet ground', 'ditches', 'runoff lines', 'erosion', 'water-holding corners'],
@@ -310,16 +330,17 @@ function WaterWalkMap({ candidates, areas, selectedCandidate, onSelectCandidate 
 
     candidates.forEach(candidate => {
       const isSelected = candidate.id === selectedCandidate?.id;
+      const theme = CANDIDATE_THEME[candidate.theme] || CANDIDATE_THEME.water_restoration;
       const marker = L.circleMarker([candidate.latitude, candidate.longitude], {
-        radius: isSelected ? 7 : 4.5,
+        radius: isSelected ? 7.5 : 4.8,
         color: isSelected ? '#111827' : '#ffffff',
-        fillColor: PRIORITY[candidate.priority]?.fill || PRIORITY.background.fill,
+        fillColor: theme.fill,
         fillOpacity: 0.95,
-        weight: isSelected ? 2 : 1,
+        weight: isSelected || candidate.priority === 'high' ? 2 : 1,
       });
       marker.bindPopup(`
         <strong>${escapeHtml(candidate.title)}</strong><br />
-        Score ${escapeHtml(candidate.score)}<br />
+        ${escapeHtml(theme.label)} · score ${escapeHtml(candidate.score)}<br />
         ${escapeHtml(candidate.whyInteresting.slice(0, 2).join('; '))}
       `);
       marker.on('click', () => onSelectCandidate(candidate.id));
@@ -618,6 +639,14 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
             <div className="border-b border-stone-100 px-4 py-3">
               <h2 className="text-sm font-semibold">Candidate map</h2>
               <p className="text-xs text-gray-500">OpenStreetMap base layer with private pins and clay-rich areas.</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-medium text-gray-600">
+                {Object.entries(CANDIDATE_THEME).map(([themeKey, theme]) => (
+                  <span key={themeKey} className="inline-flex items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.fill }} />
+                    {theme.label}
+                  </span>
+                ))}
+              </div>
             </div>
             <WaterWalkMap
               candidates={candidates}
@@ -635,9 +664,14 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
                 <h2 className="text-lg font-semibold">{selectedCandidate.title}</h2>
                 <p className="mt-1 text-sm text-gray-500">Score {selectedCandidate.score}</p>
               </div>
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${PRIORITY[selectedCandidate.priority]?.className || PRIORITY.background.className}`}>
-                {PRIORITY[selectedCandidate.priority]?.label || 'Check'}
-              </span>
+              <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CANDIDATE_THEME[selectedCandidate.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
+                  {CANDIDATE_THEME[selectedCandidate.theme]?.label || CANDIDATE_THEME.water_restoration.label}
+                </span>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${PRIORITY[selectedCandidate.priority]?.className || PRIORITY.background.className}`}>
+                  {PRIORITY[selectedCandidate.priority]?.label || 'Check'}
+                </span>
+              </div>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
@@ -783,6 +817,9 @@ export function WaterWalkScreen({ onBack, onRecord, user }) {
                   <span className="block truncate text-sm font-medium">{candidate.title}</span>
                   <span className="block truncate text-xs text-gray-500">{candidate.whyInteresting.slice(0, 2).join('; ')}</span>
                 </button>
+                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${CANDIDATE_THEME[candidate.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
+                  {CANDIDATE_THEME[candidate.theme]?.label || CANDIDATE_THEME.water_restoration.label}
+                </span>
                 <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${PRIORITY[candidate.priority]?.className || PRIORITY.background.className}`}>
                   {candidate.score}
                 </span>

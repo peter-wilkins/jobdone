@@ -20,6 +20,7 @@ test('normalizeCandidatePayload accepts RegenOS field-style candidate data', () 
         name: 'North Test Field',
         centre: [51.5, -0.12],
         priority: 'high',
+        theme: 'soil_doctor',
         score: 12,
         clues: ['high runoff risk'],
       },
@@ -38,6 +39,7 @@ test('normalizeCandidatePayload accepts RegenOS field-style candidate data', () 
   assert.equal(payload.candidates[0].title, 'North Test Field');
   assert.equal(payload.candidates[0].latitude, 51.5);
   assert.equal(payload.candidates[0].longitude, -0.12);
+  assert.equal(payload.candidates[0].theme, 'soil_doctor');
   assert.deepEqual(payload.candidates[0].whyInteresting, ['high runoff risk']);
   assert.equal(payload.areas.length, 1);
   assert.equal(payload.areas[0].soilTextureCode, 'hZCL');

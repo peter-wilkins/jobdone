@@ -22,6 +22,7 @@ function normalizeCandidate(raw = {}) {
   const title = String(raw.title || raw.name || raw.fieldName || '').trim();
   if (!title || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   const priority = ['high', 'medium', 'low', 'background'].includes(raw.priority) ? raw.priority : 'background';
+  const theme = ['water_restoration', 'soil_doctor', 'syntropic_agroforestry'].includes(raw.theme) ? raw.theme : 'water_restoration';
   return {
     id: String(raw.id || `${title}-${latitude.toFixed(5)}-${longitude.toFixed(5)}`)
       .toLowerCase()
@@ -31,6 +32,7 @@ function normalizeCandidate(raw = {}) {
     latitude,
     longitude,
     priority,
+    theme,
     score: Number(raw.score || 0),
     whyInteresting: Array.isArray(raw.whyInteresting) ? raw.whyInteresting : Array.isArray(raw.clues) ? raw.clues : [],
     lookFor: Array.isArray(raw.lookFor) ? raw.lookFor : ['wet ground', 'ditches', 'runoff lines', 'erosion', 'water-holding corners'],

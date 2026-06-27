@@ -60,10 +60,30 @@ The JSON shape is:
 - `areas`
 - `unmappedClayRichFields`
 
+Candidate pins have two separate classifications:
+
+- `priority`: high, medium, low, or background; this says how strongly the
+  location should be considered for a field walk.
+- `theme`: water restoration, soil doctor, or syntropic agroforestry; this
+  drives the map pin colour.
+
 Clay-rich areas currently mean "SMP texture class hZCL - Heavy Silty Clay Loam".
 They are not confirmed numeric clay percentages above 30%. The spreadsheet scan
 found no numeric `Clay (%) > 30`; the highest numeric clay reading found was
 25.35% in 8 Acres.
+
+The current themed pins were scanned from:
+
+- field KML zip centres
+- SMP 2026 extracted PDF text
+- Soil analysis export XLSX rows
+- field names that indicate margins, cover strips, woodland edges, leazes, or
+  lower/wetter ground
+
+Soil Doctor pins highlight low organic matter, heavier clay, high pH,
+compaction, or crop-risk clues for inspection. Syntropic agroforestry pins
+highlight margins, cover strips, and woodland-edge reference points. They are
+observation prompts, not planting recommendations.
 
 ## MVP route planning
 
