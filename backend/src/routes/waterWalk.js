@@ -8,6 +8,7 @@ const DEFAULT_ALLOWED_EMAILS = ['poppetew@gmail.com'];
 const DEFAULT_CANDIDATES_PATH = 'local/water-walk/dewlish-candidates.json';
 const DEFAULT_FARM_ID = 'dewlish';
 const DEFAULT_DATASET_KIND = 'water_walk';
+const CANDIDATE_THEMES = ['water_restoration', 'soil_doctor', 'syntropic_agroforestry', 'historic_water'];
 
 function allowedEmailsFromEnv(value = process.env.JOBDONE_WATER_WALK_ALLOWED_EMAILS) {
   return String(value || '')
@@ -22,7 +23,7 @@ function normalizeCandidate(raw = {}) {
   const title = String(raw.title || raw.name || raw.fieldName || '').trim();
   if (!title || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   const priority = ['high', 'medium', 'low', 'background'].includes(raw.priority) ? raw.priority : 'background';
-  const theme = ['water_restoration', 'soil_doctor', 'syntropic_agroforestry'].includes(raw.theme) ? raw.theme : 'water_restoration';
+  const theme = CANDIDATE_THEMES.includes(raw.theme) ? raw.theme : 'water_restoration';
   return {
     id: String(raw.id || `${title}-${latitude.toFixed(5)}-${longitude.toFixed(5)}`)
       .toLowerCase()
