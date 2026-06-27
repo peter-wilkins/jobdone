@@ -25,6 +25,15 @@ require_env JOBDONE_STAGING_SUPABASE_DB_URL
 require_env JOBDONE_STAGING_SUPABASE_URL
 require_env JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY
 
+env_file_value() {
+  local file="$1"
+  local name="$2"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  grep -E "^${name}=" "$file" | tail -n 1 | cut -d= -f2-
+}
+
 extract_deployment_url() {
   grep -Eo 'https://[a-zA-Z0-9.-]+\.vercel\.app' | grep -v 'vercel.com' | tail -n 1
 }
@@ -55,10 +64,16 @@ deploy_backend() {
 
 deploy_frontend() {
   local cwd="$1"
+  local os_maps_api_key="${JOBDONE_STAGING_OS_MAPS_API_KEY:-$(env_file_value "$cwd/.env" VITE_OS_MAPS_API_KEY)}"
+  local os_maps_layer="${JOBDONE_STAGING_OS_MAPS_LAYER:-$(env_file_value "$cwd/.env" VITE_OS_MAPS_LAYER)}"
+  local os_maps_max_zoom="${JOBDONE_STAGING_OS_MAPS_MAX_ZOOM:-$(env_file_value "$cwd/.env" VITE_OS_MAPS_MAX_ZOOM)}"
   VITE_SUPABASE_URL="$JOBDONE_STAGING_SUPABASE_URL" \
     VITE_SUPABASE_ANON_KEY="$JOBDONE_STAGING_SUPABASE_PUBLISHABLE_KEY" \
     VITE_APP_URL="https://$FRONTEND_STAGING_ALIAS" \
     VITE_API_URL="https://$BACKEND_STAGING_ALIAS" \
+    VITE_OS_MAPS_API_KEY="$os_maps_api_key" \
+    VITE_OS_MAPS_LAYER="${os_maps_layer:-Outdoor_3857}" \
+    VITE_OS_MAPS_MAX_ZOOM="${os_maps_max_zoom:-20}" \
     npx vercel --cwd "$cwd" build \
       --target=production \
       >&2
