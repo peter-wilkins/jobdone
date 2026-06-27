@@ -306,6 +306,51 @@ the field:
 RegenOS owns the grant/intervention model. JobDone owns the user-facing capture
 and editing flow.
 
+## Grant lifecycle tasks
+
+Water Walk should not only capture field observations. Once a candidate becomes
+a possible grant job, JobDone should help manage the grant lifecycle.
+
+Suggested phases:
+
+- `explore`
+- `pre_application`
+- `application`
+- `agreement`
+- `delivery`
+- `claim`
+- `payment_review`
+- `maintenance`
+
+The most important safety rule:
+
+> Do not start work or buy materials until the grant agreement is accepted and
+> the agreement start date has arrived.
+
+Useful generated tasks:
+
+- check Rural Payments land parcels and maps
+- confirm management control
+- check existing agreements and double-funding risk
+- collect adviser support where required
+- check consents, permissions, SSSI, archaeology, drainage, access, and public rights of way
+- capture before-work photos
+- prepare map/sketch
+- submit application through the official route
+- record agreement offer, start date, claim-by date, and durability period
+- brief contractor or farm worker
+- collect during/after photos
+- keep invoices, receipts, and timesheets
+- assemble claim pack
+- submit claim through the official route
+- record actual payment and costs
+- review estimate-vs-actual variance
+- schedule maintenance/durability checks
+
+JobDone can automate evidence packs and reminders. It should not pretend to
+submit Rural Payments applications or claims unless an official API or authorised
+agent route exists.
+
 Sites should eventually become Team-owned resources. A Team can own zero or
 more Sites, and Team members should be able to see the Site data and add
 observations according to their Team permissions. The current MVP keeps Sites as
