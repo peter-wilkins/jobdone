@@ -24,6 +24,7 @@
     "smoke:local-replica:entry": "node scripts/smoke-local-replica-entry.js",
     "deploy:release": "npm run deploy:staging && npm run deploy:check:staging && npm run qa:staging && npm run deploy:promote && npm run deploy:check:production",
     "logs:backend": "bash scripts/tail-backend-prod-logs.sh",
+    "water-walk:import:bgs": "node scripts/import-bgs-water-wells.js",
     "water-walk:import:osm": "node scripts/import-osm-historic-water.js",
     "water-walk:upsert": "node scripts/upsert-water-walk-dataset.js --target staging",
     "water-walk:upsert:production": "node scripts/upsert-water-walk-dataset.js --target production",
