@@ -227,10 +227,27 @@ The next LiDAR slice can produce a tighter bounded local layer:
 4. Do not generate candidate pins until Peter has used the layer in the field and
    confirmed what visual cues are actually helpful.
 
+## Surface-water flood risk layer
+
+The first flood-risk slice is another optional WMS overlay:
+
+- source: Environment Agency Risk of Flooding from Surface Water (RoFSW)
+- dataset: `https://environment.data.gov.uk/dataset/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e`
+- service: `https://environment.data.gov.uk/spatialdata/nafra2-risk-of-flooding-from-surface-water/wms?request=GetCapabilities&service=WMS&version=1.3.0`
+- layer: `rofsw`
+- toggle: `Surface water`
+
+Use this as an indicative field-walk layer: it helps decide where water is
+already modelled to lie or flow during rainfall. It should not be treated as
+property-level flood truth or a design recommendation. The source service is
+scale-gated around 1:50,000, so visibility may vary by zoom level.
+
 Useful source:
 
 - Environment Agency LiDAR Composite DTM, 1m where available:
   `https://environment.data.gov.uk/dataset/13787b9a-26a4-4775-8523-806d13af58fc`
+- Environment Agency Risk of Flooding from Surface Water:
+  `https://environment.data.gov.uk/dataset/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e`
 
 ## Later
 

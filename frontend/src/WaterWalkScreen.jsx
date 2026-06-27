@@ -26,6 +26,8 @@ const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/c
 const DEFAULT_MAP_VIEW = { latitude: 50.61, longitude: -2.46, zoom: 14 };
 const EA_LIDAR_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/13787b9a-26a4-4775-8523-806d13af58fc/wms';
 const EA_LIDAR_HILLSHADE_LAYER = 'Lidar_Composite_Hillshade_DTM_1m';
+const EA_SURFACE_WATER_FLOOD_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e/wms';
+const EA_SURFACE_WATER_FLOOD_LAYER = 'rofsw';
 const CONTOUR_LAYER_BY_SITE = {
   dewlish: '/water-walk/dewlish-contours-2m.geojson',
 };
@@ -329,6 +331,7 @@ function WaterWalkMap({
   showLidarHillshade,
   showContours,
   contourGeoJson,
+  showSurfaceWaterFloodRisk,
   selectedCandidate,
   selectedObservation,
   currentLocation,
@@ -341,6 +344,7 @@ function WaterWalkMap({
   const overlayLayerRef = useRef(null);
   const lidarLayerRef = useRef(null);
   const contourLayerRef = useRef(null);
+  const surfaceWaterFloodLayerRef = useRef(null);
   const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
   const initialView = defaultView || DEFAULT_MAP_VIEW;
@@ -368,6 +372,7 @@ function WaterWalkMap({
       overlayLayerRef.current = null;
       lidarLayerRef.current = null;
       contourLayerRef.current = null;
+      surfaceWaterFloodLayerRef.current = null;
     };
   }, [initialView.latitude, initialView.longitude, initialView.zoom, tileConfig]);
 
@@ -420,6 +425,31 @@ function WaterWalkMap({
     }).addTo(map);
     bringLayerGroupToFront(overlayLayerRef.current);
   }, [contourGeoJson, showContours]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (showSurfaceWaterFloodRisk && !surfaceWaterFloodLayerRef.current) {
+      surfaceWaterFloodLayerRef.current = L.tileLayer.wms(EA_SURFACE_WATER_FLOOD_WMS_URL, {
+        layers: EA_SURFACE_WATER_FLOOD_LAYER,
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        opacity: 0.46,
+        attribution: 'Surface water flood risk &copy; Environment Agency',
+        crossOrigin: true,
+      }).addTo(map);
+      if (typeof contourLayerRef.current?.bringToFront === 'function') contourLayerRef.current.bringToFront();
+      bringLayerGroupToFront(overlayLayerRef.current);
+      return;
+    }
+
+    if (!showSurfaceWaterFloodRisk && surfaceWaterFloodLayerRef.current) {
+      map.removeLayer(surfaceWaterFloodLayerRef.current);
+      surfaceWaterFloodLayerRef.current = null;
+    }
+  }, [showSurfaceWaterFloodRisk]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -573,6 +603,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [showContours, setShowContours] = useState(false);
   const [contourGeoJson, setContourGeoJson] = useState(null);
   const [contourStatus, setContourStatus] = useState('');
+  const [showSurfaceWaterFloodRisk, setShowSurfaceWaterFloodRisk] = useState(false);
 
   const saveDataset = useCallback(dataset => {
     const nextDataset = normalizeDataset(dataset);
@@ -608,6 +639,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       setShowContours(false);
       setContourGeoJson(null);
       setContourStatus('');
+      setShowSurfaceWaterFloodRisk(false);
       setCurrentLocation(null);
       setGpsStatus('');
       setNote('');
@@ -938,6 +970,15 @@ export function WaterWalkScreen({ routeHash, user }) {
                   />
                   Contours 2m
                 </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showSurfaceWaterFloodRisk}
+                    onChange={event => setShowSurfaceWaterFloodRisk(event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  Surface water
+                </label>
                 {(contourStatus || (showContours && !CONTOUR_LAYER_BY_SITE[site.id])) && (
                   <span className="text-[11px] text-gray-500">
                     {contourStatus || 'No contour layer for this site yet.'}
@@ -952,6 +993,7 @@ export function WaterWalkScreen({ routeHash, user }) {
               showLidarHillshade={showLidarHillshade}
               showContours={showContours}
               contourGeoJson={contourGeoJson}
+              showSurfaceWaterFloodRisk={showSurfaceWaterFloodRisk}
               selectedCandidate={selectedCandidate}
               selectedObservation={selectedObservation}
               currentLocation={currentLocation}
