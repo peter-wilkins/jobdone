@@ -195,7 +195,15 @@ allows offline use, OS Data Hub terms that cover it, or self-hosted tiles.
 
 ## LiDAR layer direction
 
-The first LiDAR slice should produce a bounded, site-specific visual layer:
+The first LiDAR slice is an app-visible WMS overlay:
+
+- Environment Agency LiDAR Composite DTM 1m hillshade WMS
+- layer: `Lidar_Composite_Hillshade_DTM_1m`
+- purpose: let Peter read terrain shape directly during a field walk
+
+This keeps LiDAR as an analysis layer, not a candidate-pin generator.
+
+The next LiDAR slice can produce a bounded, site-specific local layer:
 
 1. Download only the Environment Agency LiDAR DTM tiles that intersect the site
    scope.

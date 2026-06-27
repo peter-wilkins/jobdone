@@ -23,6 +23,8 @@ const ENV = import.meta.env || {};
 const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const DEFAULT_MAP_VIEW = { latitude: 50.61, longitude: -2.46, zoom: 14 };
+const EA_LIDAR_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/13787b9a-26a4-4775-8523-806d13af58fc/wms';
+const EA_LIDAR_HILLSHADE_LAYER = 'Lidar_Composite_Hillshade_DTM_1m';
 const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
 const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY
   ? `https://api.os.uk/maps/raster/v1/zxy/${OS_MAPS_LAYER}/{z}/{x}/{y}.png?key=${ENV.VITE_OS_MAPS_API_KEY}`
@@ -320,6 +322,7 @@ function WaterWalkMap({
   candidates,
   areas,
   observations,
+  showLidarHillshade,
   selectedCandidate,
   selectedObservation,
   currentLocation,
@@ -330,6 +333,7 @@ function WaterWalkMap({
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const overlayLayerRef = useRef(null);
+  const lidarLayerRef = useRef(null);
   const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
   const initialView = defaultView || DEFAULT_MAP_VIEW;
@@ -355,8 +359,33 @@ function WaterWalkMap({
       map.remove();
       mapRef.current = null;
       overlayLayerRef.current = null;
+      lidarLayerRef.current = null;
     };
   }, [initialView.latitude, initialView.longitude, initialView.zoom, tileConfig]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (showLidarHillshade && !lidarLayerRef.current) {
+      lidarLayerRef.current = L.tileLayer.wms(EA_LIDAR_WMS_URL, {
+        layers: EA_LIDAR_HILLSHADE_LAYER,
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        opacity: 0.58,
+        attribution: 'LiDAR hillshade &copy; Environment Agency',
+        crossOrigin: true,
+      }).addTo(map);
+      if (overlayLayerRef.current) overlayLayerRef.current.bringToFront();
+      return;
+    }
+
+    if (!showLidarHillshade && lidarLayerRef.current) {
+      map.removeLayer(lidarLayerRef.current);
+      lidarLayerRef.current = null;
+    }
+  }, [showLidarHillshade]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -506,6 +535,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [importText, setImportText] = useState('');
   const [importStatus, setImportStatus] = useState('');
   const [exportStatus, setExportStatus] = useState('');
+  const [showLidarHillshade, setShowLidarHillshade] = useState(false);
 
   const saveDataset = useCallback(dataset => {
     const nextDataset = normalizeDataset(dataset);
@@ -815,11 +845,24 @@ export function WaterWalkScreen({ routeHash, user }) {
                   </span>
                 ))}
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-stone-100 pt-2 text-xs text-gray-600">
+                <span className="font-semibold text-gray-700">Layers</span>
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={showLidarHillshade}
+                    onChange={event => setShowLidarHillshade(event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  LiDAR hillshade
+                </label>
+              </div>
             </div>
             <WaterWalkMap
               candidates={candidates}
               areas={areas}
               observations={observations}
+              showLidarHillshade={showLidarHillshade}
               selectedCandidate={selectedCandidate}
               selectedObservation={selectedObservation}
               currentLocation={currentLocation}
