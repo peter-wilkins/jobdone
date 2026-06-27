@@ -11,6 +11,7 @@ import {
 import { apiService } from './services/apiService';
 import { parseWaterWalkDataset } from './contracts/waterWalkDataset';
 import { waterWalkBoundsKey } from './waterWalkViewport';
+import { bringLayerGroupToFront } from './waterWalkLeafletLayers';
 import { waterWalkSiteFromHash } from './waterWalkSites';
 import { Modal } from './Modal';
 
@@ -377,7 +378,7 @@ function WaterWalkMap({
         attribution: 'LiDAR hillshade &copy; Environment Agency',
         crossOrigin: true,
       }).addTo(map);
-      if (overlayLayerRef.current) overlayLayerRef.current.bringToFront();
+      bringLayerGroupToFront(overlayLayerRef.current);
       return;
     }
 
