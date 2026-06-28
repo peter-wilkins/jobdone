@@ -15,3 +15,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.water-walk-screen {
+  overflow-wrap: anywhere;
+}
+
+.water-walk-screen .leaflet-control-container {
+  position: relative;
+  z-index: 20;
+}
+
+.water-walk-screen .leaflet-top,
+.water-walk-screen .leaflet-bottom {
+  z-index: 20;
+}
+
+.water-walk-screen .leaflet-control-attribution {
+  max-width: min(72vw, 24rem);
+  white-space: normal;
+  line-height: 1.2;
+  text-align: right;
+}

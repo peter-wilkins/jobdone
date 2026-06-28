@@ -102,6 +102,25 @@ const CANDIDATE_THEME = {
   },
 };
 
+const WATER_WALK_LAYER_OPTIONS = [
+  { value: 'base', label: 'Base map', lidar: false, contours: false, surfaceWater: false },
+  { value: 'lidar', label: 'LiDAR hillshade', lidar: true, contours: false, surfaceWater: false },
+  { value: 'contours', label: 'Contours 2m', lidar: false, contours: true, surfaceWater: false },
+  { value: 'surface-water', label: 'Surface water', lidar: false, contours: false, surfaceWater: true },
+  { value: 'lidar-contours', label: 'LiDAR + contours', lidar: true, contours: true, surfaceWater: false },
+  { value: 'lidar-surface-water', label: 'LiDAR + surface water', lidar: true, contours: false, surfaceWater: true },
+  { value: 'all', label: 'All layers', lidar: true, contours: true, surfaceWater: true },
+];
+
+function waterWalkLayerMode({ showLidarHillshade, showContours, showSurfaceWaterFloodRisk }) {
+  const match = WATER_WALK_LAYER_OPTIONS.find(option => (
+    option.lidar === showLidarHillshade
+    && option.contours === showContours
+    && option.surfaceWater === showSurfaceWaterFloodRisk
+  ));
+  return match?.value || 'base';
+}
+
 function mapPinIcon({ fill, selected = false, label = 'Map pin' }) {
   const size = selected ? 48 : 42;
   const pinSize = selected ? 34 : 30;
@@ -783,7 +802,7 @@ function WaterWalkMap({
   return (
     <div
       ref={mapElementRef}
-      className="h-[58vh] min-h-[20rem] w-full max-w-full bg-stone-100 sm:h-[70vh]"
+      className="water-walk-map h-[58vh] min-h-[20rem] w-full max-w-full bg-stone-100 sm:h-[70vh]"
       role="application"
       aria-label="Interactive water walk map"
     />
@@ -793,7 +812,8 @@ function WaterWalkMap({
 export function WaterWalkScreen({ routeHash, user }) {
   const site = useMemo(() => waterWalkSiteFromHash(routeHash || window.location.hash), [routeHash]);
   const storageKeys = useMemo(() => storageKeysForSite(site.id), [site.id]);
-  const isAllowedUser = WATER_WALK_EMAILS.has(String(user?.email || '').trim().toLowerCase());
+  const userEmail = String(user?.email || '').trim().toLowerCase();
+  const isAllowedUser = WATER_WALK_EMAILS.has(userEmail);
   const canUseSite = !site.private || isAllowedUser;
   const [candidates, setCandidates] = useState([]);
   const [areas, setAreas] = useState([]);
@@ -814,7 +834,6 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [budgetForm, setBudgetForm] = useState(() => budgetToForm());
   const [budgetStatus, setBudgetStatus] = useState('');
   const [lifecycleStatus, setLifecycleStatus] = useState('');
-  const [routeSelection, setRouteSelection] = useState(new Set());
   const [note, setNote] = useState('');
   const [photoAttachments, setPhotoAttachments] = useState([]);
   const [photoError, setPhotoError] = useState('');
@@ -866,13 +885,11 @@ export function WaterWalkScreen({ routeHash, user }) {
       if (cancelled) return;
       setSelectedId('');
       setSelectedObservationId('');
-      setIsObservationDialogOpen(false);
       setIsBudgetDialogOpen(false);
       setBudgetTarget(null);
       setBudgetForm(budgetToForm());
       setBudgetStatus('');
       setLifecycleStatus('');
-      setRouteSelection(new Set());
       setImportStatus('');
       setExportStatus('');
       setShowContours(false);
@@ -881,9 +898,6 @@ export function WaterWalkScreen({ routeHash, user }) {
       setShowSurfaceWaterFloodRisk(false);
       setCurrentLocation(null);
       setGpsStatus('');
-      setNote('');
-      setPhotoAttachments([]);
-      setPhotoError('');
       setObservations(loadJsonArray(storageKeys.observations));
       setBudgets(loadJsonArray(storageKeys.budgets));
       setLifecycles(loadJsonArray(storageKeys.lifecycles));
@@ -892,6 +906,10 @@ export function WaterWalkScreen({ routeHash, user }) {
     if (!canUseSite) {
       queueMicrotask(() => {
         if (cancelled) return;
+        setIsObservationDialogOpen(false);
+        setNote('');
+        setPhotoAttachments([]);
+        setPhotoError('');
         setCandidates([]);
         setAreas([]);
         setDatasetMeta({
@@ -900,7 +918,7 @@ export function WaterWalkScreen({ routeHash, user }) {
           sourceNotes: site.sourceNotes || [],
           unmappedClayRichFields: [],
         });
-        setImportStatus(user ? `${site.label} is not enabled for this account.` : `Log in as an enabled Dewlish account to load ${site.label}.`);
+        setImportStatus(userEmail ? `${site.label} is not enabled for this account.` : `Log in as an enabled Dewlish account to load ${site.label}.`);
       });
       return () => {
         cancelled = true;
@@ -956,7 +974,7 @@ export function WaterWalkScreen({ routeHash, user }) {
     return () => {
       cancelled = true;
     };
-  }, [canUseSite, user, saveDataset, site, storageKeys]);
+  }, [canUseSite, userEmail, saveDataset, site, storageKeys]);
 
   useEffect(() => {
     if (!showContours) return undefined;
@@ -1011,12 +1029,11 @@ export function WaterWalkScreen({ routeHash, user }) {
     lookFor: ['soil condition', 'water movement', 'plant cover', 'microclimate', 'possible next action'],
     evidencePrompt: 'Capture photos and notes for this spot. The pin is your current GPS location.',
   } : null);
-  const effectiveRouteSelection = routeSelection.size
-    ? routeSelection
-    : new Set(candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id));
+  const effectiveRouteSelection = new Set(candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id));
   const selectedRouteCandidates = candidates.filter(candidate => effectiveRouteSelection.has(candidate.id));
   const routeStart = currentLocation ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude } : selectedRouteCandidates[0] || null;
   const route = routeNearestNext(selectedRouteCandidates, routeStart);
+  const layerMode = waterWalkLayerMode({ showLidarHillshade, showContours, showSurfaceWaterFloodRisk });
 
   const selectCandidate = useCallback(candidateId => {
     setSelectedId(candidateId);
@@ -1190,13 +1207,11 @@ export function WaterWalkScreen({ routeHash, user }) {
     setIsObservationDialogOpen(false);
   };
 
-  const toggleRouteCandidate = candidateId => {
-    setRouteSelection(current => {
-      const next = new Set(current);
-      if (next.has(candidateId)) next.delete(candidateId);
-      else next.add(candidateId);
-      return next;
-    });
+  const selectLayerMode = mode => {
+    const option = WATER_WALK_LAYER_OPTIONS.find(item => item.value === mode) || WATER_WALK_LAYER_OPTIONS[0];
+    setShowLidarHillshade(option.lidar);
+    setShowContours(option.contours);
+    setShowSurfaceWaterFloodRisk(option.surfaceWater);
   };
 
   const exportObservations = async () => {
@@ -1233,7 +1248,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   const selectedBudgetOption = grantJobOptionById(budgetForm.optionId);
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
+    <div className="water-walk-screen min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
       <main className="grid w-full max-w-full gap-3 overflow-x-hidden px-2 py-2 sm:mx-auto sm:max-w-4xl sm:px-4">
         {!canUseSite && (
           <section className="rounded border border-amber-200 bg-amber-50 p-4">
@@ -1259,35 +1274,18 @@ export function WaterWalkScreen({ routeHash, user }) {
                   </span>
                 ))}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-stone-100 pt-2 text-xs text-gray-600">
-                <span className="font-semibold text-gray-700">Layers</span>
-                <label className="inline-flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={showLidarHillshade}
-                    onChange={event => setShowLidarHillshade(event.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  LiDAR hillshade
-                </label>
-                <label className="inline-flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={showContours}
-                    onChange={event => setShowContours(event.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  Contours 2m
-                </label>
-                <label className="inline-flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={showSurfaceWaterFloodRisk}
-                    onChange={event => setShowSurfaceWaterFloodRisk(event.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  Surface water
-                </label>
+              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 border-t border-stone-100 pt-2 text-xs text-gray-600">
+                <label htmlFor="water-walk-layer-mode" className="font-semibold text-gray-700">Layers</label>
+                <select
+                  id="water-walk-layer-mode"
+                  value={layerMode}
+                  onChange={event => selectLayerMode(event.target.value)}
+                  className="max-w-full rounded border border-stone-300 bg-white px-2 py-1 text-xs font-medium text-gray-800"
+                >
+                  {WATER_WALK_LAYER_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
                 {(contourStatus || (showContours && !CONTOUR_LAYER_BY_SITE[site.id])) && (
                   <span className="text-[11px] text-gray-500">
                     {contourStatus || 'No contour layer for this site yet.'}
@@ -1311,6 +1309,52 @@ export function WaterWalkScreen({ routeHash, user }) {
               onSelectObservation={selectObservation}
             />
           </section>
+        )}
+
+        {canUseSite && (
+        <section className="rounded border border-stone-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold">Saved observations</h2>
+              <p className="text-sm text-gray-500">{observations.length} local records</p>
+            </div>
+            <button type="button" onClick={exportObservations} className="shrink-0 rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700">
+              Export
+            </button>
+          </div>
+          {exportStatus && (
+            <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-2 text-xs text-gray-600">{exportStatus}</p>
+          )}
+          <div className="mt-3 grid gap-2">
+            {observations.length === 0 && (
+              <p className="rounded border border-dashed border-stone-200 bg-stone-50 px-3 py-3 text-sm text-gray-500">
+                No observations yet. Tap a map pin or use the plus button to capture one.
+              </p>
+            )}
+            {observations.slice(0, 8).map(observation => (
+              <button
+                key={observation.id}
+                type="button"
+                onClick={() => selectObservation(observation.id)}
+                className="rounded border border-gray-100 bg-stone-50 px-3 py-2 text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{observation.candidateTitle}</p>
+                    <p className="text-xs text-gray-500">{new Date(observation.createdAt).toLocaleString()}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-gray-500">{observation.photos?.length || 0} photos</span>
+                </div>
+                {observation.note && <p className="mt-2 text-sm text-gray-700">{observation.note}</p>}
+                {observation.photos?.length > 0 && (
+                  <div className="mt-2 flex gap-2 overflow-auto">
+                    {observation.photos.map(photo => <PhotoAttachmentThumb key={photo.id} attachment={photo} />)}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </section>
         )}
 
         {canUseSite && selectedObservation && (
@@ -1472,71 +1516,6 @@ export function WaterWalkScreen({ routeHash, user }) {
               </li>
             ))}
           </ol>
-        </section>
-        )}
-
-        {canUseSite && candidates.length > 0 && (
-        <section className="rounded border border-stone-200 bg-white p-4">
-          <h2 className="text-base font-semibold">Pins</h2>
-          <div className="mt-3 grid gap-2">
-            {candidates.map(candidate => (
-              <div key={candidate.id} className="flex items-center gap-3 rounded border border-gray-100 px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={effectiveRouteSelection.has(candidate.id)}
-                  onChange={() => toggleRouteCandidate(candidate.id)}
-                  className="h-4 w-4"
-                  aria-label={`Include ${candidate.title} in route`}
-                />
-                <button type="button" onClick={() => selectCandidate(candidate.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-medium">{candidate.title}</span>
-                  <span className="block truncate text-xs text-gray-500">{candidate.whyInteresting.slice(0, 2).join('; ')}</span>
-                </button>
-                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${CANDIDATE_THEME[candidate.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
-                  {CANDIDATE_THEME[candidate.theme]?.label || CANDIDATE_THEME.water_restoration.label}
-                </span>
-                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${PRIORITY[candidate.priority]?.className || PRIORITY.background.className}`}>
-                  {candidate.score}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-        )}
-
-        {canUseSite && (
-        <section className="rounded border border-stone-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">Saved observations</h2>
-              <p className="text-sm text-gray-500">{observations.length} local records</p>
-            </div>
-            <button type="button" onClick={exportObservations} className="rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700">
-              Export
-            </button>
-          </div>
-          {exportStatus && (
-            <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-gray-50 p-2 text-xs text-gray-600">{exportStatus}</p>
-          )}
-          <div className="mt-3 grid gap-2">
-            {observations.slice(0, 8).map(observation => (
-              <div key={observation.id} className="rounded border border-gray-100 bg-stone-50 px-3 py-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{observation.candidateTitle}</p>
-                    <p className="text-xs text-gray-500">{new Date(observation.createdAt).toLocaleString()}</p>
-                  </div>
-                  <span className="text-xs text-gray-500">{observation.photos?.length || 0} photos</span>
-                </div>
-                {observation.note && <p className="mt-2 text-sm text-gray-700">{observation.note}</p>}
-                {observation.photos?.length > 0 && (
-                  <div className="mt-2 flex gap-2 overflow-auto">
-                    {observation.photos.map(photo => <PhotoAttachmentThumb key={photo.id} attachment={photo} />)}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
         </section>
         )}
 
