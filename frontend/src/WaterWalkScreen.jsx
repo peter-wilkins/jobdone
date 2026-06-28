@@ -39,7 +39,7 @@ const WATER_WALK_META_STORAGE_KEY = 'jobdone.waterWalk.meta.v1';
 const OBSERVATIONS_STORAGE_KEY = 'jobdone.waterWalk.observations.v1';
 const BUDGETS_STORAGE_KEY = 'jobdone.waterWalk.grantJobBudgets.v1';
 const LIFECYCLES_STORAGE_KEY = 'jobdone.waterWalk.grantLifecycles.v1';
-const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com']);
+const WATER_WALK_EMAILS = new Set(['poppetew@gmail.com', 'tcwilkins@gmail.com']);
 const ENV = import.meta.env || {};
 const DEFAULT_OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -101,6 +101,54 @@ const CANDIDATE_THEME = {
     className: 'border-teal-200 bg-teal-50 text-teal-800',
   },
 };
+
+function mapPinIcon({ fill, selected = false, label = 'Map pin' }) {
+  const size = selected ? 48 : 42;
+  const pinSize = selected ? 34 : 30;
+  const borderWidth = selected ? 4 : 3;
+  const innerSize = selected ? 9 : 8;
+  const offset = Math.round((size - pinSize) / 2);
+  const borderColour = selected ? '#111827' : '#ffffff';
+
+  return L.divIcon({
+    className: 'water-walk-map-pin-icon',
+    iconSize: [size, size + 10],
+    iconAnchor: [Math.round(size / 2), size + 2],
+    popupAnchor: [0, -(size + 2)],
+    html: `
+      <span aria-label="${escapeHtml(label)}" style="
+        position: relative;
+        display: block;
+        width: ${size}px;
+        height: ${size + 10}px;
+      ">
+        <span style="
+          position: absolute;
+          left: ${offset}px;
+          top: ${selected ? 2 : 4}px;
+          width: ${pinSize}px;
+          height: ${pinSize}px;
+          background: ${fill};
+          border: ${borderWidth}px solid ${borderColour};
+          border-radius: 50% 50% 50% 0;
+          box-shadow: 0 3px 8px rgba(15, 23, 42, 0.38);
+          transform: rotate(-45deg);
+          transform-origin: center;
+        "></span>
+        <span style="
+          position: absolute;
+          left: ${Math.round((size - innerSize) / 2)}px;
+          top: ${selected ? 14 : 15}px;
+          width: ${innerSize}px;
+          height: ${innerSize}px;
+          background: rgba(255,255,255,0.92);
+          border-radius: 999px;
+          box-shadow: inset 0 0 0 1px rgba(15,23,42,0.12);
+        "></span>
+      </span>
+    `,
+  });
+}
 
 function safeJsonParse(value, fallback) {
   try {
@@ -646,12 +694,13 @@ function WaterWalkMap({
     candidates.forEach(candidate => {
       const isSelected = candidate.id === selectedCandidate?.id;
       const theme = CANDIDATE_THEME[candidate.theme] || CANDIDATE_THEME.water_restoration;
-      const marker = L.circleMarker([candidate.latitude, candidate.longitude], {
-        radius: isSelected ? 7.5 : 4.8,
-        color: isSelected ? '#111827' : '#ffffff',
-        fillColor: theme.fill,
-        fillOpacity: 0.95,
-        weight: isSelected || candidate.priority === 'high' ? 2 : 1,
+      const marker = L.marker([candidate.latitude, candidate.longitude], {
+        icon: mapPinIcon({
+          fill: theme.fill,
+          selected: isSelected || candidate.priority === 'high',
+          label: candidate.title,
+        }),
+        title: candidate.title,
       });
       marker.bindPopup(`
         <strong>${escapeHtml(candidate.title)}</strong><br />
@@ -667,12 +716,13 @@ function WaterWalkMap({
       const location = observationLocation(observation);
       if (!location) return;
       const isSelected = observation.id === selectedObservation?.id;
-      const marker = L.circleMarker([location.latitude, location.longitude], {
-        radius: isSelected ? 7 : 5,
-        color: isSelected ? '#111827' : '#f8fafc',
-        fillColor: '#0f766e',
-        fillOpacity: 0.95,
-        weight: isSelected ? 2 : 1,
+      const marker = L.marker([location.latitude, location.longitude], {
+        icon: mapPinIcon({
+          fill: '#0f766e',
+          selected: isSelected,
+          label: observation.candidateTitle || 'Observation',
+        }),
+        title: observation.candidateTitle || 'Observation',
       });
       marker.bindPopup(`
         <strong>${escapeHtml(observation.candidateTitle || 'Observation')}</strong><br />
@@ -686,12 +736,13 @@ function WaterWalkMap({
 
     if (currentLocation) {
       const accuracy = Number(currentLocation.accuracyMetres || 0);
-      const locationMarker = L.circleMarker([currentLocation.latitude, currentLocation.longitude], {
-        radius: 7,
-        color: '#111827',
-        fillColor: '#f97316',
-        fillOpacity: 0.95,
-        weight: 2,
+      const locationMarker = L.marker([currentLocation.latitude, currentLocation.longitude], {
+        icon: mapPinIcon({
+          fill: '#f97316',
+          selected: true,
+          label: 'Current GPS',
+        }),
+        title: 'Current GPS',
       });
       locationMarker.bindPopup(`
         <strong>Current GPS</strong><br />
@@ -849,7 +900,7 @@ export function WaterWalkScreen({ routeHash, user }) {
           sourceNotes: site.sourceNotes || [],
           unmappedClayRichFields: [],
         });
-        setImportStatus(user ? `${site.label} is not enabled for this account.` : `Log in as poppetew@gmail.com to load ${site.label}.`);
+        setImportStatus(user ? `${site.label} is not enabled for this account.` : `Log in as an enabled Dewlish account to load ${site.label}.`);
       });
       return () => {
         cancelled = true;
@@ -1188,7 +1239,7 @@ export function WaterWalkScreen({ routeHash, user }) {
           <section className="rounded border border-amber-200 bg-amber-50 p-4">
             <h2 className="text-base font-semibold text-amber-950">Private Water Walk</h2>
             <p className="mt-1 text-sm text-amber-900">
-              {site.label} is enabled for poppetew@gmail.com. Log in with that account to see the private pins.
+              {site.label} is enabled for the Dewlish accounts. Log in with an enabled account to see the private pins.
             </p>
           </section>
         )}

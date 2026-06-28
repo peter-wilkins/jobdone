@@ -4,7 +4,7 @@ import { requireAuth } from '../services/auth.js';
 import { JOBDONE_DB_SCHEMA, jobdoneDb } from '../services/database.js';
 import { parseWaterWalkDataset } from '../contracts/waterWalkDataset.js';
 
-const DEFAULT_ALLOWED_EMAILS = ['poppetew@gmail.com'];
+const DEFAULT_ALLOWED_EMAILS = ['poppetew@gmail.com', 'tcwilkins@gmail.com'];
 const DEFAULT_CANDIDATES_PATH = 'local/water-walk/dewlish-candidates.json';
 const DEFAULT_FARM_ID = 'dewlish';
 const DEFAULT_DATASET_KIND = 'water_walk';

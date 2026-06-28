@@ -72,6 +72,29 @@ test('Water Walk candidates are available to allowed account', async () => {
   assert.equal(response.json().candidates[0].title, 'Private candidate');
 });
 
+test('Water Walk candidates are available to Tim by default', async () => {
+  const app = Fastify({ logger: false });
+  app.register(registerWaterWalkRoutes, {
+    requireAuth: async () => ({ email: 'tcwilkins@gmail.com' }),
+    loadCandidates: async () => ({
+      candidates: [
+        {
+          id: 'candidate-1',
+          title: 'Dewlish candidate',
+          latitude: 50,
+          longitude: -2,
+        },
+      ],
+      areas: [],
+      unmappedClayRichFields: [],
+    }),
+  });
+
+  const response = await app.inject({ method: 'GET', url: '/api/water-walk/candidates' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().candidates[0].title, 'Dewlish candidate');
+});
+
 test('loadCandidates reads validated dataset from database before local fallback', async () => {
   const payload = await loadCandidates({
     db: {

@@ -25,11 +25,11 @@ The page is visible in the app menu, but private Dewlish pins are loaded from:
 GET /api/water-walk/candidates
 ```
 
-The backend only returns candidates to allowed accounts. The initial allowed
-account is:
+The backend only returns candidates to allowed accounts:
 
 ```text
 poppetew@gmail.com
+tcwilkins@gmail.com
 ```
 
 Dataset data is validated with the shared Zod contract in:
