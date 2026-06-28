@@ -52,3 +52,20 @@ test('anonymous feedback report can be sent', async ({ page }) => {
   await expectDebugLog(debugLogs, /diagnostic_event issue_report_typed_created/);
   await expectDebugLog(debugLogs, /api_request .*\/api\/feedback\/save/);
 });
+
+test('Water Walk fits a narrow phone viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+
+  await page.goto('/#water-walk?site=85-dover-road');
+  await expect(page.getByRole('application', { name: /interactive water walk map/i })).toBeVisible();
+  await expect(page.locator('.water-walk-section')).toHaveCount(3);
+
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+  }));
+
+  expect(overflow.scrollWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.clientWidth + 1);
+  expect(overflow.bodyScrollWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.clientWidth + 1);
+});

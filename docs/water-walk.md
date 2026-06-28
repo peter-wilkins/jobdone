@@ -249,6 +249,68 @@ Useful source:
 - Environment Agency Risk of Flooding from Surface Water:
   `https://environment.data.gov.uk/dataset/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e`
 
+## Farm map photo spike
+
+On 2026-06-28, the connected phone contained five photos from 2026-06-15. The
+three useful farm-map references were copied into ignored local storage:
+
+```text
+local/water-walk/farm-map-photos/2026-06-15/20260615_082530.jpg
+local/water-walk/farm-map-photos/2026-06-15/20260615_082917.jpg
+local/water-walk/farm-map-photos/2026-06-15/20260615_082936.jpg
+```
+
+They should stay local/private. Do not commit them.
+
+What they contain:
+
+- `20260615_082530.jpg`: photographed field-name/ownership map with pink
+  highlighted owned/managed areas and hand-written field names.
+- `20260615_082917.jpg`: printed Dewlish Estate map with field names, tracks,
+  ownership colouring, crop/grassland table, and a scale bar.
+- `20260615_082936.jpg`: printed grant/fencing/cross-drain map with scheme
+  codes such as `FG1`, `FG2`, `BN6`, and `BN11`.
+
+The whiteboard photo from the same day is not a map layer source, but it is a
+useful task/reference note because it lists field names and farm jobs.
+
+Data extraction is possible but should be staged:
+
+1. Use the photos as reference evidence and manually type a first field-name
+   glossary where useful.
+2. Ask for the electronic map export if possible. A PDF, shapefile, KML, GeoJSON,
+   QGIS project, RPA land parcel export, or original contractor map would be far
+   better than extracting geometry from angled photos.
+3. If no electronic version exists, georeference the clearest photo in QGIS
+   against OS/OSM control points and digitise only the useful layers by hand.
+4. Use OCR only as a helper for labels. Treat OCR field names as draft text that
+   needs human review because glare, angle, and small print make errors likely.
+
+Potential Water Walk layers:
+
+- **Field label layer**: field names at approximate centroids, useful for "where
+  am I?" and spoken navigation.
+- **Ownership/management area layer**: rough polygons showing what the farm owns
+  or manages.
+- **Track/access layer**: driveable and walkable tracks, gates, yards, and
+  access constraints.
+- **Scheme/work layer**: fencing, hedge planting, coppicing, drains, and other
+  grant/job annotations from the printed scheme map.
+
+Track extraction should not start by trying to infer every path from a photo.
+For the MVP, record GPS while driving or walking the farm, then turn the trace
+into a small route graph. The graph can later be cleaned by hand and labelled
+with gates, yards, fields, and "safe in wet weather" notes.
+
+Recommended first slice:
+
+1. Add a local-only `farm_navigation_reference` note to the Dewlish dataset.
+2. Add a `fieldLabels` array to the private dataset when at least ten names are
+   worth showing.
+3. Render field labels as an optional map layer before attempting polygons.
+4. Record one farm drive/walk trace and convert it into a draft `trackRoutes`
+   layer.
+
 ## Later
 
 Later work can turn saved observations into:

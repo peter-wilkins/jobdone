@@ -18,6 +18,7 @@ body {
 
 .water-walk-screen {
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .water-walk-screen .leaflet-control-container {
@@ -31,8 +32,28 @@ body {
 }
 
 .water-walk-screen .leaflet-control-attribution {
-  max-width: min(72vw, 24rem);
+  box-sizing: border-box;
+  max-width: min(64vw, 22rem);
+  overflow-wrap: anywhere;
   white-space: normal;
+  word-break: break-word;
   line-height: 1.2;
   text-align: right;
+}
+
+.water-walk-screen .leaflet-right .leaflet-control {
+  margin-right: 4px;
+}
+
+.water-walk-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.water-walk-section-chevron {
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.water-walk-section[open] .water-walk-section-chevron {
+  transform: rotate(-90deg);
 }

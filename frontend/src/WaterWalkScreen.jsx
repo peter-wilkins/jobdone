@@ -431,6 +431,29 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function WaterWalkFoldableSection({
+  title,
+  meta = '',
+  children,
+  defaultOpen = false,
+  className = 'border-stone-200 bg-white',
+}) {
+  return (
+    <details open={defaultOpen} className={`water-walk-section rounded border ${className}`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <span className="min-w-0">
+          <span className="block truncate text-base font-semibold">{title}</span>
+          {meta && <span className="block truncate text-sm text-gray-500">{meta}</span>}
+        </span>
+        <span className="water-walk-section-chevron shrink-0 text-gray-500" aria-hidden="true">›</span>
+      </summary>
+      <div className="border-t border-stone-100 p-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function BudgetSummary({ budget }) {
   if (!budget) return null;
 
@@ -1117,7 +1140,6 @@ export function WaterWalkScreen({ routeHash, user }) {
     }
     saveDataset(nextDataset);
     selectCandidate(nextDataset.candidates[0]?.id || '');
-    setRouteSelection(new Set(nextDataset.candidates.filter(candidate => candidate.priority !== 'background').slice(0, 8).map(candidate => candidate.id)));
     setImportText('');
     setImportStatus(`Imported ${nextDataset.candidates.length} pins and ${nextDataset.areas.length} areas.`);
   };
@@ -1312,12 +1334,8 @@ export function WaterWalkScreen({ routeHash, user }) {
         )}
 
         {canUseSite && (
-        <section className="rounded border border-stone-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold">Saved observations</h2>
-              <p className="text-sm text-gray-500">{observations.length} local records</p>
-            </div>
+        <WaterWalkFoldableSection title="Saved observations" meta={`${observations.length} local records`} defaultOpen>
+          <div className="flex justify-end">
             <button type="button" onClick={exportObservations} className="shrink-0 rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700">
               Export
             </button>
@@ -1354,15 +1372,13 @@ export function WaterWalkScreen({ routeHash, user }) {
               </button>
             ))}
           </div>
-        </section>
+        </WaterWalkFoldableSection>
         )}
 
         {canUseSite && selectedObservation && (
-          <section className="rounded border border-teal-200 bg-white p-4 shadow-sm">
+          <WaterWalkFoldableSection title="Observation" meta={selectedObservation.candidateTitle} defaultOpen className="border-teal-200 bg-white shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-semibold">Observation</h2>
-                <p className="mt-1 truncate text-sm font-medium text-gray-900">{selectedObservation.candidateTitle}</p>
                 <p className="mt-1 text-xs text-gray-500">{new Date(selectedObservation.createdAt).toLocaleString()}</p>
               </div>
               <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">
@@ -1390,16 +1406,12 @@ export function WaterWalkScreen({ routeHash, user }) {
             >
               {selectedObservationBudget ? 'Edit budget' : 'Add budget'}
             </button>
-          </section>
+          </WaterWalkFoldableSection>
         )}
 
         {canUseSite && observationTarget && (
-          <section className="rounded border border-stone-200 bg-white p-4">
+          <WaterWalkFoldableSection title={observationTarget.title} meta={`Score ${observationTarget.score}`} defaultOpen={Boolean(selectedCandidate)}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold">{observationTarget.title}</h2>
-                <p className="mt-1 text-sm text-gray-500">Score {observationTarget.score}</p>
-              </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1">
                 <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${CANDIDATE_THEME[observationTarget.theme]?.className || CANDIDATE_THEME.water_restoration.className}`}>
                   {CANDIDATE_THEME[observationTarget.theme]?.label || CANDIDATE_THEME.water_restoration.label}
@@ -1445,21 +1457,17 @@ export function WaterWalkScreen({ routeHash, user }) {
                 </ul>
               </div>
             </div>
-          </section>
+          </WaterWalkFoldableSection>
         )}
 
         {canUseSite && areas.length > 0 && (
-          <section className="rounded border border-stone-200 bg-white p-4">
+          <WaterWalkFoldableSection title="Clay-rich areas" meta={`${areas.length} areas`}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold">Clay-rich areas</h2>
                 <p className="mt-1 text-sm text-gray-500">
                   Based on SMP texture code hZCL, Heavy Silty Clay Loam. The spreadsheet scan did not find numeric clay above 30%; highest numeric clay found was 25.35% in 8 Acres.
                 </p>
               </div>
-              <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-semibold text-stone-700">
-                {areas.length} areas
-              </span>
             </div>
             {datasetMeta.sourceNotes?.length > 0 && (
               <ul className="mt-3 list-disc pl-5 text-sm text-gray-600">
@@ -1486,16 +1494,12 @@ export function WaterWalkScreen({ routeHash, user }) {
                 <p className="mt-2 text-xs text-amber-900">{datasetMeta.unmappedClayRichFields.join(', ')}</p>
               </details>
             )}
-          </section>
+          </WaterWalkFoldableSection>
         )}
 
         {canUseSite && (
-        <section className="rounded border border-stone-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">Route</h2>
-              <p className="text-sm text-gray-500">Nearest-next order from your GPS when available.</p>
-            </div>
+        <WaterWalkFoldableSection title="Route" meta="Nearest-next order from GPS">
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={locateMe}
@@ -1516,12 +1520,11 @@ export function WaterWalkScreen({ routeHash, user }) {
               </li>
             ))}
           </ol>
-        </section>
+        </WaterWalkFoldableSection>
         )}
 
         {canUseSite && (
-        <details className="rounded border border-stone-200 bg-white p-4">
-          <summary className="cursor-pointer text-base font-semibold">Import private pins</summary>
+        <WaterWalkFoldableSection title="Import private pins">
           <textarea
             value={importText}
             onChange={event => setImportText(event.target.value)}
@@ -1535,7 +1538,7 @@ export function WaterWalkScreen({ routeHash, user }) {
             </button>
             {importStatus && <p className="text-sm text-gray-500">{importStatus}</p>}
           </div>
-        </details>
+        </WaterWalkFoldableSection>
         )}
       </main>
 
