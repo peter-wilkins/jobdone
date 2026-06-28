@@ -99,6 +99,8 @@ const GENERIC_TASKS = [
   },
 ];
 
+export const GRANT_LIFECYCLE_GUIDE_URL = 'https://github.com/peter-wilkins/jobdone/blob/main/docs/grant-lifecycle-task-guide.md';
+
 const OPTION_SPECIFIC_TASKS = {
   'uk-england.capital-grants-2026/rp32-small-leaky-woody-dams': [
     {
@@ -165,7 +167,10 @@ function mergeTasksForBudget(budget) {
   const optionTasks = OPTION_SPECIFIC_TASKS[budget?.fundingOptionId] || [];
   const byId = new Map();
   [...GENERIC_TASKS, ...optionTasks].forEach(task => {
-    byId.set(task.id, task);
+    byId.set(task.id, {
+      ...task,
+      guideHref: `${GRANT_LIFECYCLE_GUIDE_URL}#${task.id}`,
+    });
   });
   return [...byId.values()];
 }

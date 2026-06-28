@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  GRANT_JOB_OPTIONS,
   budgetForTarget,
   buildGrantJobBudgetRecord,
   calculateGrantJobBudget,
   formatBudgetMoney,
+  formatGrantRate,
   upsertBudget,
 } from './waterWalkBudgetService.js';
 
@@ -40,7 +42,7 @@ test('grant job budget calculates actuals and variance against estimates', () =>
   });
 });
 
-test('grant job budget keeps unknown grant payment visible', () => {
+test('grant job budget calculates restore pond grant value', () => {
   const result = calculateGrantJobBudget({
     optionId: 'uk-england.capital-grants-2026/wn12-create-or-restore-ponds-up-to-2ha',
     quantity: 1,
@@ -48,9 +50,22 @@ test('grant job budget keeps unknown grant payment visible', () => {
     internalCost: 50,
   });
 
-  assert.equal(result.grantIncome, null);
-  assert.equal(result.margin, null);
-  assert.equal(formatBudgetMoney(result.margin), 'Unknown');
+  assert.equal(result.grantIncome, 1879.46);
+  assert.equal(result.margin, 1729.46);
+});
+
+test('grant job budget calculates percentage actual-cost options from cash cost', () => {
+  const result = calculateGrantJobBudget({
+    optionId: 'uk-england.capital-grants-2026/rp8-constructed-wetlands-for-pollution',
+    quantity: 10,
+    cashCost: 2400,
+    internalCost: 200,
+  });
+  const option = GRANT_JOB_OPTIONS.find(item => item.id === 'uk-england.capital-grants-2026/rp8-constructed-wetlands-for-pollution');
+
+  assert.equal(result.grantIncome, 1200);
+  assert.equal(result.margin, -1400);
+  assert.equal(formatGrantRate(option), 'Grant estimate uses 50% of entered cash cost.');
 });
 
 test('grant job budget record preserves assumptions and target link', () => {

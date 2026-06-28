@@ -311,6 +311,28 @@ Recommended first slice:
 4. Record one farm drive/walk trace and convert it into a draft `trackRoutes`
    layer.
 
+Boundary and water-exit slice:
+
+1. Use the three local map photos as private reference layers only; do not commit
+   the raw photos to the public repo.
+2. Georeference each useful photo against the live map using visible control
+   points such as road junctions, tracks, field corners, ponds, buildings, and
+   woodland edges.
+3. If a simple rectangular image overlay is good enough, render the photo in
+   Leaflet with fitted bounds. If rotation/skew matters, use a GIS step first
+   and export a georeferenced raster or tile layer rather than adding a complex
+   browser transform.
+4. Digitise rough farm boundary and management-edge polygons from the aligned
+   reference.
+5. Cross those edges with flow clues from LiDAR contours, surface-water flood
+   risk, ditches, field drains, observed wet places, and field-walk notes.
+6. Add high-priority "water leaving farm" candidate pins where water appears to
+   cross a farm boundary or leave managed land. These are likely intervention
+   spots because slowing or cleaning water before it leaves the farm has the
+   biggest downstream value.
+7. Replace the photo-derived layer with a digital map export, RPA parcel export,
+   KML, shapefile, GeoJSON, or cleaner scanned map as soon as one is available.
+
 ## Later
 
 Later work can turn saved observations into:
@@ -368,6 +390,10 @@ the field:
 RegenOS owns the grant/intervention model. JobDone owns the user-facing capture
 and editing flow.
 
+The current selectable project types are copied from the RegenOS Capital Grants
+2026 seed so field testing can happen inside JobDone. Keep RegenOS as the source
+of truth and refresh this list when the grant seed changes.
+
 ## Grant lifecycle tasks
 
 Water Walk should not only capture field observations. Once a candidate becomes
@@ -418,6 +444,15 @@ Water Walk budget. It is stored beside the site data, exported with Water Walk
 JSON, and keeps checklist completion state when the budget is edited. It does
 not create Team work items yet; that should wait until Sites are Team-owned and
 the lifecycle task model has been tested in the field.
+
+Each generated lifecycle task links to:
+
+```text
+docs/grant-lifecycle-task-guide.md
+```
+
+Those guide links are practical "how to do this task correctly" notes, not legal
+or grant advice.
 
 Sites should eventually become Team-owned resources. A Team can own zero or
 more Sites, and Team members should be able to see the Site data and add

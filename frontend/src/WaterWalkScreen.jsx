@@ -21,6 +21,7 @@ import {
   buildGrantJobBudgetRecord,
   calculateGrantJobBudget,
   formatBudgetMoney,
+  formatGrantRate,
   grantJobOptionById,
   upsertBudget,
 } from './services/waterWalkBudgetService';
@@ -557,20 +558,33 @@ function LifecycleSummary({ budget, lifecycle, onGenerate, onToggleTask }) {
             </h3>
             <div className="mt-2 grid gap-2">
               {tasks.map(task => (
-                <label key={task.id} className="flex items-start gap-2 text-sm text-blue-950">
+                <div key={task.id} className="flex items-start gap-2 text-sm text-blue-950">
                   <input
                     type="checkbox"
                     checked={task.completed}
+                    aria-label={task.title}
                     onChange={event => onToggleTask(lifecycle, task.id, event.target.checked)}
                     className="mt-1 h-4 w-4 shrink-0"
                   />
                   <span>
-                    <span className={task.completed ? 'font-medium line-through decoration-blue-500' : 'font-medium'}>
-                      {task.title}
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className={task.completed ? 'font-medium line-through decoration-blue-500' : 'font-medium'}>
+                        {task.title}
+                      </span>
+                      {task.guideHref && (
+                        <a
+                          href={task.guideHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-blue-700 underline decoration-blue-300 underline-offset-2"
+                        >
+                          Guide
+                        </a>
+                      )}
                     </span>
                     <span className="mt-0.5 block text-xs text-blue-800">{task.description}</span>
                   </span>
-                </label>
+                </div>
               ))}
             </div>
           </div>
@@ -1404,7 +1418,7 @@ export function WaterWalkScreen({ routeHash, user }) {
               onClick={() => openBudgetDialog(selectedObservationBudgetTarget)}
               className="mt-3 rounded border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900"
             >
-              {selectedObservationBudget ? 'Edit budget' : 'Add budget'}
+              {selectedObservationBudget ? 'Edit project' : 'Propose project'}
             </button>
           </WaterWalkFoldableSection>
         )}
@@ -1429,7 +1443,7 @@ export function WaterWalkScreen({ routeHash, user }) {
                     onClick={() => openBudgetDialog(selectedCandidateBudgetTarget)}
                     className="rounded border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900"
                   >
-                    {selectedCandidateBudget ? 'Edit budget' : 'Add budget'}
+                    {selectedCandidateBudget ? 'Edit project' : 'Propose project'}
                   </button>
                   {budgetStatus && <span className="self-center text-sm text-gray-500">{budgetStatus}</span>}
                 </div>
@@ -1601,14 +1615,14 @@ export function WaterWalkScreen({ routeHash, user }) {
 
       <Modal
         open={canUseSite && isBudgetDialogOpen}
-        title="Grant job budget"
+        title="Proposed grant project"
         description={budgetTarget ? `Rough estimate for ${budgetTarget.title}. Keep assumptions visible; do not fake precision.` : 'Select a pin or observation first.'}
         onClose={() => setIsBudgetDialogOpen(false)}
         closeLabel="Close"
       >
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
-            <span className="font-medium text-gray-700">Possible grant job</span>
+            <span className="font-medium text-gray-700">Project type</span>
             <select
               value={budgetForm.optionId}
               onChange={event => updateBudgetForm({ optionId: event.target.value })}
@@ -1676,9 +1690,7 @@ export function WaterWalkScreen({ routeHash, user }) {
               </div>
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              {selectedBudgetOption.grantAmountPerUnit === null
-                ? 'Grant payment is unknown in the current seed data.'
-                : `Grant estimate uses ${formatBudgetMoney(selectedBudgetOption.grantAmountPerUnit, selectedBudgetOption.currency)} per ${selectedBudgetOption.unit}.`}
+              {formatGrantRate(selectedBudgetOption)}
             </p>
           </div>
 
@@ -1856,7 +1868,7 @@ export function WaterWalkScreen({ routeHash, user }) {
               onClick={saveBudget}
               className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white"
             >
-              Save budget
+              Save project
             </button>
             <button
               type="button"

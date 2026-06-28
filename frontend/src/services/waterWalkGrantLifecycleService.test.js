@@ -31,6 +31,7 @@ test('grant lifecycle generator creates gate tasks for a budget', () => {
   assert.ok(lifecycle.tasks.some(task => task.phase === 'pre_application' && task.id === 'preapp-csf-support'));
   assert.ok(lifecycle.tasks.some(task => task.gate === 'work_allowed'));
   assert.ok(lifecycle.tasks.some(task => task.phase === 'claim'));
+  assert.ok(lifecycle.tasks.every(task => task.guideHref?.includes('docs/grant-lifecycle-task-guide.md#')));
 });
 
 test('grant lifecycle preserves checked tasks when regenerated', () => {
