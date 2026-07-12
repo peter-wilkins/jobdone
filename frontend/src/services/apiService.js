@@ -288,6 +288,13 @@ export class APIService {
     return response.json();
   }
 
+  async getShinyProject({ projectId, ownerUserId }) {
+    const params = new URLSearchParams({ ownerUserId });
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}?${params.toString()}`);
+    if (!response.ok) await throwApiError(response, 'Project unavailable');
+    return response.json();
+  }
+
   async requestShinyDesignPreview({ projectId, ownerUserId, sourceImageId, designDirection }) {
     const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/design-preview`, {
       method: 'POST',

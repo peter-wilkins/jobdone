@@ -46,6 +46,33 @@ function dataUrl(mimeType, dataBase64) {
   return dataBase64 ? `data:${mimeType || 'image/jpeg'};base64,${dataBase64}` : '';
 }
 
+function projectIdFromUrl(location = window.location) {
+  const params = new URLSearchParams(location.search || '');
+  const value = params.get('project');
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '') ? value : null;
+}
+
+function setProjectIdInUrl(projectId, history = window.history, location = window.location) {
+  const url = new URL(location.href);
+  url.searchParams.set('project', projectId);
+  history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function clearProjectIdFromUrl(history = window.history, location = window.location) {
+  const url = new URL(location.href);
+  url.searchParams.delete('project');
+  history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function projectStateFromLoadedProject(result) {
+  return {
+    projectId: result.projectId,
+    ownerUserId: result.ownerUserId,
+    sourceImageId: result.sourceImageId,
+    sourcePreviewUrl: dataUrl(result.sourceImage?.mimeType, result.sourceImage?.dataBase64),
+  };
+}
+
 function OptionSelect({ label, value, options, onChange }) {
   return (
     <label className="block">
@@ -68,6 +95,7 @@ export function ShinyArtShopScreen() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [project, setProject] = useState(null);
+  const [loadingProject, setLoadingProject] = useState(false);
   const [designDirection, setDesignDirection] = useState(initialDirection);
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
@@ -81,6 +109,35 @@ export function ShinyArtShopScreen() {
       })
       .catch(() => {
         if (!cancelled) setOptions(fallbackOptions);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const projectId = projectIdFromUrl();
+    if (!projectId) return;
+    let cancelled = false;
+    setLoadingProject(true);
+    setUploadError('');
+    apiService.getShinyProject({
+      projectId,
+      ownerUserId: getShinyProjectOwnerId(),
+    })
+      .then(result => {
+        if (cancelled) return;
+        setProject(projectStateFromLoadedProject(result));
+        setDesignDirection(result.designDirection || initialDirection);
+        setGeneratedPreview(result.previewImage || null);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setUploadError(error?.message || 'Project unavailable');
+        clearProjectIdFromUrl();
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProject(false);
       });
     return () => {
       cancelled = true;
@@ -113,6 +170,7 @@ export function ShinyArtShopScreen() {
         sourceImageId: null,
         sourcePreviewUrl: sourcePreview,
       });
+      setProjectIdInUrl(projectId);
       const result = await apiService.createShinyProject({
         projectId,
         ownerUserId,
@@ -129,6 +187,7 @@ export function ShinyArtShopScreen() {
       }));
     } catch (error) {
       setUploadError(error?.message || 'Upload failed');
+      clearProjectIdFromUrl();
     } finally {
       setUploading(false);
       event.target.value = '';
@@ -273,6 +332,9 @@ export function ShinyArtShopScreen() {
             <p className="max-w-sm rounded border border-red-500/50 bg-red-950/60 px-3 py-2 text-sm text-red-100">
               {uploadError}
             </p>
+          )}
+          {loadingProject && (
+            <p className="text-sm text-zinc-400">Loading project...</p>
           )}
         </section>
 

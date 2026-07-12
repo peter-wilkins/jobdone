@@ -33,6 +33,10 @@ const PreviewRequestSchema = z.object({
   designDirection: DesignDirectionSchema,
 }).strict();
 
+const ProjectLoadQuerySchema = z.object({
+  ownerUserId: z.string().uuid(),
+}).strict();
+
 function stableHash(value) {
   const input = JSON.stringify(value);
   let hash = 2166136261;
@@ -178,12 +182,87 @@ function findGeneratedPreview(model, { sourceImageId, designDirectionHash, gener
   return file ? { preview, file } : null;
 }
 
+function latestDesignDirection(model) {
+  const events = Array.isArray(model.events) ? model.events : [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.designDirection) return event.designDirection;
+  }
+  return null;
+}
+
+function latestSourceImage(model, fallbackSourceImageId = null) {
+  const files = Array.isArray(model.files) ? model.files : [];
+  if (fallbackSourceImageId) {
+    const file = files.find(item => item.id === fallbackSourceImageId && item.kind === 'customer_upload');
+    if (file) return file;
+  }
+  return [...files].reverse().find(item => item.kind === 'customer_upload') || null;
+}
+
+function latestGeneratedPreview(model) {
+  const previews = Array.isArray(model.previews) ? model.previews : [];
+  const files = Array.isArray(model.files) ? model.files : [];
+  for (let index = previews.length - 1; index >= 0; index -= 1) {
+    const preview = previews[index];
+    if (preview?.kind !== 'generated_design_preview') continue;
+    const file = files.find(item => item.id === preview.outputFileId && item.kind === 'generated_preview');
+    if (file) return { preview, file };
+  }
+  return null;
+}
+
+function projectResponseFromObject(object) {
+  const payload = object.payloadJson || {};
+  const model = payload.model || emptyProjectModel();
+  const sourceImage = latestSourceImage(model, payload.sourceImageId);
+  const generated = latestGeneratedPreview(model);
+  return {
+    projectId: object.id,
+    ownerUserId: object.ownerId,
+    status: payload.status || 'source_image_uploaded',
+    sourceImageId: sourceImage?.id || payload.sourceImageId || null,
+    sourceImage: sourceImage ? {
+      fileId: sourceImage.id,
+      filename: sourceImage.filename,
+      mimeType: sourceImage.mimeType,
+      dataBase64: sourceImage.dataBase64,
+    } : null,
+    designDirection: latestDesignDirection(model),
+    previewImage: generated ? {
+      fileId: generated.file.id,
+      mimeType: generated.file.mimeType,
+      dataBase64: generated.file.dataBase64,
+    } : null,
+  };
+}
+
 export async function registerShinyProjectRoutes(fastify, deps = {}) {
   const store = deps.localReplicaStore ?? defaultStore;
   const imageGenerator = deps.imageGenerator ?? generateShinyDesignPreview;
   const options = deps.designOptions ?? shinyDesignOptions;
 
   fastify.get('/api/shiny/design-options', async () => sellableShinyDesignOptions(options));
+
+  fastify.get('/api/shiny/projects/:projectId', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = ProjectLoadQuerySchema.safeParse(request.query || {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid project load request',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const object = await loadProjectObject({
+      store,
+      ownerUserId: parsed.data.ownerUserId,
+      projectId: request.params.projectId,
+    });
+    if (!object) return reply.status(404).send({ error: 'Project not found' });
+    return projectResponseFromObject(object);
+  });
 
   fastify.post('/api/shiny/projects', async (request, reply) => {
     if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });

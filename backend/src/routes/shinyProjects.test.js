@@ -276,6 +276,47 @@ test('Design preview generation returns cached image for same direction without 
   }
 });
 
+test('Shiny project can be reloaded by project ID and owner identity', async () => {
+  const store = memoryStore();
+  const app = await buildApp(store, {
+    imageGenerator: async (input) => ({
+      ok: true,
+      provider: 'openai',
+      generatorVersion: 'openai-image-edit:v1',
+      promptText: buildShinyImagePrompt(input.designDirection),
+      mimeType: 'image/jpeg',
+      dataBase64: GENERATED_BYTES,
+    }),
+  });
+
+  try {
+    const upload = await uploadProject(app);
+    const sourceImageId = JSON.parse(upload.body).sourceImageId;
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/design-preview`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ownerUserId: OWNER_ID, sourceImageId, designDirection }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/shiny/projects/${PROJECT_ID}?ownerUserId=${OWNER_ID}`,
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body);
+    assert.equal(body.projectId, PROJECT_ID);
+    assert.equal(body.ownerUserId, OWNER_ID);
+    assert.equal(body.sourceImageId, sourceImageId);
+    assert.equal(body.sourceImage.dataBase64, SOURCE_BYTES);
+    assert.equal(body.designDirection.material, 'copper_effect');
+    assert.equal(body.previewImage.dataBase64, GENERATED_BYTES);
+  } finally {
+    await app.close();
+  }
+});
+
 test('Design preview failure is persisted and can be retried', async () => {
   const store = memoryStore();
   let calls = 0;
