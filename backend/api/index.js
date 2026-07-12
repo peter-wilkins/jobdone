@@ -1,5 +1,9 @@
 import { createApp } from '../src/app.js';
 
+export const config = {
+  maxDuration: 120,
+};
+
 const app = createApp();
 let readyPromise;
 

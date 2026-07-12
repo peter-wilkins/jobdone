@@ -99,7 +99,7 @@ export async function generateShinyDesignPreview({
   designDirection,
   fetchImpl = fetch,
   env = process.env,
-  timeoutMs = Number(process.env.SHINY_IMAGE_TIMEOUT_MS || 55000),
+  timeoutMs = Number(process.env.SHINY_IMAGE_TIMEOUT_MS || 90000),
 } = {}) {
   if (!env.OPENAI_API_KEY) {
     return {
