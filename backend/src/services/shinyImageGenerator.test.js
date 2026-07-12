@@ -8,8 +8,8 @@ test('Shiny image generator loads swatches independent of process cwd', async ()
   const seen = {};
   const fetchImpl = async (_url, init) => {
     const form = init.body;
-    seen.images = form.getAll('image');
-    seen.imageBracket = form.getAll('image[]');
+    seen.images = form.getAll('image[]');
+    seen.imagePlain = form.getAll('image');
     return {
       ok: true,
       json: async () => ({ data: [{ b64_json: tinyPngBase64 }], usage: { total_tokens: 1 } }),
@@ -36,6 +36,5 @@ test('Shiny image generator loads swatches independent of process cwd', async ()
   assert.equal(result.ok, true);
   assert.equal(result.dataBase64, tinyPngBase64);
   assert.equal(seen.images.length, 2);
-  assert.equal(seen.imageBracket.length, 0);
+  assert.equal(seen.imagePlain.length, 0);
 });
-

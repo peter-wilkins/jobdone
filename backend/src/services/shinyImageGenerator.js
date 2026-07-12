@@ -117,8 +117,8 @@ export async function generateShinyDesignPreview({
     const form = new FormData();
     form.append('model', env.SHINY_IMAGE_MODEL || DEFAULT_MODEL);
     form.append('prompt', promptText);
-    form.append('image', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
-    form.append('image', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
+    form.append('image[]', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
+    form.append('image[]', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
     form.append('n', '1');
     form.append('size', env.SHINY_IMAGE_SIZE || DEFAULT_SIZE);
     form.append('quality', env.SHINY_IMAGE_QUALITY || DEFAULT_QUALITY);
