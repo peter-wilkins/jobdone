@@ -2,11 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_MODEL = 'gpt-image-1';
+const DEFAULT_MODEL = 'gpt-image-2';
 const DEFAULT_OUTPUT_FORMAT = 'jpeg';
 const DEFAULT_SIZE = '1024x1024';
 const DEFAULT_QUALITY = 'high';
-const GENERATOR_VERSION = 'openai-image-edit:v1';
+const GENERATOR_VERSION = 'openai-image-edit:gpt-image-2:v1';
 const SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
 const BACKEND_DIR = resolve(SERVICE_DIR, '..', '..');
 
@@ -61,8 +61,8 @@ export function buildShinyImagePrompt(direction = {}) {
   const notes = normalizeNotes(direction.styleNotes);
 
   return [
-    'Create a realistic product mockup of a mostly flat wall-art piece based on the customer source image.',
-    'Preserve the input image subject, framing, composition, outline, pose, and exact visible proportions.',
+    'Edit the customer source image as a material translation for a mostly flat wall-art piece.',
+    'Treat the source image geometry, silhouette, subject identity, framing, composition, outline, pose, and exact visible proportions as hard constraints.',
     'Do not make people, pets, animals, faces, bodies, objects, or scenery fatter, thinner, taller, shorter, wider, narrower, stretched, or squashed.',
     'Do not crop, zoom, rotate, add, remove, or reshape the main subject.',
     `Only reinterpret the surface as ${product} made from ${material} with ${finish}.`,

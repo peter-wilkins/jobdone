@@ -76,7 +76,9 @@ Inputs:
 
 Behaviour:
 
-- Anonymous users get one successful generated preview per Project.
+- Anonymous users get one successful generated preview per Project per generator
+  version. A generator-version bump may deliberately allow one fresh preview for
+  existing Projects when the preview model or prompt materially improves.
 - Upload creates the Project immediately using a frontend-created UUIDv7.
 - The customer sees their uploaded image immediately while upload finishes in
   the background.
@@ -87,6 +89,10 @@ Behaviour:
 - The backend sends the customer source image plus tiny material reference
   swatches to the image generator. MVP swatches are approximate repo assets;
   replace them later with real photographed materials.
+- The MVP default generator is GPT Image 2 through the OpenAI image edit API.
+  The prompt treats the source image geometry, silhouette, subject identity, and
+  proportions as hard constraints. If prompt-only editing still loses pet
+  identity, spike Flux 2 Pro or a structure-locking image-edit provider next.
 - Generated previews are cached by Project, source image, Design Direction hash,
   and generator version. Reloads and retries for the same inputs should return
   the stored image rather than regenerating.

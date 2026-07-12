@@ -193,6 +193,51 @@ test('anonymous preview quota is enforced as a defined user error', () => {
   assert.equal(second.code, 'anonymous_preview_limit');
 });
 
+test('generated design preview quota is scoped to generator version', () => {
+  let model = emptyProjectModel();
+  model = apply(model, cmd('createProject', {
+    title: 'Dog portrait',
+    ownerUserId: anonymousCustomer.userId,
+    productSurface: 'shiny_art_shop',
+  }, anonymousCustomer, 1));
+  model = apply(model, cmd('uploadProjectFile', {
+    fileId: 'file-1',
+    kind: 'customer_upload',
+    filename: 'dog.jpg',
+    mimeType: 'image/jpeg',
+  }, anonymousCustomer, 2));
+  model = apply(model, cmd('recordDesignPreviewGenerated', {
+    sourceFileId: 'file-1',
+    outputFileId: 'preview-v1',
+    filename: 'preview-v1.jpg',
+    mimeType: 'image/jpeg',
+    dataBase64: 'abc',
+    designDirection: { productType: 'embossed_metal_picture', material: 'copper_effect', finish: 'natural', styleNotes: '' },
+    designDirectionHash: 'hash-v1',
+    generatorVersion: 'openai-image-edit:v1',
+    provider: 'openai',
+    promptText: 'old prompt',
+    usage: {},
+  }, system, 3));
+
+  const sameVersion = applyProjectCommand(model, cmd('requestDesignPreview', {
+    sourceFileId: 'file-1',
+    designDirection: { productType: 'embossed_metal_picture', material: 'copper_effect', finish: 'natural', styleNotes: '' },
+    designDirectionHash: 'hash-v1',
+    generatorVersion: 'openai-image-edit:v1',
+  }, anonymousCustomer, 4));
+  assert.equal(sameVersion.accepted, false);
+  assert.equal(sameVersion.code, 'anonymous_preview_limit');
+
+  const upgradedVersion = applyProjectCommand(model, cmd('requestDesignPreview', {
+    sourceFileId: 'file-1',
+    designDirection: { productType: 'embossed_metal_picture', material: 'copper_effect', finish: 'natural', styleNotes: '' },
+    designDirectionHash: 'hash-v2',
+    generatorVersion: 'openai-image-edit:gpt-image-2:v1',
+  }, anonymousCustomer, 5));
+  assert.equal(upgradedVersion.accepted, true);
+});
+
 function random(seed) {
   let state = seed >>> 0;
   return () => {

@@ -177,8 +177,11 @@ export function applyProjectCommand(rawModel = emptyProjectModel(), rawCommand, 
     case 'requestDesignPreview': {
       const hasSource = model.files.some(file => file.id === command.sourceFileId && file.kind === 'customer_upload');
       if (!hasSource) return reject('Upload an image before creating a preview.', 'source_file_missing');
-      const successfulPreview = model.previews.some(preview => preview.kind === 'generated_design_preview');
-      if (successfulPreview) return reject('This project already has a generated preview.', 'anonymous_preview_limit');
+      const successfulPreviewForVersion = model.previews.some(preview =>
+        preview.kind === 'generated_design_preview' &&
+        preview.generatorVersion === command.generatorVersion
+      );
+      if (successfulPreviewForVersion) return reject('This project already has a generated preview.', 'anonymous_preview_limit');
       return applyAccepted(model, command, next => {
         next.events.push(businessEvent(command, 'design_preview_requested', {
           sourceFileId: command.sourceFileId,
