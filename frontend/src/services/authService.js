@@ -23,6 +23,7 @@ export function isJobDoneAuthOrigin(origin) {
       'jobdone-frontend-staging.vercel.app',
       'jobdone-frontend-production.vercel.app',
       'jobdone.continuumkit.org',
+      'shiny-art-shop.continuumkit.org',
     ].includes(hostname);
   } catch {
     return false;

@@ -9,6 +9,7 @@ FRONTEND_PRODUCTION_PRIMARY_ALIAS="${FRONTEND_PRODUCTION_ALIAS:-jobdone.continuu
 BACKEND_PRODUCTION_PRIMARY_ALIAS="${BACKEND_PRODUCTION_ALIAS:-jobdone-backend-production.vercel.app}"
 FRONTEND_PRODUCTION_ALIASES=(
   "$FRONTEND_PRODUCTION_PRIMARY_ALIAS"
+  "shiny-art-shop.continuumkit.org"
   "jobdone-frontend-production.vercel.app"
 )
 FRONTEND_REMOVED_ALIASES=(
@@ -56,7 +57,7 @@ extract_deployment_url() {
 }
 
 deploy_backend() {
-  local cors_allowed_origins="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS,https://jobdone-frontend-production.vercel.app,http://localhost:5173,http://localhost:4173"
+  local cors_allowed_origins="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS,https://shiny-art-shop.continuumkit.org,https://jobdone-frontend-production.vercel.app,http://localhost:5173,http://localhost:4173"
   npx vercel --cwd backend build \
     --target=production \
     >&2

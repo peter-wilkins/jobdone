@@ -77,6 +77,10 @@ test('routes explicit staging and production hostnames to matching backend alias
     'https://jobdone-backend-production.vercel.app',
   );
   assert.equal(
+    defaultApiBaseUrl('shiny-art-shop.continuumkit.org'),
+    'https://jobdone-backend-production.vercel.app',
+  );
+  assert.equal(
     defaultApiBaseUrl('frontend-old-preview.vercel.app'),
     'https://jobdone-gamma.vercel.app',
   );

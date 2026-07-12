@@ -97,6 +97,7 @@ test('known JobDone app origins are valid auth redirect origins', () => {
   assert.equal(isJobDoneAuthOrigin('https://jobdone-staging.vercel.app'), true);
   assert.equal(isJobDoneAuthOrigin('https://jobdone-frontend-production.vercel.app'), true);
   assert.equal(isJobDoneAuthOrigin('https://jobdone.continuumkit.org'), true);
+  assert.equal(isJobDoneAuthOrigin('https://shiny-art-shop.continuumkit.org'), true);
   assert.equal(isJobDoneAuthOrigin('https://frontend-six-sage-63.vercel.app'), false);
   assert.equal(isJobDoneAuthOrigin('http://localhost:5173'), true);
   assert.equal(isJobDoneAuthOrigin('https://wrong.example'), false);

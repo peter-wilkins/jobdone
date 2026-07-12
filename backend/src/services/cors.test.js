@@ -27,6 +27,7 @@ describe('CORS policy', () => {
 
     assert.equal(isAllowedCorsOrigin('https://jobdone-staging.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone.continuumkit.org', origins), true);
+    assert.equal(isAllowedCorsOrigin('https://shiny-art-shop.continuumkit.org', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-staging.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone-frontend-production.vercel.app', origins), true);
     assert.equal(isAllowedCorsOrigin('https://jobdone-production.vercel.app', origins), false);

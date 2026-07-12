@@ -18,6 +18,15 @@ export function deploymentEnvironmentForHostname(hostname = globalThis.window?.l
       bannerClassName: 'bg-emerald-600 text-white',
     };
   }
+  if (normalized === 'shiny-art-shop.continuumkit.org') {
+    return {
+      kind: 'production',
+      label: 'SHINY ART SHOP',
+      appName: 'Shiny Art Shop',
+      manifestPath: '/manifest-shiny-art-shop.webmanifest',
+      bannerClassName: 'bg-violet-600 text-white',
+    };
+  }
   return null;
 }
 

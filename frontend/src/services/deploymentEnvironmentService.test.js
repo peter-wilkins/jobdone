@@ -30,6 +30,14 @@ test('keeps explicit frontend hostnames classified', () => {
   assert.equal(deploymentEnvironmentForHostname('frontend-jobdone1.vercel.app'), null);
 });
 
+test('detects Shiny Art Shop hostname as a production product surface', () => {
+  const environment = deploymentEnvironmentForHostname('shiny-art-shop.continuumkit.org');
+
+  assert.equal(environment.kind, 'production');
+  assert.equal(environment.appName, 'Shiny Art Shop');
+  assert.equal(environment.manifestPath, '/manifest-shiny-art-shop.webmanifest');
+});
+
 test('leaves local development unlabelled', () => {
   assert.equal(deploymentEnvironmentForHostname('localhost'), null);
 });
