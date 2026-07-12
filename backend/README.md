@@ -31,11 +31,19 @@ calls.
 
 ```text
 VOYAGE_API_KEY
+OPENAI_API_KEY
+SHINY_IMAGE_PROVIDER
+SHINY_IMAGE_MODEL
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
 SUPABASE_URL
 SUPABASE_KEY
 SUPABASE_DB_URL
 USE_MOCK_APIS
 ```
+
+`SHINY_IMAGE_PROVIDER` defaults to `openai`. Use `cloudflare-flux-2-dev` with
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` to test Workers AI FLUX.2.
 
 `SUPABASE_URL`/`SUPABASE_KEY` are for Supabase Auth. App data uses direct
 Postgres via `SUPABASE_DB_URL`; it does not require Supabase REST/Data API

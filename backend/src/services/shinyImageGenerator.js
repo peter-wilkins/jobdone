@@ -2,11 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_MODEL = 'gpt-image-2';
+const OPENAI_PROVIDER = 'openai';
+const CLOUDFLARE_FLUX_PROVIDER = 'cloudflare-flux-2-dev';
+const DEFAULT_PROVIDER = OPENAI_PROVIDER;
+const DEFAULT_OPENAI_MODEL = 'gpt-image-2';
+const DEFAULT_CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-2-dev';
 const DEFAULT_OUTPUT_FORMAT = 'jpeg';
 const DEFAULT_SIZE = '1024x1024';
 const DEFAULT_QUALITY = 'high';
-const GENERATOR_VERSION = 'openai-image-edit:gpt-image-2:v1';
 const SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
 const BACKEND_DIR = resolve(SERVICE_DIR, '..', '..');
 
@@ -50,8 +53,22 @@ function normalizeNotes(value) {
     .slice(0, 500);
 }
 
-export function shinyGeneratorVersion() {
-  return GENERATOR_VERSION;
+function shinyImageProvider(env = process.env) {
+  return String(env.SHINY_IMAGE_PROVIDER || DEFAULT_PROVIDER).trim().toLowerCase();
+}
+
+function openAiModel(env = process.env) {
+  return env.SHINY_IMAGE_MODEL || DEFAULT_OPENAI_MODEL;
+}
+
+function cloudflareModel(env = process.env) {
+  return env.SHINY_IMAGE_MODEL || env.CLOUDFLARE_WORKERS_AI_MODEL || DEFAULT_CLOUDFLARE_MODEL;
+}
+
+export function shinyGeneratorVersion(env = process.env) {
+  const provider = shinyImageProvider(env);
+  if (provider === CLOUDFLARE_FLUX_PROVIDER) return `cloudflare-workers-ai:${cloudflareModel(env)}:v1`;
+  return `openai-image-edit:${openAiModel(env)}:v1`;
 }
 
 export function buildShinyImagePrompt(direction = {}) {
@@ -94,20 +111,46 @@ function providerErrorCategory(error) {
   return 'provider_error';
 }
 
+function parseSize(size) {
+  const match = String(size || DEFAULT_SIZE).match(/^(\d+)x(\d+)$/);
+  return {
+    width: match ? match[1] : '1024',
+    height: match ? match[2] : '1024',
+  };
+}
+
 export async function generateShinyDesignPreview({
   sourceImage,
   designDirection,
   fetchImpl = fetch,
   env = process.env,
-  timeoutMs = Number(process.env.SHINY_IMAGE_TIMEOUT_MS || 90000),
+  timeoutMs = Number(env.SHINY_IMAGE_TIMEOUT_MS || 90000),
 } = {}) {
+  const provider = shinyImageProvider(env);
+  if (provider === OPENAI_PROVIDER) {
+    return generateOpenAiPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
+  }
+  if (provider === CLOUDFLARE_FLUX_PROVIDER) {
+    return generateCloudflareFluxPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
+  }
+  return {
+    ok: false,
+    errorCategory: 'provider_not_configured',
+    message: `Unsupported image generator provider: ${provider}`,
+    promptText: buildShinyImagePrompt(designDirection),
+    generatorVersion: shinyGeneratorVersion(env),
+  };
+}
+
+async function generateOpenAiPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs }) {
+  const generatorVersion = shinyGeneratorVersion(env);
   if (!env.OPENAI_API_KEY) {
     return {
       ok: false,
       errorCategory: 'provider_not_configured',
       message: 'Image generator is not configured.',
       promptText: buildShinyImagePrompt(designDirection),
-      generatorVersion: GENERATOR_VERSION,
+      generatorVersion,
     };
   }
 
@@ -117,7 +160,7 @@ export async function generateShinyDesignPreview({
 
   try {
     const form = new FormData();
-    form.append('model', env.SHINY_IMAGE_MODEL || DEFAULT_MODEL);
+    form.append('model', openAiModel(env));
     form.append('prompt', promptText);
     form.append('image[]', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
     form.append('image[]', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
@@ -146,7 +189,7 @@ export async function generateShinyDesignPreview({
     return {
       ok: true,
       provider: 'openai',
-      generatorVersion: GENERATOR_VERSION,
+      generatorVersion,
       promptText,
       mimeType: `image/${env.SHINY_IMAGE_OUTPUT_FORMAT || DEFAULT_OUTPUT_FORMAT}`,
       dataBase64,
@@ -158,7 +201,74 @@ export async function generateShinyDesignPreview({
       errorCategory: providerErrorCategory(error),
       message: 'Oops, we had a problem. Try again in a few minutes.',
       promptText,
-      generatorVersion: GENERATOR_VERSION,
+      generatorVersion,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateCloudflareFluxPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs }) {
+  const generatorVersion = shinyGeneratorVersion(env);
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID || env.CLOUDFLARE_WORKERS_AI_ACCOUNT_ID;
+  const token = env.CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_WORKERS_AI_TOKEN;
+  const promptText = buildShinyImagePrompt(designDirection);
+  if (!accountId || !token) {
+    return {
+      ok: false,
+      errorCategory: 'provider_not_configured',
+      message: 'Image generator is not configured.',
+      promptText,
+      generatorVersion,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const { width, height } = parseSize(env.SHINY_IMAGE_SIZE || DEFAULT_SIZE);
+  const model = cloudflareModel(env);
+
+  try {
+    const form = new FormData();
+    form.append('prompt', promptText);
+    form.append('input_image_0', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
+    form.append('input_image_1', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
+    form.append('width', width);
+    form.append('height', height);
+    form.append('steps', String(env.SHINY_IMAGE_STEPS || 25));
+
+    const response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body?.success === false) {
+      const error = new Error(body?.errors?.[0]?.message || `Cloudflare image generation failed with ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    const dataBase64 = body?.result?.image || body?.image;
+    if (!dataBase64) throw new Error('Cloudflare image generation returned no image');
+
+    return {
+      ok: true,
+      provider: 'cloudflare-workers-ai',
+      generatorVersion,
+      promptText,
+      mimeType: 'image/png',
+      dataBase64,
+      usage: body.usage || {},
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCategory: providerErrorCategory(error),
+      message: 'Oops, we had a problem. Try again in a few minutes.',
+      promptText,
+      generatorVersion,
     };
   } finally {
     clearTimeout(timeout);

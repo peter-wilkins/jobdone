@@ -43,6 +43,61 @@ test('Shiny image generator loads swatches independent of process cwd', async ()
   assert.equal(shinyGeneratorVersion(), 'openai-image-edit:gpt-image-2:v1');
 });
 
+test('Shiny image generator can call Cloudflare FLUX when selected by env', async () => {
+  const seen = {};
+  const fetchImpl = async (url, init) => {
+    const form = init.body;
+    seen.url = url;
+    seen.prompt = form.get('prompt');
+    seen.sourceImages = form.getAll('input_image_0');
+    seen.swatches = form.getAll('input_image_1');
+    seen.width = form.get('width');
+    seen.height = form.get('height');
+    seen.steps = form.get('steps');
+    seen.auth = init.headers.Authorization;
+    return {
+      ok: true,
+      json: async () => ({ success: true, result: { image: tinyPngBase64 } }),
+    };
+  };
+
+  const env = {
+    SHINY_IMAGE_PROVIDER: 'cloudflare-flux-2-dev',
+    CLOUDFLARE_ACCOUNT_ID: 'acct-1',
+    CLOUDFLARE_API_TOKEN: 'cf-token',
+    SHINY_IMAGE_SIZE: '1024x1024',
+  };
+  const result = await generateShinyDesignPreview({
+    sourceImage: {
+      filename: 'dog.png',
+      mimeType: 'image/png',
+      dataBase64: tinyPngBase64,
+    },
+    designDirection: {
+      productType: 'embossed_metal_picture',
+      material: 'copper_effect',
+      finish: 'natural',
+      styleNotes: '',
+    },
+    fetchImpl,
+    env,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'cloudflare-workers-ai');
+  assert.equal(result.generatorVersion, 'cloudflare-workers-ai:@cf/black-forest-labs/flux-2-dev:v1');
+  assert.equal(seen.url, 'https://api.cloudflare.com/client/v4/accounts/acct-1/ai/run/@cf/black-forest-labs/flux-2-dev');
+  assert.match(seen.prompt, /hard constraints/);
+  assert.equal(seen.sourceImages.length, 1);
+  assert.equal(seen.swatches.length, 1);
+  assert.equal(seen.width, '1024');
+  assert.equal(seen.height, '1024');
+  assert.equal(seen.steps, '25');
+  assert.equal(seen.auth, 'Bearer cf-token');
+  assert.equal(shinyGeneratorVersion(env), 'cloudflare-workers-ai:@cf/black-forest-labs/flux-2-dev:v1');
+});
+
 test('Shiny image prompt forbids changing subject proportions', () => {
   const prompt = buildShinyImagePrompt({
     productType: 'embossed_metal_picture',
