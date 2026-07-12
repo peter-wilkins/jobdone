@@ -74,6 +74,58 @@ Derived examples:
 received. No explicit "ready for workshop" event is needed until scheduling
 proves it useful.
 
+## Diagram
+
+This is a simple flow diagram, not a full state chart. If side paths grow more
+complex, promote it to a state chart.
+
+```mermaid
+flowchart TD
+  Draft[draft]
+  Previewed[previewed]
+  QuoteConfig[quote_configuring]
+  HumanReview[needs_human_review]
+  AwaitingPayment[awaiting_payment]
+  ReadyWorkshop[ready_for_workshop]
+  InProduction[in_production]
+  AwaitingApproval[awaiting_customer_approval]
+  AwaitingBalance[awaiting_balance]
+  Ready[ready]
+  Complete[complete]
+  Cancelled[cancelled]
+  Declined[declined]
+  HumanAttention[requires_human_attention]
+
+  Draft -->|uploadProjectFile + generatePreview| Previewed
+  Previewed -->|configureQuote| QuoteConfig
+  QuoteConfig -->|auto quote offered| AwaitingPayment
+  QuoteConfig -->|notes/custom scope| HumanReview
+  HumanReview -->|offerManualQuote| AwaitingPayment
+  HumanReview -->|declineProject| Declined
+  AwaitingPayment -->|recordPaymentFailed| AwaitingPayment
+  AwaitingPayment -->|recordPaymentReceived| ReadyWorkshop
+  ReadyWorkshop -->|cancelBeforeProduction + refund| Cancelled
+  ReadyWorkshop -->|startProduction| InProduction
+  InProduction -->|uploadWorkshopPhoto| AwaitingApproval
+  AwaitingApproval -->|requestAdjustment| InProduction
+  AwaitingApproval -->|approveFinishedPiece + balance due| AwaitingBalance
+  AwaitingApproval -->|approveFinishedPiece + paid in full| Ready
+  AwaitingBalance -->|recordPaymentReceived| Ready
+  Ready -->|markComplete| Complete
+
+  Draft -. unexpected conflict .-> HumanAttention
+  Previewed -. unexpected conflict .-> HumanAttention
+  QuoteConfig -. unexpected conflict .-> HumanAttention
+  HumanReview -. unexpected conflict .-> HumanAttention
+  AwaitingPayment -. inconsistent payment .-> HumanAttention
+  ReadyWorkshop -. race/conflict .-> HumanAttention
+  InProduction -. race/conflict .-> HumanAttention
+  AwaitingApproval -. race/conflict .-> HumanAttention
+  AwaitingBalance -. inconsistent payment .-> HumanAttention
+  Ready -. race/conflict .-> HumanAttention
+  HumanAttention -->|resolveHumanAttention| HumanReview
+```
+
 ## Commands
 
 Customer commands:
