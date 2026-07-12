@@ -1,11 +1,14 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_MODEL = 'gpt-image-1';
 const DEFAULT_OUTPUT_FORMAT = 'jpeg';
 const DEFAULT_SIZE = '1024x1024';
 const DEFAULT_QUALITY = 'high';
 const GENERATOR_VERSION = 'openai-image-edit:v1';
+const SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
+const BACKEND_DIR = resolve(SERVICE_DIR, '..', '..');
 
 const MATERIAL_LABELS = {
   aluminium: 'aluminium',
@@ -76,13 +79,14 @@ function blobFromBase64(dataBase64, mimeType) {
 
 async function materialSwatchBlob(material) {
   const filename = MATERIAL_SWATCH_FILES[material] || MATERIAL_SWATCH_FILES.aluminium;
-  const path = join(process.cwd(), 'assets', 'shiny-art-shop', 'materials', filename);
+  const path = resolve(BACKEND_DIR, 'assets', 'shiny-art-shop', 'materials', filename);
   const buffer = await readFile(path);
   return new Blob([buffer], { type: 'image/png' });
 }
 
 function providerErrorCategory(error) {
   if (error?.name === 'AbortError') return 'timeout';
+  if (error?.code === 'ENOENT') return 'generator_asset_missing';
   const message = String(error?.message || '').toLowerCase();
   if (message.includes('content') || message.includes('safety') || message.includes('policy')) return 'unsafe_request';
   return 'provider_error';
@@ -113,8 +117,8 @@ export async function generateShinyDesignPreview({
     const form = new FormData();
     form.append('model', env.SHINY_IMAGE_MODEL || DEFAULT_MODEL);
     form.append('prompt', promptText);
-    form.append('image[]', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
-    form.append('image[]', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
+    form.append('image', blobFromBase64(sourceImage.dataBase64, sourceImage.mimeType), sourceImage.filename || 'source.jpg');
+    form.append('image', await materialSwatchBlob(designDirection.material), `${designDirection.material}.png`);
     form.append('n', '1');
     form.append('size', env.SHINY_IMAGE_SIZE || DEFAULT_SIZE);
     form.append('quality', env.SHINY_IMAGE_QUALITY || DEFAULT_QUALITY);
