@@ -8,6 +8,7 @@ const ROLE_COMMANDS = {
     'createProject',
     'uploadProjectFile',
     'generatePreview',
+    'requestDesignPreview',
     'configureQuote',
     'acceptQuote',
     'cancelBeforeProduction',
@@ -25,7 +26,14 @@ const ROLE_COMMANDS = {
     'resolveHumanAttention',
     'recordRefund',
   ]),
-  system: new Set(['generatePreview', 'recordPaymentReceived', 'recordPaymentFailed', 'recordRefund']),
+  system: new Set([
+    'generatePreview',
+    'recordDesignPreviewGenerated',
+    'recordDesignPreviewFailed',
+    'recordPaymentReceived',
+    'recordPaymentFailed',
+    'recordRefund',
+  ]),
 };
 
 function cloneModel(model = emptyProjectModel()) {
@@ -165,6 +173,71 @@ export function applyProjectCommand(rawModel = emptyProjectModel(), rawCommand, 
         next.events.push(businessEvent(command, 'preview_generated', { sourceFileId: command.sourceFileId }));
       });
     }
+
+    case 'requestDesignPreview': {
+      const hasSource = model.files.some(file => file.id === command.sourceFileId && file.kind === 'customer_upload');
+      if (!hasSource) return reject('Upload an image before creating a preview.', 'source_file_missing');
+      const successfulPreview = model.previews.some(preview => preview.kind === 'generated_design_preview');
+      if (successfulPreview) return reject('This project already has a generated preview.', 'anonymous_preview_limit');
+      return applyAccepted(model, command, next => {
+        next.events.push(businessEvent(command, 'design_preview_requested', {
+          sourceFileId: command.sourceFileId,
+          designDirection: command.designDirection,
+          designDirectionHash: command.designDirectionHash,
+          generatorVersion: command.generatorVersion,
+        }));
+      });
+    }
+
+    case 'recordDesignPreviewGenerated': {
+      const hasSource = model.files.some(file => file.id === command.sourceFileId && file.kind === 'customer_upload');
+      if (!hasSource) return withHumanAttention(model, command, 'generated preview source image was missing', statusBefore);
+      return applyAccepted(model, command, next => {
+        next.files.push({
+          id: command.outputFileId,
+          projectId: command.projectId,
+          kind: 'generated_preview',
+          filename: command.filename,
+          mimeType: command.mimeType,
+          dataBase64: command.dataBase64,
+          byteSize: Math.ceil(command.dataBase64.length * 3 / 4),
+          createdAt: command.createdAt,
+        });
+        next.previews.push({
+          id: `${command.id}:preview`,
+          kind: 'generated_design_preview',
+          projectId: command.projectId,
+          sourceFileId: command.sourceFileId,
+          outputFileId: command.outputFileId,
+          designDirection: command.designDirection,
+          designDirectionHash: command.designDirectionHash,
+          generatorVersion: command.generatorVersion,
+          provider: command.provider,
+          promptText: command.promptText,
+          usage: command.usage,
+          createdAt: command.createdAt,
+        });
+        next.events.push(businessEvent(command, 'design_preview_generated', {
+          sourceFileId: command.sourceFileId,
+          outputFileId: command.outputFileId,
+          designDirectionHash: command.designDirectionHash,
+          generatorVersion: command.generatorVersion,
+          provider: command.provider,
+        }));
+      });
+    }
+
+    case 'recordDesignPreviewFailed':
+      return applyAccepted(model, command, next => {
+        next.events.push(businessEvent(command, 'design_preview_failed', {
+          sourceFileId: command.sourceFileId,
+          designDirection: command.designDirection,
+          designDirectionHash: command.designDirectionHash,
+          generatorVersion: command.generatorVersion,
+          errorCategory: command.errorCategory,
+          message: command.message,
+        }));
+      });
 
     case 'configureQuote': {
       if (!model.previews.length) return reject('Generate a preview before configuring a quote.', 'preview_missing');

@@ -31,11 +31,27 @@ export const QuoteInputSchema = z.object({
     'coloured_core_card',
     'kraft_card',
   ]),
-  finish: z.enum(['natural', 'painted', 'framed']),
+  finish: z.enum(['natural', 'framed']),
   size: z.enum(['A5', 'A4']),
   quantity: z.number().int().min(1).max(100),
   deadline: z.enum(['standard', 'rush_3_5_days', 'next_day']),
   orderNotes: z.string().max(2000).optional().default(''),
+});
+
+export const DesignDirectionSchema = z.object({
+  productType: z.enum(['embossed_metal_picture', 'layered_card_artwork']),
+  material: z.enum([
+    'aluminium',
+    'copper_effect',
+    'brass_effect',
+    'brushed_steel_effect',
+    'white_card',
+    'black_core_card',
+    'coloured_core_card',
+    'kraft_card',
+  ]),
+  finish: z.enum(['natural', 'framed']),
+  styleNotes: z.string().max(500).optional().default(''),
 });
 
 const ActorSchema = z.object({
@@ -70,6 +86,36 @@ export const CommandSchema = z.discriminatedUnion('type', [
   BaseCommandSchema.extend({
     type: z.literal('generatePreview'),
     sourceFileId: z.string().min(1),
+  }),
+  BaseCommandSchema.extend({
+    type: z.literal('requestDesignPreview'),
+    sourceFileId: z.string().min(1),
+    designDirection: DesignDirectionSchema,
+    designDirectionHash: z.string().min(1),
+    generatorVersion: z.string().min(1),
+  }),
+  BaseCommandSchema.extend({
+    type: z.literal('recordDesignPreviewGenerated'),
+    sourceFileId: z.string().min(1),
+    outputFileId: z.string().min(1),
+    filename: z.string().min(1).max(240),
+    mimeType: z.string().min(1).max(120),
+    dataBase64: z.string().min(1),
+    designDirection: DesignDirectionSchema,
+    designDirectionHash: z.string().min(1),
+    generatorVersion: z.string().min(1),
+    provider: z.string().min(1),
+    promptText: z.string().min(1),
+    usage: z.record(z.string(), z.unknown()).optional().default({}),
+  }),
+  BaseCommandSchema.extend({
+    type: z.literal('recordDesignPreviewFailed'),
+    sourceFileId: z.string().min(1),
+    designDirection: DesignDirectionSchema,
+    designDirectionHash: z.string().min(1),
+    generatorVersion: z.string().min(1),
+    errorCategory: z.enum(['provider_not_configured', 'provider_error', 'timeout', 'unsafe_request', 'unknown']),
+    message: z.string().min(1).max(500),
   }),
   BaseCommandSchema.extend({
     type: z.literal('configureQuote'),
@@ -148,4 +194,3 @@ export const CommandSchema = z.discriminatedUnion('type', [
 export function parseProjectCommand(input) {
   return CommandSchema.parse(input);
 }
-

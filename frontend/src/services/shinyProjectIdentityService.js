@@ -13,3 +13,7 @@ export function getShinyProjectOwnerId(storage = globalThis.localStorage) {
     return createUuidV7();
   }
 }
+
+export function createShinyProjectId() {
+  return createUuidV7();
+}

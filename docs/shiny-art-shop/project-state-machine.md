@@ -96,7 +96,9 @@ flowchart TD
   Declined[declined]
   HumanAttention[requires_human_attention]
 
-  Draft -->|uploadProjectFile + generatePreview| Previewed
+  Draft -->|uploadProjectFile| Draft
+  Draft -->|requestDesignPreview + recordDesignPreviewGenerated| Previewed
+  Draft -->|recordDesignPreviewFailed| Draft
   Previewed -->|configureQuote| QuoteConfig
   QuoteConfig -->|auto quote offered| AwaitingPayment
   QuoteConfig -->|notes/custom scope| HumanReview
@@ -132,7 +134,7 @@ Customer commands:
 
 - `createProject`
 - `uploadProjectFile`
-- `generatePreview`
+- `requestDesignPreview`
 - `configureQuote`
 - `acceptQuote`
 - `cancelBeforeProduction`
@@ -154,6 +156,17 @@ Payment provider commands/webhooks:
 - `recordPaymentReceived`
 - `recordPaymentFailed`
 - `recordRefund`
+
+Image generation system commands:
+
+- `recordDesignPreviewGenerated`
+- `recordDesignPreviewFailed`
+
+Legacy/internal command:
+
+- `generatePreview` is kept for compatibility with the pure model but the Shiny
+  Art Shop customer flow uses `requestDesignPreview` plus system result
+  commands.
 
 Commands do not directly set status. Each command:
 

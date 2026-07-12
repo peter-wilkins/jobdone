@@ -17,7 +17,6 @@ export const shinyArtShopV1 = Object.freeze({
   },
   finishModifiers: {
     natural: { A5: 0, A4: 0 },
-    painted: { A5: 10, A4: 15 },
     framed: { A5: 15, A4: 25 },
   },
   deadlineMultipliers: {
@@ -34,4 +33,3 @@ export const shinyArtShopV1 = Object.freeze({
     depositPercent: 20,
   },
 });
-

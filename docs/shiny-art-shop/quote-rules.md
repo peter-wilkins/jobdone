@@ -115,6 +115,30 @@ quote. They guide preview generation.
 Order notes in the Quote And Order form do disable automatic quote because they
 may affect delivery, scope, or cost.
 
+## Design Options And Stock
+
+The customer Design Direction form is driven by backend-owned options:
+
+- product type,
+- material,
+- finish.
+
+Options include an availability flag and stock level. MVP hardcodes everything
+as available with effectively unlimited stock. Later, a workshop/admin screen can
+change stock and hide unavailable options before checkout.
+
+When payment is introduced, stock reservation/decrement must happen in the same
+transaction as payment/order acceptance so a customer is not sold an unavailable
+material.
+
+Current finishes:
+
+- natural,
+- framed.
+
+Do not expose a vague `painted` finish until the workshop has a real material and
+process behind it.
+
 ## Quote Snapshots
 
 Quote snapshots are immutable.

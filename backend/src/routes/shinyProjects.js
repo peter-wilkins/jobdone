@@ -1,10 +1,18 @@
 import { z } from 'zod';
 import { createUuidV7 } from '../../../shared/contracts/clientId.js';
 import {
+  DesignDirectionSchema,
   applyProjectCommand,
   emptyProjectModel,
+  isSellableDesignDirection,
+  sellableShinyDesignOptions,
+  shinyDesignOptions,
 } from '../../../shared/shiny-project/index.js';
 import { createLocalReplicaStore } from '../services/localReplicaStore.js';
+import {
+  generateShinyDesignPreview,
+  shinyGeneratorVersion,
+} from '../services/shinyImageGenerator.js';
 
 const defaultStore = createLocalReplicaStore({
   connectionString: process.env.LOCAL_REPLICA_DB_URL,
@@ -12,10 +20,17 @@ const defaultStore = createLocalReplicaStore({
 });
 
 const UploadSchema = z.object({
+  projectId: z.string().uuid(),
   ownerUserId: z.string().uuid(),
   filename: z.string().min(1).max(240),
   mimeType: z.string().min(1).max(120).refine(value => value.startsWith('image/'), 'mimeType must be an image'),
   dataBase64: z.string().min(1).max(20_000_000),
+}).strict();
+
+const PreviewRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  sourceImageId: z.string().uuid(),
+  designDirection: DesignDirectionSchema,
 }).strict();
 
 function stableHash(value) {
@@ -39,61 +54,47 @@ function command({ type, projectId, actor, now, extra = {}, index }) {
   };
 }
 
-function buildInitialProjectModel({ ownerUserId, filename, mimeType, dataBase64, now }) {
-  const projectId = createUuidV7(Date.parse(now));
+function applyOrThrow(model, commandInput) {
+  const result = applyProjectCommand(model, commandInput);
+  if (!result.accepted) {
+    const error = new Error(result.message || result.code || 'Project command rejected');
+    error.statusCode = result.code === 'anonymous_preview_limit' ? 409 : 422;
+    error.code = result.code;
+    throw error;
+  }
+  return result.model;
+}
+
+function buildInitialProjectModel({ projectId, ownerUserId, filename, mimeType, dataBase64, now }) {
   const fileId = createUuidV7(Date.parse(now) + 10);
-  const actor = {
-    role: 'customer',
-    userId: ownerUserId,
-    anonymous: true,
-  };
+  const actor = { role: 'customer', userId: ownerUserId, anonymous: true };
 
   let model = emptyProjectModel();
-  const commands = [
-    command({
-      type: 'createProject',
-      projectId,
-      actor,
-      now,
-      index: 1,
-      extra: {
-        title: filename,
-        ownerUserId,
-        productSurface: 'shiny_art_shop',
-      },
-    }),
-    command({
-      type: 'uploadProjectFile',
-      projectId,
-      actor,
-      now,
-      index: 2,
-      extra: {
-        fileId,
-        kind: 'customer_upload',
-        filename,
-        mimeType,
-      },
-    }),
-    command({
-      type: 'generatePreview',
-      projectId,
-      actor,
-      now,
-      index: 3,
-      extra: { sourceFileId: fileId },
-    }),
-  ];
-
-  for (const item of commands) {
-    const result = applyProjectCommand(model, item);
-    if (!result.accepted) {
-      const error = new Error(result.message || result.code || 'Project command rejected');
-      error.statusCode = 422;
-      throw error;
-    }
-    model = result.model;
-  }
+  model = applyOrThrow(model, command({
+    type: 'createProject',
+    projectId,
+    actor,
+    now,
+    index: 1,
+    extra: {
+      title: filename,
+      ownerUserId,
+      productSurface: 'shiny_art_shop',
+    },
+  }));
+  model = applyOrThrow(model, command({
+    type: 'uploadProjectFile',
+    projectId,
+    actor,
+    now,
+    index: 2,
+    extra: {
+      fileId,
+      kind: 'customer_upload',
+      filename,
+      mimeType,
+    },
+  }));
 
   return {
     projectId,
@@ -107,8 +108,82 @@ function buildInitialProjectModel({ ownerUserId, filename, mimeType, dataBase64,
   };
 }
 
+function projectPayload(model, status = 'source_image_uploaded', extra = {}) {
+  return {
+    kind: 'shinyProject',
+    schemaVersion: 1,
+    status,
+    model,
+    ...extra,
+  };
+}
+
+async function pushObject({ store, ownerUserId, actorDeviceId, action, projectId, payloadJson, baseObjectT = null, now }) {
+  const response = await store.push({
+    actorUserId: ownerUserId,
+    actorEmail: null,
+    actorDeviceId,
+    request: {
+      replicaEpoch: createUuidV7(Date.parse(now) + 30),
+      baseT: 0,
+      intents: [{
+        id: createUuidV7(Date.parse(now) + 20),
+        ownerKind: 'user',
+        ownerId: ownerUserId,
+        collection: 'shinyProjects',
+        action,
+        objectId: projectId,
+        baseObjectT,
+        payloadJson,
+        payloadHash: stableHash(payloadJson),
+        createdAt: now,
+      }],
+    },
+  });
+  const result = response.results?.[0];
+  if (!['accepted', 'idempotent'].includes(result?.status)) {
+    const error = new Error(result?.reason || 'Project update conflicted');
+    error.statusCode = 409;
+    throw error;
+  }
+  return response.objects?.[0] || null;
+}
+
+async function loadProjectObject({ store, ownerUserId, projectId }) {
+  const response = await store.pull({
+    actorUserId: ownerUserId,
+    request: {
+      replicaEpoch: createUuidV7(),
+      sinceT: 0,
+      limit: 1000,
+    },
+  });
+  return (response.objects || []).find(object =>
+    object.ownerKind === 'user' &&
+    object.ownerId === ownerUserId &&
+    object.collection === 'shinyProjects' &&
+    object.id === projectId
+  ) || null;
+}
+
+function findGeneratedPreview(model, { sourceImageId, designDirectionHash, generatorVersion }) {
+  const preview = (model.previews || []).find(item =>
+    item.kind === 'generated_design_preview' &&
+    item.sourceFileId === sourceImageId &&
+    item.designDirectionHash === designDirectionHash &&
+    item.generatorVersion === generatorVersion
+  );
+  if (!preview) return null;
+  const file = (model.files || []).find(item => item.id === preview.outputFileId && item.kind === 'generated_preview');
+  return file ? { preview, file } : null;
+}
+
 export async function registerShinyProjectRoutes(fastify, deps = {}) {
   const store = deps.localReplicaStore ?? defaultStore;
+  const imageGenerator = deps.imageGenerator ?? generateShinyDesignPreview;
+  const options = deps.designOptions ?? shinyDesignOptions;
+
+  fastify.get('/api/shiny/design-options', async () => sellableShinyDesignOptions(options));
 
   fastify.post('/api/shiny/projects', async (request, reply) => {
     if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
@@ -123,59 +198,184 @@ export async function registerShinyProjectRoutes(fastify, deps = {}) {
 
     try {
       const now = new Date().toISOString();
-      const { ownerUserId, filename, mimeType, dataBase64 } = parsed.data;
-      const { projectId, fileId, model } = buildInitialProjectModel({
+      const { projectId, ownerUserId, filename, mimeType, dataBase64 } = parsed.data;
+      const { fileId, model } = buildInitialProjectModel({
+        projectId,
         ownerUserId,
         filename,
         mimeType,
         dataBase64,
         now,
       });
-      const intentId = createUuidV7(Date.parse(now) + 20);
-      const replicaEpoch = createUuidV7(Date.parse(now) + 30);
-      const payloadJson = {
-        kind: 'shinyProject',
-        schemaVersion: 1,
-        status: 'previewed',
-        previewFileId: fileId,
-        model,
-      };
-      const response = await store.push({
-        actorUserId: ownerUserId,
-        actorEmail: null,
+      const payloadJson = projectPayload(model, 'source_image_uploaded', { sourceImageId: fileId });
+      await pushObject({
+        store,
+        ownerUserId,
         actorDeviceId: request.headers['x-jobdone-device-id'] || null,
-        request: {
-          replicaEpoch,
-          baseT: 0,
-          intents: [{
-            id: intentId,
-            ownerKind: 'user',
-            ownerId: ownerUserId,
-            collection: 'shinyProjects',
-            action: 'createObject',
-            objectId: projectId,
-            baseObjectT: null,
-            payloadJson,
-            payloadHash: stableHash(payloadJson),
-            createdAt: now,
-          }],
-        },
+        action: 'createObject',
+        projectId,
+        payloadJson,
+        now,
       });
-      const result = response.results?.[0];
-      if (!['accepted', 'idempotent'].includes(result?.status)) {
-        return reply.status(409).send({ error: result?.reason || 'Project upload conflicted' });
-      }
 
       return {
         projectId,
-        fileId,
-        status: 'previewed',
-        previewImage: { mimeType, dataBase64 },
+        sourceImageId: fileId,
+        status: 'source_image_uploaded',
       };
     } catch (error) {
-      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message });
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
       request.log.error({ err: error }, 'shiny_project_create_failed');
       return reply.status(500).send({ error: 'Project upload failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/design-preview', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = PreviewRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid design preview request',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, sourceImageId, designDirection } = parsed.data;
+    if (!isSellableDesignDirection(designDirection, options)) {
+      return reply.status(400).send({ error: 'That option is not currently available.' });
+    }
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const generatorVersion = shinyGeneratorVersion();
+      const designDirectionHash = stableHash({ sourceImageId, designDirection, generatorVersion });
+      let model = object.payloadJson?.model || emptyProjectModel();
+      const cached = findGeneratedPreview(model, { sourceImageId, designDirectionHash, generatorVersion });
+      if (cached) {
+        return {
+          projectId,
+          sourceImageId,
+          status: 'design_preview_generated',
+          cached: true,
+          previewImage: {
+            fileId: cached.file.id,
+            mimeType: cached.file.mimeType,
+            dataBase64: cached.file.dataBase64,
+          },
+        };
+      }
+
+      const sourceImage = (model.files || []).find(file => file.id === sourceImageId && file.kind === 'customer_upload');
+      if (!sourceImage?.dataBase64) return reply.status(404).send({ error: 'Source image not found' });
+
+      const now = new Date().toISOString();
+      const actor = { role: 'customer', userId: ownerUserId, anonymous: true };
+      model = applyOrThrow(model, command({
+        type: 'requestDesignPreview',
+        projectId,
+        actor,
+        now,
+        index: 1,
+        extra: {
+          sourceFileId: sourceImageId,
+          designDirection,
+          designDirectionHash,
+          generatorVersion,
+        },
+      }));
+
+      const generated = await imageGenerator({ sourceImage, designDirection });
+      if (!generated.ok) {
+        model = applyOrThrow(model, command({
+          type: 'recordDesignPreviewFailed',
+          projectId,
+          actor: { role: 'system', userId: 'system' },
+          now,
+          index: 2,
+          extra: {
+            sourceFileId: sourceImageId,
+            designDirection,
+            designDirectionHash,
+            generatorVersion,
+            errorCategory: generated.errorCategory || 'unknown',
+            message: generated.message || 'Oops, we had a problem. Try again in a few minutes.',
+          },
+        }));
+        await pushObject({
+          store,
+          ownerUserId,
+          actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+          action: 'updateObject',
+          projectId,
+          baseObjectT: object.changedT,
+          payloadJson: projectPayload(model, 'design_preview_failed', {
+            sourceImageId,
+            designDirectionHash,
+          }),
+          now,
+        });
+        return reply.status(generated.errorCategory === 'provider_not_configured' ? 503 : 502).send({
+          error: 'Oops, we had a problem. Try again in a few minutes.',
+          status: 'design_preview_failed',
+          code: generated.errorCategory || 'unknown',
+        });
+      }
+
+      const outputFileId = createUuidV7(Date.parse(now) + 50);
+      model = applyOrThrow(model, command({
+        type: 'recordDesignPreviewGenerated',
+        projectId,
+        actor: { role: 'system', userId: 'system' },
+        now,
+        index: 3,
+        extra: {
+          sourceFileId: sourceImageId,
+          outputFileId,
+          filename: `design-preview-${projectId}.jpg`,
+          mimeType: generated.mimeType || 'image/jpeg',
+          dataBase64: generated.dataBase64,
+          designDirection,
+          designDirectionHash,
+          generatorVersion,
+          provider: generated.provider || 'openai',
+          promptText: generated.promptText,
+          usage: generated.usage || {},
+        },
+      }));
+      await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, 'design_preview_generated', {
+          sourceImageId,
+          designDirectionHash,
+          previewFileId: outputFileId,
+        }),
+        now,
+      });
+
+      return {
+        projectId,
+        sourceImageId,
+        status: 'design_preview_generated',
+        cached: false,
+        previewImage: {
+          fileId: outputFileId,
+          mimeType: generated.mimeType || 'image/jpeg',
+          dataBase64: generated.dataBase64,
+        },
+      };
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_design_preview_failed');
+      return reply.status(500).send({ error: 'Design preview failed' });
     }
   });
 }

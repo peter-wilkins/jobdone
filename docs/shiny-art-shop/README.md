@@ -9,6 +9,8 @@ The first offer is deliberately small:
 - A4 or smaller.
 - Embossed metal pictures.
 - Layered card artwork.
+- "3D card picture" is acceptable customer-facing language for layered card
+  artwork; it means relief/layers, not a freestanding sculpture.
 - Custom from the customer's uploaded image.
 - No public mention of AI. The customer buys a finished physical piece.
 
@@ -74,12 +76,33 @@ Inputs:
 
 Behaviour:
 
-- Anonymous users get one free preview per browser/device, backed by server-side
-  abuse limits.
-- In the first slice, preview generation is a no-op: show the uploaded image
-  back as the preview.
-- Later, AI can generate a visual mock-up.
+- Anonymous users get one successful generated preview per Project.
+- Upload creates the Project immediately using a frontend-created UUIDv7.
+- The customer sees their uploaded image immediately while upload finishes in
+  the background.
+- Design Direction is saved only when the customer requests a preview.
+- The backend builds the image-generation prompt from controlled enum values.
+  The frontend never sends or displays prompt text, and customer style notes are
+  bounded non-authoritative data.
+- The backend sends the customer source image plus tiny material reference
+  swatches to the image generator. MVP swatches are approximate repo assets;
+  replace them later with real photographed materials.
+- Generated previews are cached by Project, source image, Design Direction hash,
+  and generator version. Reloads and retries for the same inputs should return
+  the stored image rather than regenerating.
+- If generation fails, keep the Project and source image, show "Oops, we had a
+  problem. Try again in a few minutes.", and let the customer retry with the
+  same editable Design Direction form.
 - Preview is a guide, not a guarantee that the handmade piece will match exactly.
+
+Customer-facing copy must not mention AI, models, prompts, or provider names.
+
+MVP storage:
+
+- Uploaded and generated preview image bytes live inside the Project payload in
+  `syncObjects` as base64.
+- TODO before scale: move image bytes to object storage and keep encrypted
+  references in the Project payload.
 
 ### 2. Quote And Order
 

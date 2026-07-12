@@ -268,7 +268,13 @@ export class APIService {
     return response.json();
   }
 
-  async createShinyProject({ ownerUserId, filename, mimeType, dataBase64 }) {
+  async getShinyDesignOptions() {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/design-options`);
+    if (!response.ok) await throwApiError(response, 'Design options unavailable');
+    return response.json();
+  }
+
+  async createShinyProject({ projectId, ownerUserId, filename, mimeType, dataBase64 }) {
     const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects`, {
       method: 'POST',
       headers: {
@@ -276,9 +282,23 @@ export class APIService {
         'x-jobdone-device-id': getFeedbackDeviceId(),
         ...authHeader(),
       },
-      body: JSON.stringify({ ownerUserId, filename, mimeType, dataBase64 }),
+      body: JSON.stringify({ projectId, ownerUserId, filename, mimeType, dataBase64 }),
     });
     if (!response.ok) await throwApiError(response, 'Project upload failed');
+    return response.json();
+  }
+
+  async requestShinyDesignPreview({ projectId, ownerUserId, sourceImageId, designDirection }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/design-preview`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, sourceImageId, designDirection }),
+    });
+    if (!response.ok) await throwApiError(response, 'Oops, we had a problem. Try again in a few minutes.');
     return response.json();
   }
 
