@@ -268,6 +268,20 @@ export class APIService {
     return response.json();
   }
 
+  async createShinyProject({ ownerUserId, filename, mimeType, dataBase64 }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, filename, mimeType, dataBase64 }),
+    });
+    if (!response.ok) await throwApiError(response, 'Project upload failed');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

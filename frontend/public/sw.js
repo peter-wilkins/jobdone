@@ -27,6 +27,7 @@ const APP_SHELL = [
   '/manifest-staging.webmanifest',
   '/manifest-production.webmanifest',
   '/manifest-shiny-art-shop.webmanifest',
+  '/shiny-art-shop/process-mockup.png',
   '/favicon.svg',
   '/pwa-icon-192.png',
   '/pwa-icon-512.png'
