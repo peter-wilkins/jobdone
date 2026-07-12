@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { generateShinyDesignPreview } from './shinyImageGenerator.js';
+import { buildShinyImagePrompt, generateShinyDesignPreview } from './shinyImageGenerator.js';
 
 const tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 
@@ -37,4 +37,18 @@ test('Shiny image generator loads swatches independent of process cwd', async ()
   assert.equal(result.dataBase64, tinyPngBase64);
   assert.equal(seen.images.length, 2);
   assert.equal(seen.imagePlain.length, 0);
+});
+
+test('Shiny image prompt forbids changing subject proportions', () => {
+  const prompt = buildShinyImagePrompt({
+    productType: 'embossed_metal_picture',
+    material: 'copper_effect',
+    finish: 'natural',
+    styleNotes: 'make it shiny',
+  });
+
+  assert.match(prompt, /exact visible proportions/);
+  assert.match(prompt, /fatter, thinner/);
+  assert.match(prompt, /stretched, or squashed/);
+  assert.match(prompt, /Do not crop, zoom, rotate, add, remove, or reshape/);
 });

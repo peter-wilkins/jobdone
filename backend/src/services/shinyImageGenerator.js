@@ -62,7 +62,9 @@ export function buildShinyImagePrompt(direction = {}) {
 
   return [
     'Create a realistic product mockup of a mostly flat wall-art piece based on the customer source image.',
-    'Preserve the input image subject, framing, composition, and broad proportions.',
+    'Preserve the input image subject, framing, composition, outline, pose, and exact visible proportions.',
+    'Do not make people, pets, animals, faces, bodies, objects, or scenery fatter, thinner, taller, shorter, wider, narrower, stretched, or squashed.',
+    'Do not crop, zoom, rotate, add, remove, or reshape the main subject.',
     `Only reinterpret the surface as ${product} made from ${material} with ${finish}.`,
     'Use the material swatch image only as a surface/material reference.',
     'Do not create a trophy, statue, figurine, freestanding object, new scene, logo, text label, or unrelated object.',
