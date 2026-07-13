@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
 const OPENAI_PROVIDER = 'openai';
 const CLOUDFLARE_FLUX_PROVIDER = 'cloudflare-flux-2-dev';
 const CLOUDFLARE_SD15_IMG2IMG_PROVIDER = 'cloudflare-sd15-img2img';
+const LOCAL_EMBOSS_FILTER_PROVIDER = 'local-emboss-filter';
 const DEFAULT_PROVIDER = OPENAI_PROVIDER;
 const DEFAULT_OPENAI_MODEL = 'gpt-image-2';
 const DEFAULT_CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-2-dev';
@@ -75,6 +77,7 @@ export function shinyGeneratorVersion(env = process.env) {
   const provider = shinyImageProvider(env);
   if (provider === CLOUDFLARE_FLUX_PROVIDER) return `cloudflare-workers-ai:${cloudflareModel(env)}:v1`;
   if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) return `cloudflare-workers-ai:${cloudflareSd15Img2ImgModel(env)}:v1`;
+  if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) return 'local-emboss-filter:v1';
   return `openai-image-edit:${openAiModel(env)}:v1`;
 }
 
@@ -142,6 +145,9 @@ export async function generateShinyDesignPreview({
   }
   if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) {
     return generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
+  }
+  if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) {
+    return generateLocalEmbossPreview({ sourceImage, designDirection, env });
   }
   return {
     ok: false,
@@ -358,5 +364,75 @@ async function generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirecti
     };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+function materialTint(material) {
+  switch (material) {
+    case 'copper_effect':
+      return { r: 184, g: 105, b: 55 };
+    case 'brass_effect':
+      return { r: 190, g: 150, b: 70 };
+    case 'brushed_steel_effect':
+      return { r: 170, g: 178, b: 178 };
+    case 'black_core_card':
+      return { r: 45, g: 45, b: 45 };
+    case 'kraft_card':
+      return { r: 170, g: 130, b: 85 };
+    case 'white_card':
+      return { r: 232, g: 230, b: 220 };
+    case 'coloured_core_card':
+      return { r: 80, g: 130, b: 175 };
+    case 'aluminium':
+    default:
+      return { r: 190, g: 190, b: 185 };
+  }
+}
+
+async function generateLocalEmbossPreview({ sourceImage, designDirection, env }) {
+  const generatorVersion = shinyGeneratorVersion(env);
+  const promptText = buildShinyImagePrompt(designDirection);
+
+  try {
+    const { width, height } = parseSize(env.SHINY_IMAGE_SIZE || DEFAULT_SIZE);
+    const image = sharp(Buffer.from(sourceImage.dataBase64, 'base64'))
+      .rotate()
+      .resize({
+        width: Number(width),
+        height: Number(height),
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+
+    const dataBuffer = await image
+      .greyscale()
+      .convolve({
+        width: 3,
+        height: 3,
+        kernel: [-2, -1, 0, -1, 1, 1, 0, 1, 2],
+      })
+      .normalize()
+      .linear(1.08, -4)
+      .tint(materialTint(designDirection.material))
+      .png({ compressionLevel: 8, adaptiveFiltering: true })
+      .toBuffer();
+
+    return {
+      ok: true,
+      provider: 'local-emboss-filter',
+      generatorVersion,
+      promptText,
+      mimeType: 'image/png',
+      dataBase64: dataBuffer.toString('base64'),
+      usage: {},
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCategory: providerErrorCategory(error),
+      message: 'Oops, we had a problem. Try again in a few minutes.',
+      promptText,
+      generatorVersion,
+    };
   }
 }

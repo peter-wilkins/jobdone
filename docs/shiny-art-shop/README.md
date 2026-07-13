@@ -91,8 +91,11 @@ Behaviour:
   replace them later with real photographed materials.
 - The MVP default generator is GPT Image 2 through the OpenAI image edit API.
   `SHINY_IMAGE_PROVIDER` can switch the backend to another configured provider.
-  Supported values: `openai`, `cloudflare-flux-2-dev`, and
-  `cloudflare-sd15-img2img`.
+  Supported values: `openai`, `local-emboss-filter`, `cloudflare-flux-2-dev`,
+  and `cloudflare-sd15-img2img`.
+- `local-emboss-filter` is deterministic image processing, not generative AI.
+  It preserves source geometry exactly and is the preferred fast MVP preview
+  path while generative providers are being evaluated.
 - The prompt treats the source image geometry, silhouette, subject identity, and
   proportions as hard constraints. If prompt-only editing still loses pet
   identity, continue the Flux/structure-lock provider spike.

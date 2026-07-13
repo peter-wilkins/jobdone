@@ -152,6 +152,35 @@ test('Shiny image generator can call fast Cloudflare SD img2img when selected by
   assert.equal(shinyGeneratorVersion(env), 'cloudflare-workers-ai:@cf/runwayml/stable-diffusion-v1-5-img2img:v1');
 });
 
+test('Shiny image generator can create a local embossed preview without external API', async () => {
+  const env = {
+    SHINY_IMAGE_PROVIDER: 'local-emboss-filter',
+    SHINY_IMAGE_SIZE: '512x512',
+  };
+  const result = await generateShinyDesignPreview({
+    sourceImage: {
+      filename: 'source.png',
+      mimeType: 'image/png',
+      dataBase64: tinyPngBase64,
+    },
+    designDirection: {
+      productType: 'embossed_metal_picture',
+      material: 'copper_effect',
+      finish: 'natural',
+      styleNotes: '',
+    },
+    env,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'local-emboss-filter');
+  assert.equal(result.generatorVersion, 'local-emboss-filter:v1');
+  assert.equal(result.mimeType, 'image/png');
+  assert.ok(result.dataBase64.length > 0);
+  assert.equal(shinyGeneratorVersion(env), 'local-emboss-filter:v1');
+});
+
 test('Shiny image prompt forbids changing subject proportions', () => {
   const prompt = buildShinyImagePrompt({
     productType: 'embossed_metal_picture',
