@@ -42,8 +42,9 @@ SUPABASE_DB_URL
 USE_MOCK_APIS
 ```
 
-`SHINY_IMAGE_PROVIDER` defaults to `openai`. Use `cloudflare-flux-2-dev` with
-`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` to test Workers AI FLUX.2.
+`SHINY_IMAGE_PROVIDER` defaults to `openai`. Use `cloudflare-flux-2-dev` or
+`cloudflare-sd15-img2img` with `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN` to test Workers AI image generation.
 
 `SUPABASE_URL`/`SUPABASE_KEY` are for Supabase Auth. App data uses direct
 Postgres via `SUPABASE_DB_URL`; it does not require Supabase REST/Data API

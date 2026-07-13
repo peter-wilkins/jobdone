@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 const OPENAI_PROVIDER = 'openai';
 const CLOUDFLARE_FLUX_PROVIDER = 'cloudflare-flux-2-dev';
+const CLOUDFLARE_SD15_IMG2IMG_PROVIDER = 'cloudflare-sd15-img2img';
 const DEFAULT_PROVIDER = OPENAI_PROVIDER;
 const DEFAULT_OPENAI_MODEL = 'gpt-image-2';
 const DEFAULT_CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-2-dev';
+const DEFAULT_CLOUDFLARE_SD15_IMG2IMG_MODEL = '@cf/runwayml/stable-diffusion-v1-5-img2img';
 const DEFAULT_OUTPUT_FORMAT = 'jpeg';
 const DEFAULT_SIZE = '1024x1024';
 const DEFAULT_QUALITY = 'high';
@@ -65,9 +67,14 @@ function cloudflareModel(env = process.env) {
   return env.SHINY_IMAGE_MODEL || env.CLOUDFLARE_WORKERS_AI_MODEL || DEFAULT_CLOUDFLARE_MODEL;
 }
 
+function cloudflareSd15Img2ImgModel(env = process.env) {
+  return env.SHINY_IMAGE_MODEL || env.CLOUDFLARE_WORKERS_AI_MODEL || DEFAULT_CLOUDFLARE_SD15_IMG2IMG_MODEL;
+}
+
 export function shinyGeneratorVersion(env = process.env) {
   const provider = shinyImageProvider(env);
   if (provider === CLOUDFLARE_FLUX_PROVIDER) return `cloudflare-workers-ai:${cloudflareModel(env)}:v1`;
+  if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) return `cloudflare-workers-ai:${cloudflareSd15Img2ImgModel(env)}:v1`;
   return `openai-image-edit:${openAiModel(env)}:v1`;
 }
 
@@ -132,6 +139,9 @@ export async function generateShinyDesignPreview({
   }
   if (provider === CLOUDFLARE_FLUX_PROVIDER) {
     return generateCloudflareFluxPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
+  }
+  if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) {
+    return generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
   }
   return {
     ok: false,
@@ -261,6 +271,82 @@ async function generateCloudflareFluxPreview({ sourceImage, designDirection, fet
       mimeType: 'image/png',
       dataBase64,
       usage: body.usage || {},
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCategory: providerErrorCategory(error),
+      message: 'Oops, we had a problem. Try again in a few minutes.',
+      promptText,
+      generatorVersion,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs }) {
+  const generatorVersion = shinyGeneratorVersion(env);
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID || env.CLOUDFLARE_WORKERS_AI_ACCOUNT_ID;
+  const token = env.CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_WORKERS_AI_TOKEN;
+  const promptText = buildShinyImagePrompt(designDirection);
+  if (!accountId || !token) {
+    return {
+      ok: false,
+      errorCategory: 'provider_not_configured',
+      message: 'Image generator is not configured.',
+      promptText,
+      generatorVersion,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const { width, height } = parseSize(env.SHINY_IMAGE_SIZE || DEFAULT_SIZE);
+  const model = cloudflareSd15Img2ImgModel(env);
+
+  try {
+    const response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: promptText,
+        negative_prompt: 'fat, bloated, stretched, squashed, different animal, different pet, changed face, changed body, new scene, text, logo',
+        image_b64: sourceImage.dataBase64,
+        width: Number(width),
+        height: Number(height),
+        num_steps: Number(env.SHINY_IMAGE_STEPS || 8),
+        strength: Number(env.SHINY_IMAGE_STRENGTH || 0.35),
+        guidance: Number(env.SHINY_IMAGE_GUIDANCE || 4),
+      }),
+      signal: controller.signal,
+    });
+    const contentType = response.headers?.get?.('content-type') || '';
+    if (!response.ok) {
+      const body = contentType.includes('application/json')
+        ? await response.json().catch(() => ({}))
+        : {};
+      const error = new Error(body?.errors?.[0]?.message || `Cloudflare image generation failed with ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    const dataBase64 = contentType.includes('application/json')
+      ? (await response.json().catch(() => ({})))?.result?.image
+      : Buffer.from(await response.arrayBuffer()).toString('base64');
+    if (!dataBase64) throw new Error('Cloudflare image generation returned no image');
+
+    return {
+      ok: true,
+      provider: 'cloudflare-workers-ai',
+      generatorVersion,
+      promptText,
+      mimeType: contentType.includes('image/jpeg') ? 'image/jpeg' : 'image/png',
+      dataBase64,
+      usage: {},
     };
   } catch (error) {
     return {

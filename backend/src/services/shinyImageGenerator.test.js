@@ -98,6 +98,60 @@ test('Shiny image generator can call Cloudflare FLUX when selected by env', asyn
   assert.equal(shinyGeneratorVersion(env), 'cloudflare-workers-ai:@cf/black-forest-labs/flux-2-dev:v1');
 });
 
+test('Shiny image generator can call fast Cloudflare SD img2img when selected by env', async () => {
+  const seen = {};
+  const fetchImpl = async (url, init) => {
+    seen.url = url;
+    seen.auth = init.headers.Authorization;
+    seen.contentType = init.headers['Content-Type'];
+    seen.body = JSON.parse(init.body);
+    return {
+      ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => Buffer.from(tinyPngBase64, 'base64'),
+    };
+  };
+
+  const env = {
+    SHINY_IMAGE_PROVIDER: 'cloudflare-sd15-img2img',
+    CLOUDFLARE_ACCOUNT_ID: 'acct-1',
+    CLOUDFLARE_API_TOKEN: 'cf-token',
+    SHINY_IMAGE_SIZE: '512x512',
+  };
+  const result = await generateShinyDesignPreview({
+    sourceImage: {
+      filename: 'dog.png',
+      mimeType: 'image/png',
+      dataBase64: tinyPngBase64,
+    },
+    designDirection: {
+      productType: 'embossed_metal_picture',
+      material: 'copper_effect',
+      finish: 'natural',
+      styleNotes: '',
+    },
+    fetchImpl,
+    env,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'cloudflare-workers-ai');
+  assert.equal(result.generatorVersion, 'cloudflare-workers-ai:@cf/runwayml/stable-diffusion-v1-5-img2img:v1');
+  assert.equal(seen.url, 'https://api.cloudflare.com/client/v4/accounts/acct-1/ai/run/@cf/runwayml/stable-diffusion-v1-5-img2img');
+  assert.equal(seen.auth, 'Bearer cf-token');
+  assert.equal(seen.contentType, 'application/json');
+  assert.match(seen.body.prompt, /hard constraints/);
+  assert.equal(seen.body.image_b64, tinyPngBase64);
+  assert.equal(seen.body.num_steps, 8);
+  assert.equal(seen.body.strength, 0.35);
+  assert.equal(seen.body.guidance, 4);
+  assert.equal(seen.body.width, 512);
+  assert.equal(seen.body.height, 512);
+  assert.equal(result.dataBase64, tinyPngBase64);
+  assert.equal(shinyGeneratorVersion(env), 'cloudflare-workers-ai:@cf/runwayml/stable-diffusion-v1-5-img2img:v1');
+});
+
 test('Shiny image prompt forbids changing subject proportions', () => {
   const prompt = buildShinyImagePrompt({
     productType: 'embossed_metal_picture',
