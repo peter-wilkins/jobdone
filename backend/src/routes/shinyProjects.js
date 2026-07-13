@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { createUuidV7 } from '../../../shared/contracts/clientId.js';
 import {
   DesignDirectionSchema,
+  QuoteInputSchema,
   applyProjectCommand,
+  currentQuote,
   emptyProjectModel,
   isSellableDesignDirection,
   sellableShinyDesignOptions,
@@ -31,6 +33,11 @@ const PreviewRequestSchema = z.object({
   ownerUserId: z.string().uuid(),
   sourceImageId: z.string().uuid(),
   designDirection: DesignDirectionSchema,
+}).strict();
+
+const QuoteRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  quoteInput: QuoteInputSchema,
 }).strict();
 
 const ProjectLoadQuerySchema = z.object({
@@ -217,6 +224,7 @@ function projectResponseFromObject(object) {
   const model = payload.model || emptyProjectModel();
   const sourceImage = latestSourceImage(model, payload.sourceImageId);
   const generated = latestGeneratedPreview(model);
+  const quote = currentQuote(model);
   return {
     projectId: object.id,
     ownerUserId: object.ownerId,
@@ -234,6 +242,7 @@ function projectResponseFromObject(object) {
       mimeType: generated.file.mimeType,
       dataBase64: generated.file.dataBase64,
     } : null,
+    quote,
   };
 }
 
@@ -455,6 +464,60 @@ export async function registerShinyProjectRoutes(fastify, deps = {}) {
       if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
       request.log.error({ err: error }, 'shiny_design_preview_failed');
       return reply.status(500).send({ error: 'Design preview failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/quote', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = QuoteRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid quote request',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, quoteInput } = parsed.data;
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const now = new Date().toISOString();
+      const actor = { role: 'customer', userId: ownerUserId, anonymous: true };
+      const model = applyOrThrow(object.payloadJson?.model || emptyProjectModel(), command({
+        type: 'configureQuote',
+        projectId,
+        actor,
+        now,
+        index: 1,
+        extra: { quoteInput },
+      }));
+      const quote = currentQuote(model);
+      await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, quote?.canAutoQuote ? 'quote_offered' : 'quote_needs_review', {
+          quoteSnapshotId: quote?.id || null,
+        }),
+        now,
+      });
+
+      return {
+        projectId,
+        status: quote?.canAutoQuote ? 'quote_offered' : 'quote_needs_review',
+        quote,
+      };
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_quote_failed');
+      return reply.status(500).send({ error: 'Quote failed' });
     }
   });
 }

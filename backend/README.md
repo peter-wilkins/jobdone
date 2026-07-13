@@ -42,10 +42,12 @@ SUPABASE_DB_URL
 USE_MOCK_APIS
 ```
 
-`SHINY_IMAGE_PROVIDER` defaults to `openai`. Use `local-emboss-filter` for a
-fast deterministic embossed preview. Use `cloudflare-flux-2-dev` or
-`cloudflare-sd15-img2img` with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`
-to test Workers AI image generation.
+`SHINY_IMAGE_PROVIDER` defaults to `openai`. Use `no-op-preview` to return the
+uploaded image as the design preview while the physical preview style is still
+being worked out. Use `local-emboss-filter` for a fast deterministic embossed
+preview. Use `cloudflare-flux-2-dev` or `cloudflare-sd15-img2img` with
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` to test Workers AI image
+generation.
 
 `SUPABASE_URL`/`SUPABASE_KEY` are for Supabase Auth. App data uses direct
 Postgres via `SUPABASE_DB_URL`; it does not require Supabase REST/Data API

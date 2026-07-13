@@ -181,6 +181,34 @@ test('Shiny image generator can create a local embossed preview without external
   assert.equal(shinyGeneratorVersion(env), 'local-emboss-filter:v1');
 });
 
+test('Shiny image generator can no-op by returning the uploaded source image', async () => {
+  const env = {
+    SHINY_IMAGE_PROVIDER: 'no-op-preview',
+  };
+  const result = await generateShinyDesignPreview({
+    sourceImage: {
+      filename: 'source.png',
+      mimeType: 'image/png',
+      dataBase64: tinyPngBase64,
+    },
+    designDirection: {
+      productType: 'embossed_metal_picture',
+      material: 'copper_effect',
+      finish: 'natural',
+      styleNotes: '',
+    },
+    env,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'no-op-preview');
+  assert.equal(result.generatorVersion, 'no-op-preview:v1');
+  assert.equal(result.mimeType, 'image/png');
+  assert.equal(result.dataBase64, tinyPngBase64);
+  assert.equal(shinyGeneratorVersion(env), 'no-op-preview:v1');
+});
+
 test('Shiny image prompt forbids changing subject proportions', () => {
   const prompt = buildShinyImagePrompt({
     productType: 'embossed_metal_picture',

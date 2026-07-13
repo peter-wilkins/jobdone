@@ -91,11 +91,18 @@ Behaviour:
   replace them later with real photographed materials.
 - The MVP default generator is GPT Image 2 through the OpenAI image edit API.
   `SHINY_IMAGE_PROVIDER` can switch the backend to another configured provider.
-  Supported values: `openai`, `local-emboss-filter`, `cloudflare-flux-2-dev`,
-  and `cloudflare-sd15-img2img`.
+  Supported values: `openai`, `no-op-preview`, `local-emboss-filter`,
+  `cloudflare-flux-2-dev`, and `cloudflare-sd15-img2img`.
+- `no-op-preview` returns the uploaded source image as the preview. Use this
+  when the next useful product slice is ordering/quoting rather than preview
+  style quality.
 - `local-emboss-filter` is deterministic image processing, not generative AI.
   It preserves source geometry exactly and is the preferred fast MVP preview
   path while generative providers are being evaluated.
+- TODO: [GitHub issue #178](https://github.com/peter-wilkins/jobdone/issues/178)
+  captures a later Google Cloud Run ImageMagick service spike. Local
+  ImageMagick tests looked promising, but should be tuned against real handmade
+  output once the workshop has produced reference pieces.
 - The prompt treats the source image geometry, silhouette, subject identity, and
   proportions as hard constraints. If prompt-only editing still loses pet
   identity, continue the Flux/structure-lock provider spike.
@@ -145,6 +152,8 @@ Quote UI:
   deadline change.
 - If automatic pricing is unavailable, show the same quote explanation and a
   clear review message rather than a dead end.
+- MVP quote form appears after design preview, creates a QuoteSnapshot, and
+  stops before real payment/checkout.
 
 ## Payment Policy
 

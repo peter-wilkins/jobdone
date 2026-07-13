@@ -309,6 +309,20 @@ export class APIService {
     return response.json();
   }
 
+  async configureShinyQuote({ projectId, ownerUserId, quoteInput }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/quote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, quoteInput }),
+    });
+    if (!response.ok) await throwApiError(response, 'Quote failed');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

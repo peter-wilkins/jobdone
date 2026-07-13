@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiService } from './services/apiService';
 import { createShinyProjectId, getShinyProjectOwnerId } from './services/shinyProjectIdentityService';
+import { evaluateQuote, shinyArtShopQuoteRules } from '../../shared/shiny-project/index.js';
 
 const fallbackOptions = {
   productTypes: [
@@ -30,6 +31,22 @@ const initialDirection = {
   styleNotes: '',
 };
 
+const initialQuoteInput = {
+  productType: initialDirection.productType,
+  material: initialDirection.material,
+  finish: initialDirection.finish,
+  size: 'A4',
+  quantity: 1,
+  deadline: 'standard',
+  orderNotes: '',
+};
+
+const deadlineOptions = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'rush_3_5_days', label: 'Rush: 3-5 days' },
+  { value: 'next_day', label: 'Next day' },
+];
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -44,6 +61,11 @@ function fileToBase64(file) {
 
 function dataUrl(mimeType, dataBase64) {
   return dataBase64 ? `data:${mimeType || 'image/jpeg'};base64,${dataBase64}` : '';
+}
+
+function money(value) {
+  if (!Number.isFinite(value)) return 'Needs review';
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(value);
 }
 
 function projectIdFromUrl(location = window.location) {
@@ -100,6 +122,10 @@ export function ShinyArtShopScreen() {
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [generatedPreview, setGeneratedPreview] = useState(null);
+  const [quoteInput, setQuoteInput] = useState(initialQuoteInput);
+  const [quote, setQuote] = useState(null);
+  const [quoteSaving, setQuoteSaving] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +156,15 @@ export function ShinyArtShopScreen() {
         setProject(projectStateFromLoadedProject(result));
         setDesignDirection(result.designDirection || initialDirection);
         setGeneratedPreview(result.previewImage || null);
+        if (result.designDirection) {
+          setQuoteInput(current => ({
+            ...current,
+            productType: result.designDirection.productType,
+            material: result.designDirection.material,
+            finish: result.designDirection.finish,
+          }));
+        }
+        setQuote(result.quote || null);
       })
       .catch(error => {
         if (cancelled) return;
@@ -149,6 +184,7 @@ export function ShinyArtShopScreen() {
     () => dataUrl(generatedPreview?.mimeType, generatedPreview?.dataBase64),
     [generatedPreview]
   );
+  const liveQuote = useMemo(() => evaluateQuote(shinyArtShopQuoteRules.latest, quoteInput), [quoteInput]);
 
   const onFileSelected = async (event) => {
     const file = event.target.files?.[0];
@@ -156,6 +192,8 @@ export function ShinyArtShopScreen() {
     setUploadError('');
     setGenerationError('');
     setGeneratedPreview(null);
+    setQuote(null);
+    setQuoteError('');
     setUploading(true);
 
     const projectId = createShinyProjectId();
@@ -196,7 +234,20 @@ export function ShinyArtShopScreen() {
 
   const updateDirection = (key, value) => {
     setDesignDirection(current => ({ ...current, [key]: value }));
+    if (['productType', 'material', 'finish'].includes(key)) {
+      setQuoteInput(current => ({ ...current, [key]: value }));
+      setQuote(null);
+    }
     setGenerationError('');
+  };
+
+  const updateQuoteInput = (key, value) => {
+    setQuoteInput(current => ({
+      ...current,
+      [key]: key === 'quantity' ? Math.min(100, Math.max(1, Number(value) || 1)) : value,
+    }));
+    setQuote(null);
+    setQuoteError('');
   };
 
   const requestPreview = async () => {
@@ -211,10 +262,29 @@ export function ShinyArtShopScreen() {
         designDirection,
       });
       setGeneratedPreview(result.previewImage || null);
+      setQuote(null);
     } catch {
       setGenerationError('Oops, we had a problem. Try again in a few minutes.');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const submitQuote = async () => {
+    if (!project?.projectId || quoteSaving) return;
+    setQuoteSaving(true);
+    setQuoteError('');
+    try {
+      const result = await apiService.configureShinyQuote({
+        projectId: project.projectId,
+        ownerUserId: project.ownerUserId,
+        quoteInput,
+      });
+      setQuote(result.quote || null);
+    } catch (error) {
+      setQuoteError(error?.message || 'Quote failed');
+    } finally {
+      setQuoteSaving(false);
     }
   };
 
@@ -302,6 +372,87 @@ export function ShinyArtShopScreen() {
               <p className="text-sm text-zinc-300">
                 Your final piece will be handmade from real materials, so small differences are part of the process.
               </p>
+              <section className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">Quote</h2>
+                  <p className="mt-1 text-sm text-zinc-400">Adjust size, quantity, and deadline. Price updates here before checkout.</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <OptionSelect
+                    label="Size"
+                    value={quoteInput.size}
+                    options={[
+                      { value: 'A5', label: 'A5' },
+                      { value: 'A4', label: 'A4' },
+                    ]}
+                    onChange={value => updateQuoteInput('size', value)}
+                  />
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Quantity</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={quoteInput.quantity}
+                      onChange={event => updateQuoteInput('quantity', event.target.value)}
+                      className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-amber-300"
+                    />
+                  </label>
+                  <OptionSelect
+                    label="Deadline"
+                    value={quoteInput.deadline}
+                    options={deadlineOptions}
+                    onChange={value => updateQuoteInput('deadline', value)}
+                  />
+                </div>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Order notes</span>
+                  <textarea
+                    value={quoteInput.orderNotes}
+                    rows={3}
+                    maxLength={2000}
+                    onChange={event => updateQuoteInput('orderNotes', event.target.value)}
+                    placeholder="Anything that changes the job scope goes here."
+                    className="w-full resize-y rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-amber-300"
+                  />
+                </label>
+
+                <div className="rounded border border-zinc-800 bg-zinc-900 p-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-medium text-zinc-300">Estimated total</span>
+                    <span className="text-2xl font-semibold text-amber-200">{money(liveQuote.priceEstimate)}</span>
+                  </div>
+                  <ul className="mt-3 space-y-1 text-sm text-zinc-400">
+                    {liveQuote.explanation.map(line => <li key={line}>{line}</li>)}
+                  </ul>
+                  {liveQuote.canAutoQuote ? (
+                    <p className="mt-3 text-sm text-zinc-300">
+                      Due now: {money(liveQuote.depositDue)}. Balance later: {money(liveQuote.balanceDue)}.
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-sm text-amber-200">A human will review this and get back to you before checkout.</p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="w-full rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 shadow disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={quoteSaving}
+                  onClick={submitQuote}
+                >
+                  {quoteSaving ? 'Saving quote...' : liveQuote.canAutoQuote ? 'Save quote' : 'Send for review'}
+                </button>
+                {quoteError && (
+                  <p className="rounded border border-red-500/50 bg-red-950/60 px-3 py-2 text-sm text-red-100">{quoteError}</p>
+                )}
+                {quote && (
+                  <p className="rounded border border-emerald-500/40 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100">
+                    {quote.canAutoQuote ? 'Quote saved.' : 'Review request saved.'}
+                  </p>
+                )}
+              </section>
             </section>
           )}
         </main>

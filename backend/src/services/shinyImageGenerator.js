@@ -7,6 +7,7 @@ const OPENAI_PROVIDER = 'openai';
 const CLOUDFLARE_FLUX_PROVIDER = 'cloudflare-flux-2-dev';
 const CLOUDFLARE_SD15_IMG2IMG_PROVIDER = 'cloudflare-sd15-img2img';
 const LOCAL_EMBOSS_FILTER_PROVIDER = 'local-emboss-filter';
+const NO_OP_PREVIEW_PROVIDER = 'no-op-preview';
 const DEFAULT_PROVIDER = OPENAI_PROVIDER;
 const DEFAULT_OPENAI_MODEL = 'gpt-image-2';
 const DEFAULT_CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-2-dev';
@@ -78,6 +79,7 @@ export function shinyGeneratorVersion(env = process.env) {
   if (provider === CLOUDFLARE_FLUX_PROVIDER) return `cloudflare-workers-ai:${cloudflareModel(env)}:v1`;
   if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) return `cloudflare-workers-ai:${cloudflareSd15Img2ImgModel(env)}:v1`;
   if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) return 'local-emboss-filter:v1';
+  if (provider === NO_OP_PREVIEW_PROVIDER) return 'no-op-preview:v1';
   return `openai-image-edit:${openAiModel(env)}:v1`;
 }
 
@@ -149,12 +151,27 @@ export async function generateShinyDesignPreview({
   if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) {
     return generateLocalEmbossPreview({ sourceImage, designDirection, env });
   }
+  if (provider === NO_OP_PREVIEW_PROVIDER) {
+    return generateNoOpPreview({ sourceImage, designDirection, env });
+  }
   return {
     ok: false,
     errorCategory: 'provider_not_configured',
     message: `Unsupported image generator provider: ${provider}`,
     promptText: buildShinyImagePrompt(designDirection),
     generatorVersion: shinyGeneratorVersion(env),
+  };
+}
+
+async function generateNoOpPreview({ sourceImage, designDirection, env }) {
+  return {
+    ok: true,
+    provider: 'no-op-preview',
+    generatorVersion: shinyGeneratorVersion(env),
+    promptText: buildShinyImagePrompt(designDirection),
+    mimeType: sourceImage.mimeType || 'image/jpeg',
+    dataBase64: sourceImage.dataBase64,
+    usage: {},
   };
 }
 

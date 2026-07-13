@@ -317,6 +317,117 @@ test('Shiny project can be reloaded by project ID and owner identity', async () 
   }
 });
 
+test('Quote configuration stores current quote snapshot and returns live payment policy', async () => {
+  const store = memoryStore();
+  const app = await buildApp(store, {
+    imageGenerator: async (input) => ({
+      ok: true,
+      provider: 'no-op-preview',
+      generatorVersion: 'no-op-preview:v1',
+      promptText: buildShinyImagePrompt(input.designDirection),
+      mimeType: 'image/jpeg',
+      dataBase64: SOURCE_BYTES,
+    }),
+  });
+
+  try {
+    const upload = await uploadProject(app);
+    const sourceImageId = JSON.parse(upload.body).sourceImageId;
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/design-preview`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ownerUserId: OWNER_ID, sourceImageId, designDirection }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/quote`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteInput: {
+          productType: 'embossed_metal_picture',
+          material: 'copper_effect',
+          finish: 'natural',
+          size: 'A4',
+          quantity: 2,
+          deadline: 'rush_3_5_days',
+          orderNotes: '',
+        },
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body);
+    assert.equal(body.status, 'quote_offered');
+    assert.equal(body.quote.status, 'offered');
+    assert.equal(body.quote.result.price, 225);
+    assert.equal(body.quote.result.depositDue, 45);
+    assert.equal(body.quote.result.balanceDue, 180);
+
+    const reload = await app.inject({
+      method: 'GET',
+      url: `/api/shiny/projects/${PROJECT_ID}?ownerUserId=${OWNER_ID}`,
+    });
+    assert.equal(reload.statusCode, 200);
+    assert.equal(JSON.parse(reload.body).quote.result.price, 225);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Quote configuration with order notes routes to human review', async () => {
+  const store = memoryStore();
+  const app = await buildApp(store, {
+    imageGenerator: async (input) => ({
+      ok: true,
+      provider: 'no-op-preview',
+      generatorVersion: 'no-op-preview:v1',
+      promptText: buildShinyImagePrompt(input.designDirection),
+      mimeType: 'image/jpeg',
+      dataBase64: SOURCE_BYTES,
+    }),
+  });
+
+  try {
+    const upload = await uploadProject(app);
+    const sourceImageId = JSON.parse(upload.body).sourceImageId;
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/design-preview`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ownerUserId: OWNER_ID, sourceImageId, designDirection }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/quote`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteInput: {
+          productType: 'embossed_metal_picture',
+          material: 'copper_effect',
+          finish: 'natural',
+          size: 'A4',
+          quantity: 1,
+          deadline: 'standard',
+          orderNotes: 'Can you add a name plate?',
+        },
+      }),
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = JSON.parse(response.body);
+    assert.equal(body.status, 'quote_needs_review');
+    assert.equal(body.quote.status, 'needs_review');
+    assert.deepEqual(body.quote.reviewReasons, ['order_notes_present']);
+  } finally {
+    await app.close();
+  }
+});
+
 test('Design preview failure is persisted and can be retried', async () => {
   const store = memoryStore();
   let calls = 0;
