@@ -180,17 +180,19 @@ derived as `ready_for_workshop`.
 MVP workshop behaviour:
 
 - `/api/shiny/workshop/queue` lists paid Projects that are ready for workshop
-  work.
+  work, Projects in production, and Projects waiting for customer approval.
 - `#shiny-workshop` shows that queue in the frontend.
-- The queue is deliberately simple for the first slice: no auth gate, no
-  assignment, no production-start command, and no stock reservation yet.
+- The queue lets a workshop user mark production started once payment and terms
+  are in place.
+- Once production has started, the queue shows an upload control for the
+  finished-piece photo.
 - Each queue item links back to the Project page so workshop users can inspect
   the source image, preview, quote, and options.
+- The queue is deliberately simple for the first slices: no auth gate, no
+  assignment, and no stock reservation yet.
 
 Next workshop slices:
 
-- Mark production started.
-- Record a real workshop photo.
 - Customer approval before delivery/collection.
 - Harden workshop access before real customers.
 

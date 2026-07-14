@@ -359,6 +359,34 @@ export class APIService {
     return response.json();
   }
 
+  async startShinyProduction({ projectId, ownerUserId, quoteSnapshotId, confirmationText }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/start-production`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, quoteSnapshotId, confirmationText }),
+    });
+    if (!response.ok) await throwApiError(response, 'Production start failed');
+    return response.json();
+  }
+
+  async uploadShinyWorkshopPhoto({ projectId, ownerUserId, filename, mimeType, dataBase64 }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/workshop-photo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, filename, mimeType, dataBase64 }),
+    });
+    if (!response.ok) await throwApiError(response, 'Finished photo upload failed');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

@@ -538,6 +538,47 @@ test('Workshop queue lists paid projects ready for work', async () => {
     assert.equal(body.readyForWorkshop[0].projectStatus, 'ready_for_workshop');
     assert.equal(body.readyForWorkshop[0].quote.result.price, 90);
     assert.equal(body.readyForWorkshop[0].thumbnail.dataBase64, SOURCE_BYTES);
+
+    const start = await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/start-production`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteSnapshotId: quote.id,
+        confirmationText: 'Workshop checked payment and terms.',
+      }),
+    });
+    assert.equal(start.statusCode, 200);
+    assert.equal(JSON.parse(start.body).projectStatus, 'in_production');
+
+    queue = await app.inject({ method: 'GET', url: '/api/shiny/workshop/queue' });
+    const activeQueue = JSON.parse(queue.body);
+    assert.equal(activeQueue.readyForWorkshop.length, 0);
+    assert.equal(activeQueue.projects.length, 1);
+    assert.equal(activeQueue.projects[0].projectStatus, 'in_production');
+
+    const photo = await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/workshop-photo`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        filename: 'finished.jpg',
+        mimeType: 'image/jpeg',
+        dataBase64: GENERATED_BYTES,
+      }),
+    });
+    assert.equal(photo.statusCode, 200);
+    const photoBody = JSON.parse(photo.body);
+    assert.equal(photoBody.projectStatus, 'awaiting_customer_approval');
+    assert.equal(photoBody.workshopPhoto.dataBase64, GENERATED_BYTES);
+
+    queue = await app.inject({ method: 'GET', url: '/api/shiny/workshop/queue' });
+    const photoQueue = JSON.parse(queue.body);
+    assert.equal(photoQueue.projects.length, 1);
+    assert.equal(photoQueue.projects[0].projectStatus, 'awaiting_customer_approval');
+    assert.equal(photoQueue.projects[0].thumbnail.dataBase64, GENERATED_BYTES);
   } finally {
     await app.close();
   }

@@ -160,6 +160,7 @@ export const CommandSchema = z.discriminatedUnion('type', [
     fileId: z.string().min(1),
     filename: z.string().min(1).max(240),
     mimeType: z.string().min(1).max(120),
+    dataBase64: z.string().min(1).optional(),
   }),
   BaseCommandSchema.extend({
     type: z.literal('markReady'),

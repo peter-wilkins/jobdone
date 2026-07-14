@@ -362,6 +362,8 @@ export function applyProjectCommand(rawModel = emptyProjectModel(), rawCommand, 
           kind: 'workshop_photo',
           filename: command.filename,
           mimeType: command.mimeType,
+          dataBase64: command.dataBase64,
+          byteSize: command.dataBase64 ? Math.ceil(command.dataBase64.length * 3 / 4) : undefined,
           createdAt: command.createdAt,
         });
         next.events.push(businessEvent(command, 'workshop_photo_uploaded', { fileId: command.fileId }));

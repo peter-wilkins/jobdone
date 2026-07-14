@@ -55,6 +55,19 @@ const PayNowRequestSchema = z.object({
   quoteSnapshotId: z.string().min(1),
 }).strict();
 
+const StartProductionRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  quoteSnapshotId: z.string().min(1),
+  confirmationText: z.string().min(1).max(500).optional(),
+}).strict();
+
+const WorkshopPhotoRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  filename: z.string().min(1).max(240),
+  mimeType: z.string().min(1).max(120).refine(value => value.startsWith('image/'), 'mimeType must be an image'),
+  dataBase64: z.string().min(1).max(20_000_000),
+}).strict();
+
 const ProjectLoadQuerySchema = z.object({
   ownerUserId: z.string().uuid(),
 }).strict();
@@ -234,11 +247,17 @@ function latestGeneratedPreview(model) {
   return null;
 }
 
+function latestWorkshopPhoto(model) {
+  const files = Array.isArray(model.files) ? model.files : [];
+  return [...files].reverse().find(item => item.kind === 'workshop_photo') || null;
+}
+
 function projectResponseFromObject(object) {
   const payload = object.payloadJson || {};
   const model = payload.model || emptyProjectModel();
   const sourceImage = latestSourceImage(model, payload.sourceImageId);
   const generated = latestGeneratedPreview(model);
+  const workshopPhoto = latestWorkshopPhoto(model);
   const quote = currentQuote(model);
   const accepted = quote ? quoteAccepted(model, quote.id) : false;
   const paid = quote ? requiredPaymentReceived(model, quote) : false;
@@ -260,6 +279,12 @@ function projectResponseFromObject(object) {
       mimeType: generated.file.mimeType,
       dataBase64: generated.file.dataBase64,
     } : null,
+    workshopPhoto: workshopPhoto ? {
+      fileId: workshopPhoto.id,
+      filename: workshopPhoto.filename,
+      mimeType: workshopPhoto.mimeType,
+      dataBase64: workshopPhoto.dataBase64 || null,
+    } : null,
     quote,
     quoteAccepted: accepted,
     requiredPaymentReceived: paid,
@@ -274,8 +299,9 @@ function workshopQueueItemFromObject(object) {
     ownerUserId: response.ownerUserId,
     projectStatus: response.projectStatus,
     title: response.sourceImage?.filename || 'Untitled project',
-    thumbnail: response.previewImage || response.sourceImage,
+    thumbnail: response.workshopPhoto || response.previewImage || response.sourceImage,
     designDirection: response.designDirection,
+    workshopPhoto: response.workshopPhoto,
     quote: response.quote,
     quoteInput,
     quoteAccepted: response.quoteAccepted,
@@ -300,7 +326,12 @@ export async function registerShinyProjectRoutes(fastify, deps = {}) {
       .map(workshopQueueItemFromObject)
       .filter(project => project.projectStatus === 'ready_for_workshop');
 
-    return { readyForWorkshop };
+    const projects = objects
+      .filter(object => object.payloadJson?.kind === 'shinyProject')
+      .map(workshopQueueItemFromObject)
+      .filter(project => ['ready_for_workshop', 'in_production', 'awaiting_customer_approval'].includes(project.projectStatus));
+
+    return { projects, readyForWorkshop };
   });
 
   fastify.get('/api/shiny/projects/:projectId', async (request, reply) => {
@@ -697,6 +728,107 @@ export async function registerShinyProjectRoutes(fastify, deps = {}) {
       if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
       request.log.error({ err: error }, 'shiny_pay_now_failed');
       return reply.status(500).send({ error: 'Payment failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/start-production', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = StartProductionRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid production start request',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, quoteSnapshotId, confirmationText } = parsed.data;
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const now = new Date().toISOString();
+      const model = applyOrThrow(object.payloadJson?.model || emptyProjectModel(), command({
+        type: 'startProduction',
+        projectId,
+        actor: { role: 'builder', userId: 'workshop' },
+        now,
+        index: 1,
+        extra: {
+          quoteSnapshotId,
+          confirmationText: confirmationText || 'Workshop checked payment and terms before starting production.',
+        },
+      }));
+      const updated = await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, 'production_started', { quoteSnapshotId }),
+        now,
+      });
+
+      return projectResponseFromObject(updated);
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_start_production_failed');
+      return reply.status(500).send({ error: 'Production start failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/workshop-photo', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = WorkshopPhotoRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid workshop photo upload',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, filename, mimeType, dataBase64 } = parsed.data;
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const now = new Date().toISOString();
+      const fileId = createUuidV7(Date.parse(now) + 40);
+      const model = applyOrThrow(object.payloadJson?.model || emptyProjectModel(), command({
+        type: 'uploadWorkshopPhoto',
+        projectId,
+        actor: { role: 'builder', userId: 'workshop' },
+        now,
+        index: 1,
+        extra: {
+          fileId,
+          filename,
+          mimeType,
+          dataBase64,
+        },
+      }));
+      const updated = await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, 'workshop_photo_uploaded', { workshopPhotoFileId: fileId }),
+        now,
+      });
+
+      return projectResponseFromObject(updated);
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_workshop_photo_failed');
+      return reply.status(500).send({ error: 'Workshop photo upload failed' });
     }
   });
 }
