@@ -161,6 +161,20 @@ export class LocalReplicaStore {
     }
   }
 
+  async listObjects({ collection, limit = 100 } = {}) {
+    if (!this.pool) throw new Error('Local Replica database not configured');
+    const boundedLimit = Math.max(1, Math.min(Number(limit || 100), 1000));
+    const result = await this.pool.query(`
+      SELECT *
+      FROM ${this.table('syncObjects')}
+      WHERE "collection" = $1
+        AND "deletedT" IS NULL
+      ORDER BY "changedT" DESC, "ownerKind" ASC, "ownerId" ASC, "id" ASC
+      LIMIT $2
+    `, [collection, boundedLimit]);
+    return result.rows.map(normalizeSyncObject);
+  }
+
   async applyIntent(client, { actorUserId, actorEmail, actorDeviceId, replicaEpoch, baseT, intent }) {
     const existingIntent = await this.findIntent(client, intent.id);
     if (existingIntent) {

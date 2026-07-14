@@ -78,6 +78,9 @@ function memoryStore() {
         objects: Array.from(objects.values()).filter(object => object.ownerId === actorUserId),
       };
     },
+    async listObjects({ collection }) {
+      return Array.from(objects.values()).filter(object => object.collection === collection);
+    },
   };
 }
 
@@ -455,6 +458,86 @@ test('Customer can accept a quote and no-op Pay Now moves project to workshop qu
     assert.equal(reloaded.projectStatus, 'ready_for_workshop');
     assert.equal(reloaded.quoteAccepted, true);
     assert.equal(reloaded.requiredPaymentReceived, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Workshop queue lists paid projects ready for work', async () => {
+  const store = memoryStore();
+  const app = await buildApp(store, {
+    imageGenerator: async (input) => ({
+      ok: true,
+      provider: 'no-op-preview',
+      generatorVersion: 'no-op-preview:v1',
+      promptText: buildShinyImagePrompt(input.designDirection),
+      mimeType: 'image/jpeg',
+      dataBase64: SOURCE_BYTES,
+    }),
+  });
+
+  try {
+    const upload = await uploadProject(app);
+    const sourceImageId = JSON.parse(upload.body).sourceImageId;
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/design-preview`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ownerUserId: OWNER_ID, sourceImageId, designDirection }),
+    });
+    const quoteResponse = await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/quote`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteInput: {
+          productType: 'embossed_metal_picture',
+          material: 'copper_effect',
+          finish: 'natural',
+          size: 'A4',
+          quantity: 1,
+          deadline: 'standard',
+          orderNotes: '',
+        },
+      }),
+    });
+    const quote = JSON.parse(quoteResponse.body).quote;
+
+    let queue = await app.inject({ method: 'GET', url: '/api/shiny/workshop/queue' });
+    assert.equal(queue.statusCode, 200);
+    assert.deepEqual(JSON.parse(queue.body).readyForWorkshop, []);
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/accept-quote`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteSnapshotId: quote.id,
+        termsVersion: 'custom-order-terms:v1',
+        termsText: 'Custom order terms accepted.',
+      }),
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/shiny/projects/${PROJECT_ID}/pay-now`,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ownerUserId: OWNER_ID,
+        quoteSnapshotId: quote.id,
+      }),
+    });
+
+    queue = await app.inject({ method: 'GET', url: '/api/shiny/workshop/queue' });
+    assert.equal(queue.statusCode, 200);
+    const body = JSON.parse(queue.body);
+    assert.equal(body.readyForWorkshop.length, 1);
+    assert.equal(body.readyForWorkshop[0].projectId, PROJECT_ID);
+    assert.equal(body.readyForWorkshop[0].ownerUserId, OWNER_ID);
+    assert.equal(body.readyForWorkshop[0].projectStatus, 'ready_for_workshop');
+    assert.equal(body.readyForWorkshop[0].quote.result.price, 90);
+    assert.equal(body.readyForWorkshop[0].thumbnail.dataBase64, SOURCE_BYTES);
   } finally {
     await app.close();
   }

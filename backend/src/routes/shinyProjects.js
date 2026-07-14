@@ -266,12 +266,42 @@ function projectResponseFromObject(object) {
   };
 }
 
+function workshopQueueItemFromObject(object) {
+  const response = projectResponseFromObject(object);
+  const quoteInput = response.quote?.input || null;
+  return {
+    projectId: response.projectId,
+    ownerUserId: response.ownerUserId,
+    projectStatus: response.projectStatus,
+    title: response.sourceImage?.filename || 'Untitled project',
+    thumbnail: response.previewImage || response.sourceImage,
+    designDirection: response.designDirection,
+    quote: response.quote,
+    quoteInput,
+    quoteAccepted: response.quoteAccepted,
+    requiredPaymentReceived: response.requiredPaymentReceived,
+  };
+}
+
 export async function registerShinyProjectRoutes(fastify, deps = {}) {
   const store = deps.localReplicaStore ?? defaultStore;
   const imageGenerator = deps.imageGenerator ?? generateShinyDesignPreview;
   const options = deps.designOptions ?? shinyDesignOptions;
 
   fastify.get('/api/shiny/design-options', async () => sellableShinyDesignOptions(options));
+
+  fastify.get('/api/shiny/workshop/queue', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+    if (typeof store.listObjects !== 'function') return reply.status(503).send({ error: 'Workshop queue unavailable' });
+
+    const objects = await store.listObjects({ collection: 'shinyProjects', limit: 500 });
+    const readyForWorkshop = objects
+      .filter(object => object.payloadJson?.kind === 'shinyProject')
+      .map(workshopQueueItemFromObject)
+      .filter(project => project.projectStatus === 'ready_for_workshop');
+
+    return { readyForWorkshop };
+  });
 
   fastify.get('/api/shiny/projects/:projectId', async (request, reply) => {
     if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });

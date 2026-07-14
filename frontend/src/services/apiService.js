@@ -351,6 +351,14 @@ export class APIService {
     return response.json();
   }
 
+  async getShinyWorkshopQueue() {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/workshop/queue`, {
+      headers: authHeader(),
+    });
+    if (!response.ok) await throwApiError(response, 'Workshop queue unavailable');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

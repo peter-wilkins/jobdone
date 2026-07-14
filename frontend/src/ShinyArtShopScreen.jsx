@@ -77,6 +77,12 @@ function projectIdFromUrl(location = window.location) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '') ? value : null;
 }
 
+function projectOwnerIdFromUrl(location = window.location) {
+  const params = new URLSearchParams(location.search || '');
+  const value = params.get('owner');
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value || '') ? value : null;
+}
+
 function setProjectIdInUrl(projectId, history = window.history, location = window.location) {
   const url = new URL(location.href);
   url.searchParams.set('project', projectId);
@@ -86,6 +92,7 @@ function setProjectIdInUrl(projectId, history = window.history, location = windo
 function clearProjectIdFromUrl(history = window.history, location = window.location) {
   const url = new URL(location.href);
   url.searchParams.delete('project');
+  url.searchParams.delete('owner');
   history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -158,7 +165,7 @@ export function ShinyArtShopScreen() {
     setUploadError('');
     apiService.getShinyProject({
       projectId,
-      ownerUserId: getShinyProjectOwnerId(),
+      ownerUserId: projectOwnerIdFromUrl() || getShinyProjectOwnerId(),
     })
       .then(result => {
         if (cancelled) return;

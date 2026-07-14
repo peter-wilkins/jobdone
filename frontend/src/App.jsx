@@ -12,6 +12,7 @@ import { TeamPageScreen } from './TeamPageScreen';
 import { InviteScreen } from './InviteScreen';
 import { WaterWalkScreen } from './WaterWalkScreen';
 import { ShinyArtShopScreen } from './ShinyArtShopScreen';
+import { ShinyWorkshopScreen } from './ShinyWorkshopScreen';
 import { GlobalMenu } from './GlobalMenu';
 import { OnboardingScreen } from './OnboardingScreen';
 import { authService, consumeAuthErrorFromLocation } from './services/authService';
@@ -36,14 +37,17 @@ import {
 } from './services/teamNavigationService';
 
 function screenFromLocation() {
-  if (window.location.hostname === 'shiny-art-shop.continuumkit.org') return 'shiny-art-shop';
   const hash = window.location.hash.replace('#', '').split('?')[0];
+  if (window.location.hostname === 'shiny-art-shop.continuumkit.org') {
+    return hash === 'shiny-workshop' ? 'shiny-workshop' : 'shiny-art-shop';
+  }
   const pathname = window.location.pathname;
   // Share target can be /share-target (SW-served) or #share-target (after redirect)
   if (pathname === '/share-target') return 'share-target';
   if (pathname === '/invite') return 'invite';
   if (hash.startsWith('team/')) return hash;
   if (hash === 'shiny-art-shop') return 'shiny-art-shop';
+  if (hash === 'shiny-workshop') return 'shiny-workshop';
   if (hash === 'my-work' || hash === 'team-work' || hash === 'action-inbox') return 'home';
   return ['feedback', 'inbox', 'contacts', 'locations', 'login', 'onboarding', 'share-target', 'team-review', 'team-setup', 'invite', 'water-walk'].includes(hash)
     ? hash
@@ -370,6 +374,10 @@ function App() {
 
   if (screen === 'shiny-art-shop') {
     return <>{environmentBanner}{crashStatusBar}{authStatusBar}<ShinyArtShopScreen /></>;
+  }
+
+  if (screen === 'shiny-workshop') {
+    return <>{environmentBanner}{crashStatusBar}{authStatusBar}<ShinyWorkshopScreen /></>;
   }
 
   if (screen === 'feedback') {

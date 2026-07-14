@@ -172,6 +172,28 @@ Human-reviewed Projects can override payment policy:
 No production work starts until required payment is received, unless a human
 override is recorded.
 
+## Workshop Queue
+
+After the customer accepts terms and payment is recorded, the Project status is
+derived as `ready_for_workshop`.
+
+MVP workshop behaviour:
+
+- `/api/shiny/workshop/queue` lists paid Projects that are ready for workshop
+  work.
+- `#shiny-workshop` shows that queue in the frontend.
+- The queue is deliberately simple for the first slice: no auth gate, no
+  assignment, no production-start command, and no stock reservation yet.
+- Each queue item links back to the Project page so workshop users can inspect
+  the source image, preview, quote, and options.
+
+Next workshop slices:
+
+- Mark production started.
+- Record a real workshop photo.
+- Customer approval before delivery/collection.
+- Harden workshop access before real customers.
+
 ## Custom Order Terms
 
 Before checkout, the customer must accept custom-order terms for the active
