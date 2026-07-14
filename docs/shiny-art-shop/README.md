@@ -159,15 +159,13 @@ Quote UI:
 
 Default automated policy:
 
-- If quote total is under GBP 50: full payment up front.
-- If quote total is GBP 50 or more: 20% deposit before work starts, balance
-  before delivery/collection.
+- Full payment up front for every automatically quoted order.
+- No production work starts until full payment is received.
 
 Human-reviewed Projects can override payment policy:
 
 - Full up front.
-- 20% deposit.
-- Custom deposit.
+- Deposit or custom staged payment later if a human decides the project needs it.
 - Invoice later.
 - Waived.
 

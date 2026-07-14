@@ -47,6 +47,9 @@ const deadlineOptions = [
   { value: 'next_day', label: 'Next day' },
 ];
 
+const CUSTOM_ORDER_TERMS_VERSION = 'custom-order-terms:v1';
+const CUSTOM_ORDER_TERMS_TEXT = 'I understand this is custom-made. I can cancel before production starts, but once production starts I cannot cancel for a change of mind. My statutory rights are not affected.';
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -95,12 +98,13 @@ function projectStateFromLoadedProject(result) {
   };
 }
 
-function OptionSelect({ label, value, options, onChange }) {
+function OptionSelect({ label, value, options, onChange, disabled = false }) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">{label}</span>
       <select
         value={value}
+        disabled={disabled}
         onChange={event => onChange(event.target.value)}
         className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-amber-300"
       >
@@ -124,8 +128,13 @@ export function ShinyArtShopScreen() {
   const [generatedPreview, setGeneratedPreview] = useState(null);
   const [quoteInput, setQuoteInput] = useState(initialQuoteInput);
   const [quote, setQuote] = useState(null);
+  const [quoteAccepted, setQuoteAccepted] = useState(false);
+  const [paymentReceived, setPaymentReceived] = useState(false);
   const [quoteSaving, setQuoteSaving] = useState(false);
   const [quoteError, setQuoteError] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [acceptingQuote, setAcceptingQuote] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +174,9 @@ export function ShinyArtShopScreen() {
           }));
         }
         setQuote(result.quote || null);
+        setQuoteAccepted(Boolean(result.quoteAccepted));
+        setPaymentReceived(Boolean(result.requiredPaymentReceived));
+        setTermsAccepted(Boolean(result.quoteAccepted));
       })
       .catch(error => {
         if (cancelled) return;
@@ -193,6 +205,9 @@ export function ShinyArtShopScreen() {
     setGenerationError('');
     setGeneratedPreview(null);
     setQuote(null);
+    setQuoteAccepted(false);
+    setPaymentReceived(false);
+    setTermsAccepted(false);
     setQuoteError('');
     setUploading(true);
 
@@ -237,16 +252,23 @@ export function ShinyArtShopScreen() {
     if (['productType', 'material', 'finish'].includes(key)) {
       setQuoteInput(current => ({ ...current, [key]: value }));
       setQuote(null);
+      setQuoteAccepted(false);
+      setPaymentReceived(false);
+      setTermsAccepted(false);
     }
     setGenerationError('');
   };
 
   const updateQuoteInput = (key, value) => {
+    if (paymentReceived) return;
     setQuoteInput(current => ({
       ...current,
       [key]: key === 'quantity' ? Math.min(100, Math.max(1, Number(value) || 1)) : value,
     }));
     setQuote(null);
+    setQuoteAccepted(false);
+    setPaymentReceived(false);
+    setTermsAccepted(false);
     setQuoteError('');
   };
 
@@ -263,6 +285,9 @@ export function ShinyArtShopScreen() {
       });
       setGeneratedPreview(result.previewImage || null);
       setQuote(null);
+      setQuoteAccepted(false);
+      setPaymentReceived(false);
+      setTermsAccepted(false);
     } catch {
       setGenerationError('Oops, we had a problem. Try again in a few minutes.');
     } finally {
@@ -281,10 +306,55 @@ export function ShinyArtShopScreen() {
         quoteInput,
       });
       setQuote(result.quote || null);
+      setQuoteAccepted(Boolean(result.quoteAccepted));
+      setPaymentReceived(Boolean(result.requiredPaymentReceived));
+      setTermsAccepted(Boolean(result.quoteAccepted));
     } catch (error) {
       setQuoteError(error?.message || 'Quote failed');
     } finally {
       setQuoteSaving(false);
+    }
+  };
+
+  const acceptQuote = async () => {
+    if (!project?.projectId || !quote?.id || acceptingQuote || !termsAccepted) return;
+    setAcceptingQuote(true);
+    setQuoteError('');
+    try {
+      const result = await apiService.acceptShinyQuote({
+        projectId: project.projectId,
+        ownerUserId: project.ownerUserId,
+        quoteSnapshotId: quote.id,
+        termsVersion: CUSTOM_ORDER_TERMS_VERSION,
+        termsText: CUSTOM_ORDER_TERMS_TEXT,
+      });
+      setQuote(result.quote || quote);
+      setQuoteAccepted(Boolean(result.quoteAccepted));
+      setPaymentReceived(Boolean(result.requiredPaymentReceived));
+    } catch (error) {
+      setQuoteError(error?.message || 'Quote acceptance failed');
+    } finally {
+      setAcceptingQuote(false);
+    }
+  };
+
+  const payNow = async () => {
+    if (!project?.projectId || !quote?.id || paying) return;
+    setPaying(true);
+    setQuoteError('');
+    try {
+      const result = await apiService.payShinyQuoteNow({
+        projectId: project.projectId,
+        ownerUserId: project.ownerUserId,
+        quoteSnapshotId: quote.id,
+      });
+      setQuote(result.quote || quote);
+      setQuoteAccepted(Boolean(result.quoteAccepted));
+      setPaymentReceived(Boolean(result.requiredPaymentReceived));
+    } catch (error) {
+      setQuoteError(error?.message || 'Payment failed');
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -386,6 +456,7 @@ export function ShinyArtShopScreen() {
                       { value: 'A5', label: 'A5' },
                       { value: 'A4', label: 'A4' },
                     ]}
+                    disabled={paymentReceived}
                     onChange={value => updateQuoteInput('size', value)}
                   />
                   <label className="block">
@@ -395,6 +466,7 @@ export function ShinyArtShopScreen() {
                       min="1"
                       max="100"
                       value={quoteInput.quantity}
+                      disabled={paymentReceived}
                       onChange={event => updateQuoteInput('quantity', event.target.value)}
                       className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-amber-300"
                     />
@@ -403,6 +475,7 @@ export function ShinyArtShopScreen() {
                     label="Deadline"
                     value={quoteInput.deadline}
                     options={deadlineOptions}
+                    disabled={paymentReceived}
                     onChange={value => updateQuoteInput('deadline', value)}
                   />
                 </div>
@@ -413,6 +486,7 @@ export function ShinyArtShopScreen() {
                     value={quoteInput.orderNotes}
                     rows={3}
                     maxLength={2000}
+                    disabled={paymentReceived}
                     onChange={event => updateQuoteInput('orderNotes', event.target.value)}
                     placeholder="Anything that changes the job scope goes here."
                     className="w-full resize-y rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-amber-300"
@@ -429,7 +503,7 @@ export function ShinyArtShopScreen() {
                   </ul>
                   {liveQuote.canAutoQuote ? (
                     <p className="mt-3 text-sm text-zinc-300">
-                      Due now: {money(liveQuote.depositDue)}. Balance later: {money(liveQuote.balanceDue)}.
+                      Due now: {money(liveQuote.depositDue)}. Full payment is required before workshop work starts.
                     </p>
                   ) : (
                     <p className="mt-3 text-sm text-amber-200">A human will review this and get back to you before checkout.</p>
@@ -439,7 +513,7 @@ export function ShinyArtShopScreen() {
                 <button
                   type="button"
                   className="w-full rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 shadow disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={quoteSaving}
+                  disabled={quoteSaving || paymentReceived}
                   onClick={submitQuote}
                 >
                   {quoteSaving ? 'Saving quote...' : liveQuote.canAutoQuote ? 'Save quote' : 'Send for review'}
@@ -448,9 +522,46 @@ export function ShinyArtShopScreen() {
                   <p className="rounded border border-red-500/50 bg-red-950/60 px-3 py-2 text-sm text-red-100">{quoteError}</p>
                 )}
                 {quote && (
-                  <p className="rounded border border-emerald-500/40 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100">
-                    {quote.canAutoQuote ? 'Quote saved.' : 'Review request saved.'}
-                  </p>
+                  <div className="space-y-3 rounded border border-emerald-500/40 bg-emerald-950/30 p-3 text-sm text-emerald-100">
+                    <p>{quote.canAutoQuote ? 'Quote saved.' : 'Review request saved.'}</p>
+                    {quote.canAutoQuote && !quoteAccepted && (
+                      <>
+                        <label className="flex gap-3 text-left text-sm text-zinc-100">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 accent-amber-300"
+                            checked={termsAccepted}
+                            onChange={event => setTermsAccepted(event.target.checked)}
+                          />
+                          <span>{CUSTOM_ORDER_TERMS_TEXT}</span>
+                        </label>
+                        <button
+                          type="button"
+                          className="w-full rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 shadow disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!termsAccepted || acceptingQuote}
+                          onClick={acceptQuote}
+                        >
+                          {acceptingQuote ? 'Accepting...' : 'Accept quote'}
+                        </button>
+                      </>
+                    )}
+                    {quote.canAutoQuote && quoteAccepted && !paymentReceived && (
+                      <>
+                        <p>Quote accepted. Pay {money(quote.result.depositDue)} now to join the workshop queue.</p>
+                        <button
+                          type="button"
+                          className="w-full rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 shadow disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={paying}
+                          onClick={payNow}
+                        >
+                          {paying ? 'Recording payment...' : 'Pay now'}
+                        </button>
+                      </>
+                    )}
+                    {paymentReceived && (
+                      <p>Payment recorded. Your project is ready for the workshop queue.</p>
+                    )}
+                  </div>
                 )}
               </section>
             </section>

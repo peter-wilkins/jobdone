@@ -244,6 +244,9 @@ export function applyProjectCommand(rawModel = emptyProjectModel(), rawCommand, 
 
     case 'configureQuote': {
       if (!model.previews.length) return reject('Generate a preview before configuring a quote.', 'preview_missing');
+      if (['ready_for_workshop', 'in_production', 'awaiting_customer_approval', 'awaiting_balance', 'ready'].includes(statusBefore)) {
+        return reject('Paid order details cannot be changed here. Contact the workshop for changes.', 'paid_order_locked');
+      }
       const result = evaluateQuote(ruleset, command.quoteInput);
       return applyAccepted(model, command, next => {
         next.quotes.push({

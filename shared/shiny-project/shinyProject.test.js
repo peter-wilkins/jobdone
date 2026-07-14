@@ -81,8 +81,8 @@ test('quote rules are deterministic and send notes to human review', () => {
   const auto = evaluateQuote(shinyArtShopQuoteRules.latest, baseQuoteInput);
   assert.equal(auto.canAutoQuote, true);
   assert.equal(auto.price, 80);
-  assert.equal(auto.depositDue, 16);
-  assert.equal(auto.balanceDue, 64);
+  assert.equal(auto.depositDue, 80);
+  assert.equal(auto.balanceDue, 0);
 
   const withNotes = evaluateQuote(shinyArtShopQuoteRules.latest, {
     ...baseQuoteInput,
@@ -105,7 +105,7 @@ test('Zod rejects malformed command input at the pure model boundary', () => {
   }));
 });
 
-test('happy path reaches workshop, approval, balance, and complete states', () => {
+test('happy path reaches workshop, approval, ready, and complete states', () => {
   let model = acceptAndPay(buildQuotedProject());
   const quote = currentQuote(model);
   assert.equal(deriveProjectStatus(model), 'ready_for_workshop');
@@ -124,13 +124,6 @@ test('happy path reaches workshop, approval, balance, and complete states', () =
   assert.equal(deriveProjectStatus(model), 'awaiting_customer_approval');
 
   model = apply(model, cmd('approveFinishedPiece', { approvalPhotoFileId: 'photo-1' }, customer, 9));
-  assert.equal(deriveProjectStatus(model), 'awaiting_balance');
-
-  model = apply(model, cmd('recordPaymentReceived', {
-    paymentId: 'pay-2',
-    quoteSnapshotId: quote.id,
-    amount: quote.result.balanceDue,
-  }, system, 10));
   assert.equal(deriveProjectStatus(model), 'ready');
 
   model = apply(model, cmd('markComplete', {}, { role: 'admin', userId: 'admin-1' }, 11));
@@ -171,6 +164,20 @@ test('quote snapshots stay immutable after quote acceptance', () => {
 
   assert.equal(JSON.stringify(model.quotes), before);
   assert.equal(currentQuote(model).id, quote.id);
+});
+
+test('paid order details cannot be reconfigured by customer command', () => {
+  const model = acceptAndPay(buildQuotedProject());
+  const result = applyProjectCommand(model, cmd('configureQuote', {
+    quoteInput: {
+      ...baseQuoteInput,
+      quantity: 2,
+    },
+  }, customer, 7));
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.code, 'paid_order_locked');
+  assert.equal(deriveProjectStatus(model), 'ready_for_workshop');
 });
 
 test('anonymous preview quota is enforced as a defined user error', () => {

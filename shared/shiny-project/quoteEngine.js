@@ -62,10 +62,8 @@ export function evaluateQuote(ruleset, rawInput) {
     explanation.push('Next-day deadlines need workshop review before checkout.');
   }
 
-  const fullUpfront = price < ruleset.paymentPolicy.fullUpfrontBelow;
-  const depositDue = fullUpfront
-    ? price
-    : money(price * (ruleset.paymentPolicy.depositPercent / 100));
+  const fullUpfront = ruleset.paymentPolicy.type === 'full_upfront' || price < ruleset.paymentPolicy.fullUpfrontBelow;
+  const depositDue = fullUpfront ? price : money(price * (ruleset.paymentPolicy.depositPercent / 100));
   const balanceDue = money(price - depositDue);
   const paymentPolicy = fullUpfront
     ? { type: 'full_upfront', dueNow: depositDue }
@@ -83,4 +81,3 @@ export function evaluateQuote(ruleset, rawInput) {
     reviewReasons,
   };
 }
-

@@ -323,6 +323,34 @@ export class APIService {
     return response.json();
   }
 
+  async acceptShinyQuote({ projectId, ownerUserId, quoteSnapshotId, termsVersion, termsText }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/accept-quote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, quoteSnapshotId, termsVersion, termsText }),
+    });
+    if (!response.ok) await throwApiError(response, 'Quote acceptance failed');
+    return response.json();
+  }
+
+  async payShinyQuoteNow({ projectId, ownerUserId, quoteSnapshotId }) {
+    const response = await apiFetch(`${API_BASE_URL}/api/shiny/projects/${encodeURIComponent(projectId)}/pay-now`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-jobdone-device-id': getFeedbackDeviceId(),
+        ...authHeader(),
+      },
+      body: JSON.stringify({ ownerUserId, quoteSnapshotId }),
+    });
+    if (!response.ok) await throwApiError(response, 'Payment failed');
+    return response.json();
+  }
+
   async getCloudContacts() {
     try {
       const response = await apiFetch(`${API_BASE_URL}/api/sync/contacts`, {

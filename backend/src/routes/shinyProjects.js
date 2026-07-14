@@ -5,8 +5,11 @@ import {
   QuoteInputSchema,
   applyProjectCommand,
   currentQuote,
+  deriveProjectStatus,
   emptyProjectModel,
   isSellableDesignDirection,
+  quoteAccepted,
+  requiredPaymentReceived,
   sellableShinyDesignOptions,
   shinyDesignOptions,
 } from '../../../shared/shiny-project/index.js';
@@ -38,6 +41,18 @@ const PreviewRequestSchema = z.object({
 const QuoteRequestSchema = z.object({
   ownerUserId: z.string().uuid(),
   quoteInput: QuoteInputSchema,
+}).strict();
+
+const AcceptQuoteRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  quoteSnapshotId: z.string().min(1),
+  termsVersion: z.string().min(1),
+  termsText: z.string().min(1),
+}).strict();
+
+const PayNowRequestSchema = z.object({
+  ownerUserId: z.string().uuid(),
+  quoteSnapshotId: z.string().min(1),
 }).strict();
 
 const ProjectLoadQuerySchema = z.object({
@@ -225,10 +240,13 @@ function projectResponseFromObject(object) {
   const sourceImage = latestSourceImage(model, payload.sourceImageId);
   const generated = latestGeneratedPreview(model);
   const quote = currentQuote(model);
+  const accepted = quote ? quoteAccepted(model, quote.id) : false;
+  const paid = quote ? requiredPaymentReceived(model, quote) : false;
   return {
     projectId: object.id,
     ownerUserId: object.ownerId,
     status: payload.status || 'source_image_uploaded',
+    projectStatus: deriveProjectStatus(model),
     sourceImageId: sourceImage?.id || payload.sourceImageId || null,
     sourceImage: sourceImage ? {
       fileId: sourceImage.id,
@@ -243,6 +261,8 @@ function projectResponseFromObject(object) {
       dataBase64: generated.file.dataBase64,
     } : null,
     quote,
+    quoteAccepted: accepted,
+    requiredPaymentReceived: paid,
   };
 }
 
@@ -512,12 +532,141 @@ export async function registerShinyProjectRoutes(fastify, deps = {}) {
       return {
         projectId,
         status: quote?.canAutoQuote ? 'quote_offered' : 'quote_needs_review',
+        projectStatus: deriveProjectStatus(model),
         quote,
+        quoteAccepted: quote ? quoteAccepted(model, quote.id) : false,
+        requiredPaymentReceived: quote ? requiredPaymentReceived(model, quote) : false,
       };
     } catch (error) {
       if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
       request.log.error({ err: error }, 'shiny_quote_failed');
       return reply.status(500).send({ error: 'Quote failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/accept-quote', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = AcceptQuoteRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid quote acceptance',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, quoteSnapshotId, termsVersion, termsText } = parsed.data;
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const now = new Date().toISOString();
+      const actor = { role: 'customer', userId: ownerUserId, anonymous: true };
+      const model = applyOrThrow(object.payloadJson?.model || emptyProjectModel(), command({
+        type: 'acceptQuote',
+        projectId,
+        actor,
+        now,
+        index: 1,
+        extra: { quoteSnapshotId, termsVersion, termsText },
+      }));
+      const quote = currentQuote(model);
+      await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, 'quote_accepted', { quoteSnapshotId }),
+        now,
+      });
+
+      return {
+        projectId,
+        status: 'quote_accepted',
+        projectStatus: deriveProjectStatus(model),
+        quote,
+        quoteAccepted: quote ? quoteAccepted(model, quote.id) : false,
+        requiredPaymentReceived: quote ? requiredPaymentReceived(model, quote) : false,
+      };
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_quote_accept_failed');
+      return reply.status(500).send({ error: 'Quote acceptance failed' });
+    }
+  });
+
+  fastify.post('/api/shiny/projects/:projectId/pay-now', async (request, reply) => {
+    if (!store?.configured) return reply.status(503).send({ error: 'Project database not configured' });
+
+    const parsed = PayNowRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message || 'Invalid payment request',
+        issues: parsed.error.issues.map(issue => issue.message),
+      });
+    }
+
+    const projectId = request.params.projectId;
+    const { ownerUserId, quoteSnapshotId } = parsed.data;
+
+    try {
+      const object = await loadProjectObject({ store, ownerUserId, projectId });
+      if (!object) return reply.status(404).send({ error: 'Project not found' });
+
+      const currentModel = object.payloadJson?.model || emptyProjectModel();
+      const quote = currentQuote(currentModel);
+      if (!quote || quote.id !== quoteSnapshotId) return reply.status(422).send({ error: 'Quote is not current.', code: 'quote_not_current' });
+      if (requiredPaymentReceived(currentModel, quote)) {
+        return {
+          projectId,
+          status: 'payment_received',
+          projectStatus: deriveProjectStatus(currentModel),
+          quote,
+          quoteAccepted: quoteAccepted(currentModel, quote.id),
+          requiredPaymentReceived: true,
+        };
+      }
+
+      const now = new Date().toISOString();
+      const model = applyOrThrow(currentModel, command({
+        type: 'recordPaymentReceived',
+        projectId,
+        actor: { role: 'system', userId: 'system' },
+        now,
+        index: 1,
+        extra: {
+          paymentId: createUuidV7(Date.parse(now) + 40),
+          quoteSnapshotId,
+          amount: quote.result.depositDue,
+        },
+      }));
+      await pushObject({
+        store,
+        ownerUserId,
+        actorDeviceId: request.headers['x-jobdone-device-id'] || null,
+        action: 'updateObject',
+        projectId,
+        baseObjectT: object.changedT,
+        payloadJson: projectPayload(model, 'payment_received', { quoteSnapshotId }),
+        now,
+      });
+
+      return {
+        projectId,
+        status: 'payment_received',
+        projectStatus: deriveProjectStatus(model),
+        quote: currentQuote(model),
+        quoteAccepted: true,
+        requiredPaymentReceived: true,
+      };
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      request.log.error({ err: error }, 'shiny_pay_now_failed');
+      return reply.status(500).send({ error: 'Payment failed' });
     }
   });
 }

@@ -29,7 +29,6 @@ export const shinyArtShopV1 = Object.freeze({
     nextDay: true,
   },
   paymentPolicy: {
-    fullUpfrontBelow: 50,
-    depositPercent: 20,
+    type: 'full_upfront',
   },
 });

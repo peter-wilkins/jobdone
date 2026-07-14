@@ -39,7 +39,7 @@ evaluateQuote(ruleset, input) -> {
   canAutoQuote,
   price,
   priceEstimate,
-  depositDue,
+  depositDue, // MVP: full price due now
   balanceDue,
   paymentPolicy,
   explanation,
@@ -71,7 +71,7 @@ Auto-quote example:
 {
   canAutoQuote: true,
   price: 92,
-  depositDue: 18.40,
+  depositDue: 92,
   explanation: [
     "A4 embossed metal picture: GBP 80",
     "Copper effect: +GBP 10",
@@ -176,11 +176,10 @@ accepted against.
 
 Initial automated policy:
 
-- under GBP 50: full upfront,
-- GBP 50 or more: 20% deposit before work starts, balance before
-  delivery/collection.
+- full payment up front for every automatically quoted order,
+- no production work starts until full payment is received.
 
-Human-reviewed Projects may override this.
+Human-reviewed Projects may override this later if real operations need it.
 
 Post-payment changes before production are a later feature:
 
