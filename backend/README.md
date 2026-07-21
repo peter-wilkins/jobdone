@@ -34,6 +34,9 @@ VOYAGE_API_KEY
 OPENAI_API_KEY
 SHINY_IMAGE_PROVIDER
 SHINY_IMAGE_MODEL
+SHINY_IMAGEMAGICK_SERVICE_URL
+SHINY_IMAGEMAGICK_SERVICE_TOKEN
+SHINY_IMAGEMAGICK_TIMEOUT_MS
 CLOUDFLARE_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN
 SUPABASE_URL
@@ -47,7 +50,8 @@ uploaded image as the design preview while the physical preview style is still
 being worked out. Use `local-emboss-filter` for a fast deterministic embossed
 preview. Use `cloudflare-flux-2-dev` or `cloudflare-sd15-img2img` with
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` to test Workers AI image
-generation.
+generation. Use `google-imagemagick` with `SHINY_IMAGEMAGICK_SERVICE_URL` and
+`SHINY_IMAGEMAGICK_SERVICE_TOKEN` to call the Cloud Run deterministic renderer.
 
 `SUPABASE_URL`/`SUPABASE_KEY` are for Supabase Auth. App data uses direct
 Postgres via `SUPABASE_DB_URL`; it does not require Supabase REST/Data API

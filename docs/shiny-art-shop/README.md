@@ -92,7 +92,8 @@ Behaviour:
 - The MVP default generator is GPT Image 2 through the OpenAI image edit API.
   `SHINY_IMAGE_PROVIDER` can switch the backend to another configured provider.
   Supported values: `openai`, `no-op-preview`, `local-emboss-filter`,
-  `cloudflare-flux-2-dev`, and `cloudflare-sd15-img2img`.
+  `cloudflare-flux-2-dev`, `cloudflare-sd15-img2img`, and
+  `google-imagemagick`.
 - `no-op-preview` returns the uploaded source image as the preview. Use this
   when the next useful product slice is ordering/quoting rather than preview
   style quality.
@@ -103,6 +104,11 @@ Behaviour:
   captures a later Google Cloud Run ImageMagick service spike. Local
   ImageMagick tests looked promising, but should be tuned against real handmade
   output once the workshop has produced reference pieces.
+- The Google Cloud Run ImageMagick renderer is an MVP deterministic preview
+  provider. It should be callable only with a shared bearer token from the
+  JobDone/Shiny backend. The Cloud Run service may allow unauthenticated
+  invocations at the Google layer for Vercel simplicity, but the renderer must
+  reject requests without `Authorization: Bearer <token>`.
 - The prompt treats the source image geometry, silhouette, subject identity, and
   proportions as hard constraints. If prompt-only editing still loses pet
   identity, continue the Flux/structure-lock provider spike.

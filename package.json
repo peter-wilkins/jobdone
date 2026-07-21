@@ -30,7 +30,9 @@
     "water-walk:upsert": "node scripts/upsert-water-walk-dataset.js --target staging",
     "water-walk:upsert:production": "node scripts/upsert-water-walk-dataset.js --target production",
     "auth:emails:dry-run": "node scripts/apply-supabase-auth-email-templates.js",
-    "auth:emails:apply": "node scripts/apply-supabase-auth-email-templates.js --apply"
+    "auth:emails:apply": "node scripts/apply-supabase-auth-email-templates.js --apply",
+    "shiny:imagemagick:test": "npm --prefix services/shiny-imagemagick test",
+    "shiny:imagemagick:deploy": "bash scripts/deploy-shiny-imagemagick.sh"
   },
   "devDependencies": {
     "proj4": "^2.20.9",

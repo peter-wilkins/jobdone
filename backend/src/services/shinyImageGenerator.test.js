@@ -152,6 +152,62 @@ test('Shiny image generator can call fast Cloudflare SD img2img when selected by
   assert.equal(shinyGeneratorVersion(env), 'cloudflare-workers-ai:@cf/runwayml/stable-diffusion-v1-5-img2img:v1');
 });
 
+test('Shiny image generator can call Google ImageMagick renderer when selected by env', async () => {
+  const seen = {};
+  const fetchImpl = async (url, init) => {
+    seen.url = url;
+    seen.auth = init.headers.Authorization;
+    seen.contentType = init.headers['Content-Type'];
+    seen.body = JSON.parse(init.body);
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        provider: 'google-imagemagick',
+        generatorVersion: 'google-imagemagick:v1',
+        mimeType: 'image/png',
+        dataBase64: tinyPngBase64,
+        usage: { inputBytes: 12 },
+      }),
+    };
+  };
+
+  const env = {
+    SHINY_IMAGE_PROVIDER: 'google-imagemagick',
+    SHINY_IMAGEMAGICK_SERVICE_URL: 'https://shiny-imagemagick.example/render',
+    SHINY_IMAGEMAGICK_SERVICE_TOKEN: 'render-token',
+    SHINY_IMAGE_SIZE: '1024x1024',
+  };
+  const result = await generateShinyDesignPreview({
+    sourceImage: {
+      filename: 'dog.png',
+      mimeType: 'image/png',
+      dataBase64: tinyPngBase64,
+    },
+    designDirection: {
+      productType: 'embossed_metal_picture',
+      material: 'copper_effect',
+      finish: 'natural',
+      styleNotes: '',
+    },
+    fetchImpl,
+    env,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.provider, 'google-imagemagick');
+  assert.equal(result.generatorVersion, 'google-imagemagick:v1');
+  assert.equal(result.dataBase64, tinyPngBase64);
+  assert.equal(seen.url, 'https://shiny-imagemagick.example/render');
+  assert.equal(seen.auth, 'Bearer render-token');
+  assert.equal(seen.contentType, 'application/json');
+  assert.equal(seen.body.sourceImage.dataBase64, tinyPngBase64);
+  assert.equal(seen.body.designDirection.material, 'copper_effect');
+  assert.equal(seen.body.size, '1024x1024');
+  assert.equal(shinyGeneratorVersion(env), 'google-imagemagick:v1');
+});
+
 test('Shiny image generator can create a local embossed preview without external API', async () => {
   const env = {
     SHINY_IMAGE_PROVIDER: 'local-emboss-filter',

@@ -6,6 +6,7 @@ import sharp from 'sharp';
 const OPENAI_PROVIDER = 'openai';
 const CLOUDFLARE_FLUX_PROVIDER = 'cloudflare-flux-2-dev';
 const CLOUDFLARE_SD15_IMG2IMG_PROVIDER = 'cloudflare-sd15-img2img';
+const GOOGLE_IMAGEMAGICK_PROVIDER = 'google-imagemagick';
 const LOCAL_EMBOSS_FILTER_PROVIDER = 'local-emboss-filter';
 const NO_OP_PREVIEW_PROVIDER = 'no-op-preview';
 const DEFAULT_PROVIDER = OPENAI_PROVIDER;
@@ -78,6 +79,7 @@ export function shinyGeneratorVersion(env = process.env) {
   const provider = shinyImageProvider(env);
   if (provider === CLOUDFLARE_FLUX_PROVIDER) return `cloudflare-workers-ai:${cloudflareModel(env)}:v1`;
   if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) return `cloudflare-workers-ai:${cloudflareSd15Img2ImgModel(env)}:v1`;
+  if (provider === GOOGLE_IMAGEMAGICK_PROVIDER) return 'google-imagemagick:v1';
   if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) return 'local-emboss-filter:v1';
   if (provider === NO_OP_PREVIEW_PROVIDER) return 'no-op-preview:v1';
   return `openai-image-edit:${openAiModel(env)}:v1`;
@@ -147,6 +149,9 @@ export async function generateShinyDesignPreview({
   }
   if (provider === CLOUDFLARE_SD15_IMG2IMG_PROVIDER) {
     return generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
+  }
+  if (provider === GOOGLE_IMAGEMAGICK_PROVIDER) {
+    return generateGoogleImagemagickPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs });
   }
   if (provider === LOCAL_EMBOSS_FILTER_PROVIDER) {
     return generateLocalEmbossPreview({ sourceImage, designDirection, env });
@@ -370,6 +375,68 @@ async function generateCloudflareSd15Img2ImgPreview({ sourceImage, designDirecti
       mimeType: contentType.includes('image/jpeg') ? 'image/jpeg' : 'image/png',
       dataBase64,
       usage: {},
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCategory: providerErrorCategory(error),
+      message: 'Oops, we had a problem. Try again in a few minutes.',
+      promptText,
+      generatorVersion,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateGoogleImagemagickPreview({ sourceImage, designDirection, fetchImpl, env, timeoutMs }) {
+  const generatorVersion = shinyGeneratorVersion(env);
+  const serviceUrl = env.SHINY_IMAGEMAGICK_SERVICE_URL;
+  const token = env.SHINY_IMAGEMAGICK_SERVICE_TOKEN;
+  const promptText = buildShinyImagePrompt(designDirection);
+  if (!serviceUrl || !token) {
+    return {
+      ok: false,
+      errorCategory: 'provider_not_configured',
+      message: 'Image generator is not configured.',
+      promptText,
+      generatorVersion,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(env.SHINY_IMAGEMAGICK_TIMEOUT_MS || timeoutMs || 30000));
+
+  try {
+    const response = await fetchImpl(serviceUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sourceImage,
+        designDirection,
+        size: env.SHINY_IMAGE_SIZE || DEFAULT_SIZE,
+      }),
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body?.ok === false) {
+      const error = new Error(body?.error || `ImageMagick renderer failed with ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    if (!body.dataBase64) throw new Error('ImageMagick renderer returned no image');
+
+    return {
+      ok: true,
+      provider: 'google-imagemagick',
+      generatorVersion,
+      promptText,
+      mimeType: body.mimeType || 'image/png',
+      dataBase64: body.dataBase64,
+      usage: body.usage || {},
     };
   } catch (error) {
     return {

@@ -46,6 +46,9 @@ deploy_backend() {
   local shiny_image_steps="${JOBDONE_STAGING_SHINY_IMAGE_STEPS:-$(env_file_value "backend/.env" SHINY_IMAGE_STEPS)}"
   local shiny_image_strength="${JOBDONE_STAGING_SHINY_IMAGE_STRENGTH:-$(env_file_value "backend/.env" SHINY_IMAGE_STRENGTH)}"
   local shiny_image_guidance="${JOBDONE_STAGING_SHINY_IMAGE_GUIDANCE:-$(env_file_value "backend/.env" SHINY_IMAGE_GUIDANCE)}"
+  local shiny_imagemagick_url="${JOBDONE_STAGING_SHINY_IMAGEMAGICK_SERVICE_URL:-$(env_file_value "backend/.env" SHINY_IMAGEMAGICK_SERVICE_URL)}"
+  local shiny_imagemagick_token="${JOBDONE_STAGING_SHINY_IMAGEMAGICK_SERVICE_TOKEN:-$(env_file_value "backend/.env" SHINY_IMAGEMAGICK_SERVICE_TOKEN)}"
+  local shiny_imagemagick_timeout="${JOBDONE_STAGING_SHINY_IMAGEMAGICK_TIMEOUT_MS:-$(env_file_value "backend/.env" SHINY_IMAGEMAGICK_TIMEOUT_MS)}"
   local cloudflare_account_id="${JOBDONE_STAGING_CLOUDFLARE_ACCOUNT_ID:-$(env_file_value "backend/.env" CLOUDFLARE_ACCOUNT_ID)}"
   local cloudflare_api_token="${JOBDONE_STAGING_CLOUDFLARE_API_TOKEN:-$(env_file_value "backend/.env" CLOUDFLARE_API_TOKEN)}"
   npx vercel --cwd backend build \
@@ -71,6 +74,9 @@ deploy_backend() {
     -e SHINY_IMAGE_STEPS="$shiny_image_steps" \
     -e SHINY_IMAGE_STRENGTH="$shiny_image_strength" \
     -e SHINY_IMAGE_GUIDANCE="$shiny_image_guidance" \
+    -e SHINY_IMAGEMAGICK_SERVICE_URL="$shiny_imagemagick_url" \
+    -e SHINY_IMAGEMAGICK_SERVICE_TOKEN="$shiny_imagemagick_token" \
+    -e SHINY_IMAGEMAGICK_TIMEOUT_MS="$shiny_imagemagick_timeout" \
     -e CLOUDFLARE_ACCOUNT_ID="$cloudflare_account_id" \
     -e CLOUDFLARE_API_TOKEN="$cloudflare_api_token" \
     2>&1)"

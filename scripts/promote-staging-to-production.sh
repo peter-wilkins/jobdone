@@ -58,6 +58,17 @@ extract_deployment_url() {
 
 deploy_backend() {
   local cors_allowed_origins="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS,https://shiny-art-shop.continuumkit.org,https://jobdone-frontend-production.vercel.app,http://localhost:5173,http://localhost:4173"
+  local shiny_image_provider="${JOBDONE_PROD_SHINY_IMAGE_PROVIDER:-${JOBDONE_STAGING_SHINY_IMAGE_PROVIDER:-}}"
+  local shiny_image_model="${JOBDONE_PROD_SHINY_IMAGE_MODEL:-${JOBDONE_STAGING_SHINY_IMAGE_MODEL:-}}"
+  local shiny_image_size="${JOBDONE_PROD_SHINY_IMAGE_SIZE:-${JOBDONE_STAGING_SHINY_IMAGE_SIZE:-}}"
+  local shiny_image_steps="${JOBDONE_PROD_SHINY_IMAGE_STEPS:-${JOBDONE_STAGING_SHINY_IMAGE_STEPS:-}}"
+  local shiny_image_strength="${JOBDONE_PROD_SHINY_IMAGE_STRENGTH:-${JOBDONE_STAGING_SHINY_IMAGE_STRENGTH:-}}"
+  local shiny_image_guidance="${JOBDONE_PROD_SHINY_IMAGE_GUIDANCE:-${JOBDONE_STAGING_SHINY_IMAGE_GUIDANCE:-}}"
+  local shiny_imagemagick_url="${JOBDONE_PROD_SHINY_IMAGEMAGICK_SERVICE_URL:-${JOBDONE_STAGING_SHINY_IMAGEMAGICK_SERVICE_URL:-}}"
+  local shiny_imagemagick_token="${JOBDONE_PROD_SHINY_IMAGEMAGICK_SERVICE_TOKEN:-${JOBDONE_STAGING_SHINY_IMAGEMAGICK_SERVICE_TOKEN:-}}"
+  local shiny_imagemagick_timeout="${JOBDONE_PROD_SHINY_IMAGEMAGICK_TIMEOUT_MS:-${JOBDONE_STAGING_SHINY_IMAGEMAGICK_TIMEOUT_MS:-}}"
+  local cloudflare_account_id="${JOBDONE_PROD_CLOUDFLARE_ACCOUNT_ID:-${JOBDONE_STAGING_CLOUDFLARE_ACCOUNT_ID:-}}"
+  local cloudflare_api_token="${JOBDONE_PROD_CLOUDFLARE_API_TOKEN:-${JOBDONE_STAGING_CLOUDFLARE_API_TOKEN:-}}"
   npx vercel --cwd backend build \
     --target=production \
     >&2
@@ -74,6 +85,17 @@ deploy_backend() {
     -e LOCAL_REPLICA_SCHEMA="jobdone" \
     -e FRONTEND_URL="https://$FRONTEND_PRODUCTION_PRIMARY_ALIAS" \
     -e CORS_ALLOWED_ORIGINS="$cors_allowed_origins" \
+    -e SHINY_IMAGE_PROVIDER="${shiny_image_provider:-openai}" \
+    -e SHINY_IMAGE_MODEL="$shiny_image_model" \
+    -e SHINY_IMAGE_SIZE="$shiny_image_size" \
+    -e SHINY_IMAGE_STEPS="$shiny_image_steps" \
+    -e SHINY_IMAGE_STRENGTH="$shiny_image_strength" \
+    -e SHINY_IMAGE_GUIDANCE="$shiny_image_guidance" \
+    -e SHINY_IMAGEMAGICK_SERVICE_URL="$shiny_imagemagick_url" \
+    -e SHINY_IMAGEMAGICK_SERVICE_TOKEN="$shiny_imagemagick_token" \
+    -e SHINY_IMAGEMAGICK_TIMEOUT_MS="$shiny_imagemagick_timeout" \
+    -e CLOUDFLARE_ACCOUNT_ID="$cloudflare_account_id" \
+    -e CLOUDFLARE_API_TOKEN="$cloudflare_api_token" \
     2>&1)"
   printf '%s\n' "$output" >&2
   printf '%s\n' "$output" | extract_deployment_url
