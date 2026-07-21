@@ -34,5 +34,5 @@ gcloud run deploy "$SERVICE_NAME" \
   --cpu 1 \
   --timeout 60 \
   --concurrency 4 \
-  --set-env-vars "RENDER_TOKEN=${RENDER_TOKEN},MAX_INPUT_BYTES=12582912,RENDER_TIMEOUT_MS=25000" \
+  --set-env-vars "RENDER_TOKEN=${RENDER_TOKEN},MAGICK_BIN=convert,MAX_INPUT_BYTES=12582912,RENDER_TIMEOUT_MS=25000" \
   --format='value(status.url)'

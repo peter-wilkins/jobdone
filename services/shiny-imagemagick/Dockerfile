@@ -9,4 +9,5 @@ COPY package.json server.js ./
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV MAGICK_BIN=convert
 CMD ["node", "server.js"]

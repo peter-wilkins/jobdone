@@ -86,6 +86,13 @@ export function buildMagickArgs({ inputPath, outputPath, material, size = DEFAUL
   ];
 }
 
+function extensionForMimeType(mimeType = '') {
+  if (mimeType.includes('png')) return 'png';
+  if (mimeType.includes('webp')) return 'webp';
+  if (mimeType.includes('gif')) return 'gif';
+  return 'jpg';
+}
+
 async function readJsonBody(req, maxBytes) {
   const chunks = [];
   let total = 0;
@@ -118,7 +125,7 @@ export async function renderImage({ sourceImage, designDirection = {}, size, env
   }
 
   const dir = await mkdtemp(join(tmpdir(), 'shiny-imagemagick-'));
-  const inputPath = join(dir, 'input');
+  const inputPath = join(dir, `input.${extensionForMimeType(sourceImage.mimeType)}`);
   const outputPath = join(dir, 'output.png');
   try {
     await writeFile(inputPath, inputBytes);
