@@ -45,7 +45,9 @@ RENDER_TOKEN=dev-token npm start
 
 ## Cloud Run
 
-Use the repo script from the root:
+Use the repo script from the root. It builds Docker locally, pushes to Artifact
+Registry, then deploys Cloud Run. This avoids Cloud Build default service
+account IAM drift.
 
 ```bash
 GCP_PROJECT_ID=your-project \
