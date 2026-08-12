@@ -206,12 +206,14 @@ function storageKeysForSite(siteId) {
 }
 
 function emptyDatasetForSite(site) {
+  const seed = site.seedDataset || {};
   return normalizeDataset({
     projectId: site.projectId,
-    sourceNotes: site.sourceNotes || [],
+    sourceNotes: site.sourceNotes || seed.sourceNotes || [],
     candidates: [],
     areas: [],
     unmappedClayRichFields: [],
+    ...seed,
   });
 }
 
@@ -992,11 +994,17 @@ export function WaterWalkScreen({ routeHash, user }) {
       };
     }
 
-    apiService.getWaterWalkCandidates()
+    apiService.getWaterWalkCandidates(site.id)
       .then(payload => {
         if (cancelled) return;
         const loaded = normalizeDataset(payload);
         if (!loaded.candidates.length && !loaded.areas.length) {
+          const fallbackDataset = emptyDatasetForSite(site);
+          if (fallbackDataset.candidates.length || fallbackDataset.areas.length) {
+            saveDataset(fallbackDataset);
+            setImportStatus(`Loaded ${fallbackDataset.candidates.length} starter ${site.label} pins.`);
+            return;
+          }
           setImportStatus('Water Walk returned no pins or areas.');
           return;
         }
@@ -1005,6 +1013,12 @@ export function WaterWalkScreen({ routeHash, user }) {
       })
       .catch(error => {
         if (!cancelled && !cachedDataset.candidates.length && !cachedDataset.areas.length) {
+          const fallbackDataset = emptyDatasetForSite(site);
+          if (fallbackDataset.candidates.length || fallbackDataset.areas.length) {
+            saveDataset(fallbackDataset);
+            setImportStatus(`Loaded ${fallbackDataset.candidates.length} starter ${site.label} pins while cloud data is unavailable.`);
+            return;
+          }
           setImportStatus(error?.message || 'Could not load private Water Walk dataset.');
         }
       });

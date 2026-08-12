@@ -47,29 +47,34 @@ test('normalizeCandidatePayload accepts RegenOS field-style candidate data', () 
 });
 
 test('Water Walk candidates are available to allowed account', async () => {
+  const calls = [];
   const app = buildApp({
-    loadCandidates: async () => ({
-      candidates: [
-        {
-          id: 'candidate-1',
-          title: 'Private candidate',
-          latitude: 50,
-          longitude: -2,
-          priority: 'high',
-          score: 10,
-          whyInteresting: ['test clue'],
-          lookFor: ['wet ground'],
-          evidencePrompt: 'Take photo',
-        },
-      ],
-      areas: [],
-      unmappedClayRichFields: [],
-    }),
+    loadCandidates: async (args = {}) => {
+      calls.push(args);
+      return {
+        candidates: [
+          {
+            id: 'candidate-1',
+            title: 'Private candidate',
+            latitude: 50,
+            longitude: -2,
+            priority: 'high',
+            score: 10,
+            whyInteresting: ['test clue'],
+            lookFor: ['wet ground'],
+            evidencePrompt: 'Take photo',
+          },
+        ],
+        areas: [],
+        unmappedClayRichFields: [],
+      };
+    },
   });
 
-  const response = await app.inject({ method: 'GET', url: '/api/water-walk/candidates' });
+  const response = await app.inject({ method: 'GET', url: '/api/water-walk/candidates?site=tumptonics' });
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().candidates[0].title, 'Private candidate');
+  assert.equal(calls[0].siteId, 'tumptonics');
 });
 
 test('Water Walk candidates are available to Tim by default', async () => {
@@ -96,38 +101,44 @@ test('Water Walk candidates are available to Tim by default', async () => {
 });
 
 test('loadCandidates reads validated dataset from database before local fallback', async () => {
+  const calls = [];
   const payload = await loadCandidates({
     db: {
-      query: async () => ({
-        data: [
-          {
-            payload: {
-              candidates: [
-                {
-                  id: 'db-candidate',
-                  title: 'DB candidate',
-                  latitude: 50,
-                  longitude: -2,
-                  priority: 'high',
-                  score: 8,
-                  whyInteresting: ['database source'],
-                  lookFor: ['ditch'],
-                  evidencePrompt: 'Check database source.',
-                },
-              ],
-              areas: [],
-              unmappedClayRichFields: [],
+      query: async (_sql, params) => {
+        calls.push(params);
+        return {
+          data: [
+            {
+              payload: {
+                candidates: [
+                  {
+                    id: 'db-candidate',
+                    title: 'DB candidate',
+                    latitude: 50,
+                    longitude: -2,
+                    priority: 'high',
+                    score: 8,
+                    whyInteresting: ['database source'],
+                    lookFor: ['ditch'],
+                    evidencePrompt: 'Check database source.',
+                  },
+                ],
+                areas: [],
+                unmappedClayRichFields: [],
+              },
             },
-          },
-        ],
-        error: null,
-      }),
+          ],
+          error: null,
+        };
+      },
     },
     envJson: JSON.stringify({ candidates: [] }),
     filePath: 'missing-private-water-walk.json',
+    siteId: 'tumptonics',
   });
 
   assert.equal(payload.candidates[0].id, 'db-candidate');
+  assert.equal(calls[0][0], 'tumptonics');
 });
 
 test('Water Walk candidates are forbidden for other accounts', async () => {

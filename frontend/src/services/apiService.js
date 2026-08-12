@@ -260,8 +260,11 @@ export class APIService {
     return response.json();
   }
 
-  async getWaterWalkCandidates() {
-    const response = await apiFetch(`${API_BASE_URL}/api/water-walk/candidates`, {
+  async getWaterWalkCandidates(siteId = '') {
+    const params = new URLSearchParams();
+    if (siteId) params.set('site', siteId);
+    const query = params.toString();
+    const response = await apiFetch(`${API_BASE_URL}/api/water-walk/candidates${query ? `?${query}` : ''}`, {
       headers: authHeader(),
     });
     if (!response.ok) await throwApiError(response, 'Water Walk candidates are unavailable');

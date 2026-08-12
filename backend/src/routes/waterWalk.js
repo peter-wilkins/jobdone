@@ -9,6 +9,10 @@ const DEFAULT_CANDIDATES_PATH = 'local/water-walk/dewlish-candidates.json';
 const DEFAULT_FARM_ID = 'dewlish';
 const DEFAULT_DATASET_KIND = 'water_walk';
 const CANDIDATE_THEMES = ['water_restoration', 'soil_doctor', 'syntropic_agroforestry', 'historic_water'];
+const FARM_ID_BY_SITE = {
+  dewlish: 'dewlish',
+  tumptonics: 'tumptonics',
+};
 
 function allowedEmailsFromEnv(value = process.env.JOBDONE_WATER_WALK_ALLOWED_EMAILS) {
   return String(value || '')
@@ -125,12 +129,19 @@ async function loadDatasetFromDb({
   return data?.[0]?.payload ? normalizeCandidatePayload(data[0].payload) : null;
 }
 
+function farmIdForSite(siteId = '') {
+  return FARM_ID_BY_SITE[String(siteId || '').trim().toLowerCase()] || DEFAULT_FARM_ID;
+}
+
 export async function loadCandidates({
   db = jobdoneDb,
   envJson = process.env.JOBDONE_WATER_WALK_CANDIDATES_JSON,
   filePath = process.env.JOBDONE_WATER_WALK_CANDIDATES_PATH,
+  siteId = '',
+  farmId = '',
 } = {}) {
-  const dbPayload = await loadDatasetFromDb({ db });
+  const resolvedFarmId = farmId || (siteId ? farmIdForSite(siteId) : process.env.JOBDONE_WATER_WALK_FARM_ID || DEFAULT_FARM_ID);
+  const dbPayload = await loadDatasetFromDb({ db, farmId: resolvedFarmId });
   if (dbPayload) return dbPayload;
   if (envJson) return normalizeCandidatePayload(JSON.parse(envJson));
   const resolvedPath = resolve(process.cwd(), filePath || DEFAULT_CANDIDATES_PATH);
@@ -154,7 +165,7 @@ export async function registerWaterWalkRoutes(fastify, deps = {}) {
     }
 
     try {
-      const payload = await loader();
+      const payload = await loader({ siteId: request.query?.site || '' });
       return {
         success: true,
         projectId: payload.projectId || 'dewlish-water-walk',

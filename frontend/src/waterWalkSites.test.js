@@ -10,6 +10,13 @@ test('water walk site can be selected from hash query', () => {
   assert.equal(waterWalkSiteFromHash('#water-walk?site=85-dover-road').label, '85 Dover Road');
 });
 
+test('water walk site can open the Tumptonics restoration map', () => {
+  const site = waterWalkSiteFromHash('#water-walk?site=tumptonics');
+  assert.equal(site.label, 'Tumptonics');
+  assert.equal(site.defaultView.latitude, 51.66535);
+  assert.equal(site.seedDataset.candidates.length, 2);
+});
+
 test('water walk site screen keeps the existing water-walk route', () => {
   assert.equal(waterWalkScreenForSite('85-dover-road'), 'water-walk?site=85-dover-road');
 });
