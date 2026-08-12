@@ -55,6 +55,7 @@ const EA_SURFACE_WATER_FLOOD_WMS_URL = 'https://environment.data.gov.uk/geoservi
 const EA_SURFACE_WATER_FLOOD_LAYER = 'rofsw';
 const CONTOUR_LAYER_BY_SITE = {
   dewlish: '/water-walk/dewlish-contours-2m.geojson',
+  tumptonics: '/water-walk/tumptonics-contours-1m.geojson',
 };
 const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
 const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY

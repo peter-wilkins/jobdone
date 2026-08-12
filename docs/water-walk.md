@@ -218,6 +218,21 @@ can change by job. Broad route planning may use 2m contours; a tighter pond,
 check-dam, or dam-wall inspection could regenerate a smaller layer at 1m or
 0.5m intervals.
 
+The first Wales LiDAR slice follows the same generated-layer pattern instead of
+trying to overlay a live Welsh tile service:
+
+- source: DataMapWales LiDAR DTM 1m COG
+- source URL: `https://dmwproductionblob.blob.core.windows.net/cogs/lidar/wales_dtm_16bit_cog.tif`
+- generator: `npm run water-walk:contours:tumptonics`
+- output: `frontend/public/water-walk/tumptonics-contours-1m.geojson`
+- interval: `1m`
+- sample: `2m` raster sampling from the 1m DTM
+- bounds: Tumptonics spring and pond pins plus a local buffer
+
+This avoids a key or paid service and keeps the field map usable today. A future
+live Wales hillshade overlay still needs COG rendering or British National Grid
+tile reprojection before it will line up in the current Leaflet Web Mercator map.
+
 The next LiDAR slice can produce a tighter bounded local layer:
 
 1. Download only the Environment Agency LiDAR DTM tiles that intersect the site

@@ -27,6 +27,7 @@
     "water-walk:import:bgs": "node scripts/import-bgs-water-wells.js",
     "water-walk:import:osm": "node scripts/import-osm-historic-water.js",
     "water-walk:contours": "node scripts/generate-water-walk-contours.js",
+    "water-walk:contours:tumptonics": "node scripts/generate-water-walk-contours.js --source wales-cog --site-id tumptonics --buffer-metres 350 --interval-metres 1 --sample-metres 2",
     "water-walk:upsert": "node scripts/upsert-water-walk-dataset.js --target staging",
     "water-walk:upsert:production": "node scripts/upsert-water-walk-dataset.js --target production",
     "auth:emails:dry-run": "node scripts/apply-supabase-auth-email-templates.js",
@@ -35,6 +36,7 @@
     "shiny:imagemagick:deploy": "bash scripts/deploy-shiny-imagemagick.sh"
   },
   "devDependencies": {
+    "geotiff": "^3.0.5",
     "proj4": "^2.20.9",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
