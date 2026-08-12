@@ -47,6 +47,10 @@ const DEFAULT_OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/c
 const DEFAULT_MAP_VIEW = { latitude: 50.61, longitude: -2.46, zoom: 14 };
 const EA_LIDAR_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/13787b9a-26a4-4775-8523-806d13af58fc/wms';
 const EA_LIDAR_HILLSHADE_LAYER = 'Lidar_Composite_Hillshade_DTM_1m';
+const DEFAULT_LIDAR_LAYER = {
+  kind: 'england_wms',
+  label: 'Environment Agency LiDAR DTM hillshade',
+};
 const EA_SURFACE_WATER_FLOOD_WMS_URL = 'https://environment.data.gov.uk/geoservices/datasets/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e/wms';
 const EA_SURFACE_WATER_FLOOD_LAYER = 'rofsw';
 const CONTOUR_LAYER_BY_SITE = {
@@ -600,6 +604,7 @@ function WaterWalkMap({
   candidates,
   areas,
   observations,
+  lidarLayer,
   showLidarHillshade,
   showContours,
   contourGeoJson,
@@ -652,25 +657,25 @@ function WaterWalkMap({
     const map = mapRef.current;
     if (!map) return;
 
-    if (showLidarHillshade && !lidarLayerRef.current) {
+    if (showLidarHillshade && lidarLayer?.kind === 'england_wms' && !lidarLayerRef.current) {
       lidarLayerRef.current = L.tileLayer.wms(EA_LIDAR_WMS_URL, {
         layers: EA_LIDAR_HILLSHADE_LAYER,
         format: 'image/png',
         transparent: true,
         version: '1.3.0',
         opacity: 0.58,
-        attribution: 'LiDAR hillshade &copy; Environment Agency',
+        attribution: `${lidarLayer.label || 'LiDAR hillshade'} &copy; Environment Agency`,
         crossOrigin: true,
       }).addTo(map);
       bringLayerGroupToFront(overlayLayerRef.current);
       return;
     }
 
-    if (!showLidarHillshade && lidarLayerRef.current) {
+    if ((!showLidarHillshade || lidarLayer?.kind !== 'england_wms') && lidarLayerRef.current) {
       map.removeLayer(lidarLayerRef.current);
       lidarLayerRef.current = null;
     }
-  }, [showLidarHillshade]);
+  }, [lidarLayer, showLidarHillshade]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1296,6 +1301,8 @@ export function WaterWalkScreen({ routeHash, user }) {
 
   const budgetCalculation = useMemo(() => calculateGrantJobBudget(budgetForm), [budgetForm]);
   const selectedBudgetOption = grantJobOptionById(budgetForm.optionId);
+  const lidarLayer = site.lidarLayer || DEFAULT_LIDAR_LAYER;
+  const lidarOverlayUnavailable = showLidarHillshade && lidarLayer.kind !== 'england_wms';
 
   return (
     <div className="water-walk-screen min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
@@ -1341,12 +1348,48 @@ export function WaterWalkScreen({ routeHash, user }) {
                     {contourStatus || 'No contour layer for this site yet.'}
                   </span>
                 )}
+                {lidarOverlayUnavailable && (
+                  <span className="text-[11px] text-amber-700">
+                    {lidarLayer.label} needs a COG/reprojection layer before it can overlay here.
+                  </span>
+                )}
               </div>
+              {lidarLayer.kind === 'wales_public_links' && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-stone-100 pt-2 text-xs text-gray-600">
+                  <span className="font-semibold text-gray-700">{lidarLayer.label}</span>
+                  <a
+                    href={lidarLayer.viewerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-stone-300 bg-white px-2 py-1 font-medium text-gray-800"
+                  >
+                    Open viewer
+                  </a>
+                  <a
+                    href={lidarLayer.downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-stone-300 bg-white px-2 py-1 font-medium text-gray-800"
+                  >
+                    Download tiles
+                  </a>
+                  <a
+                    href={lidarLayer.hillshadeCogUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded border border-stone-300 bg-white px-2 py-1 font-medium text-gray-800"
+                  >
+                    Hillshade COG
+                  </a>
+                  <span className="basis-full text-[11px] text-gray-500">{lidarLayer.notes}</span>
+                </div>
+              )}
             </div>
             <WaterWalkMap
               candidates={candidates}
               areas={areas}
               observations={observations}
+              lidarLayer={lidarLayer}
               showLidarHillshade={showLidarHillshade}
               showContours={showContours}
               contourGeoJson={contourGeoJson}

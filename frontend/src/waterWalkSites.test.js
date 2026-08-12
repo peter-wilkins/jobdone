@@ -15,6 +15,8 @@ test('water walk site can open the Tumptonics restoration map', () => {
   assert.equal(site.label, 'Tumptonics');
   assert.equal(site.defaultView.latitude, 51.66535);
   assert.equal(site.seedDataset.candidates.length, 2);
+  assert.equal(site.lidarLayer.kind, 'wales_public_links');
+  assert.match(site.lidarLayer.hillshadeCogUrl, /wales_hillshade/);
 });
 
 test('water walk site screen keeps the existing water-walk route', () => {

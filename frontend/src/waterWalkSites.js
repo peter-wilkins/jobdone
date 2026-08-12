@@ -16,6 +16,10 @@ export const WATER_WALK_SITES = [
       radiusMetres: 2500,
       notes: 'Use the private farm/site geometry when available, then buffer it for nearby old wells, springs and watercourses.',
     },
+    lidarLayer: {
+      kind: 'england_wms',
+      label: 'Environment Agency LiDAR DTM hillshade',
+    },
   },
   {
     id: '85-dover-road',
@@ -35,6 +39,10 @@ export const WATER_WALK_SITES = [
       notes: 'Home garden test scope. Keep external old-well/spring searches local around the default view or captured GPS anchor.',
     },
     sourceNotes: ['Home garden test site. Coordinates come from captured GPS, not hard-coded address data.'],
+    lidarLayer: {
+      kind: 'england_wms',
+      label: 'Environment Agency LiDAR DTM hillshade',
+    },
   },
   {
     id: 'tumptonics',
@@ -52,6 +60,15 @@ export const WATER_WALK_SITES = [
       mode: 'point_pair_buffer',
       radiusMetres: 1500,
       notes: 'Spring and potential pond site near Usk. Use LiDAR DTM for contours, flow paths, slope and pond siting.',
+    },
+    lidarLayer: {
+      kind: 'wales_public_links',
+      label: 'Wales LiDAR DTM hillshade',
+      viewerUrl: 'https://datamap.gov.wales/maps/lidar-viewer/',
+      downloadUrl: 'https://datamap.gov.wales/maps/lidar-data-download/',
+      hillshadeCogUrl: 'https://dmwproductionblob.blob.core.windows.net/cogs/dtm_1m_wales_hillshade_2020_23_cubic_cog.tif',
+      dtmCogUrl: 'https://dmwproductionblob.blob.core.windows.net/cogs/lidar/wales_dtm_16bit_cog.tif',
+      notes: 'Welsh LiDAR is public OGL data. Browser overlay needs COG rendering or British National Grid tile reprojection; plain Leaflet Web Mercator tiles will not line up.',
     },
     seedDataset: {
       generatedAt: '2026-08-12T00:00:00.000Z',
