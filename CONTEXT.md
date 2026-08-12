@@ -6,6 +6,8 @@ JobDone is the product surface. Teams, Backlogs, Claims, Share Packs, and Approv
 
 For action and intent language, see `docs/DOMAIN_ACTIONS_AND_INTENTS.md`.
 
+For Shiny Art Shop image-recipe language, see `docs/shiny-art-shop/domain.md`.
+
 ## Language
 
 **Capture**:

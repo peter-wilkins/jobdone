@@ -122,6 +122,20 @@ Behaviour:
 
 Customer-facing copy must not mention AI, models, prompts, or provider names.
 
+Image Recipe terminology lives in [`domain.md`](./domain.md).
+
+The internal resumable process shape lives in
+[`project-grinder.md`](./project-grinder.md).
+
+Early 3D/CAD glue-tool research lives in
+[`3d-toolchain-research.md`](./3d-toolchain-research.md).
+
+The first concrete 3D Recipe DSL slice is captured in
+[`ammonite-3d-slice.md`](./ammonite-3d-slice.md).
+
+Recipe DSL implementation principles live in
+[`dsl-principles.md`](./dsl-principles.md).
+
 MVP storage:
 
 - Uploaded and generated preview image bytes live inside the Project payload in
