@@ -9,8 +9,6 @@
       --ink: #1f2933;
       --muted: #56616f;
       --line: #d8dee6;
-      --water: #0f766e;
-      --land: #f4f1e8;
       --warn: #92400e;
     }
     * { box-sizing: border-box; }
@@ -21,97 +19,63 @@
       font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     main {
-      max-width: 900px;
+      max-width: 920px;
       margin: 0 auto;
-      padding: 36px 42px 48px;
+      padding: 32px 40px 46px;
     }
-    h1, h2, h3 { line-height: 1.18; margin: 0; }
-    h1 { font-size: 30px; letter-spacing: 0; }
-    h2 { margin-top: 28px; font-size: 19px; border-top: 1px solid var(--line); padding-top: 18px; }
-    h3 { margin-top: 16px; font-size: 15px; }
+    h1, h2 { line-height: 1.18; margin: 0; }
+    h1 { font-size: 28px; }
+    h2 {
+      margin-top: 24px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+      font-size: 18px;
+    }
     p { margin: 8px 0 0; }
     ul { margin: 8px 0 0 20px; padding: 0; }
     li { margin: 4px 0; }
     a { color: #075985; }
-    .meta {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .summary {
-      margin-top: 24px;
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, 1fr);
-    }
-    .box {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px 14px;
-      background: #fbfcfd;
-    }
-    .box strong { display: block; font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
-    .box span { display: block; margin-top: 4px; font-size: 15px; font-weight: 650; }
-    .callout {
-      margin-top: 18px;
-      border-left: 4px solid var(--water);
-      background: #eefaf7;
-      padding: 12px 14px;
-    }
-    .warning {
-      margin-top: 18px;
-      border-left: 4px solid var(--warn);
-      background: #fff7ed;
-      padding: 12px 14px;
-    }
+    .meta { margin-top: 8px; color: var(--muted); font-size: 13px; }
     .map-card {
-      margin-top: 16px;
+      margin-top: 22px;
+      overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 10px;
-      overflow: hidden;
-      background: var(--land);
+      background: #f4f1e8;
     }
     .map-title {
       padding: 10px 14px;
-      background: #ffffff;
       border-bottom: 1px solid var(--line);
+      background: #ffffff;
       font-weight: 650;
     }
-    svg { display: block; width: 100%; height: auto; background: #f4f1e8; }
+    .map-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
     .legend {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       padding: 10px 14px;
-      background: #ffffff;
       border-top: 1px solid var(--line);
-      font-size: 12px;
+      background: #ffffff;
       color: var(--muted);
+      font-size: 12px;
     }
     .legend span { display: inline-flex; align-items: center; gap: 5px; }
-    .swatch { width: 18px; height: 8px; border-radius: 99px; display: inline-block; }
-    table {
-      width: 100%;
-      margin-top: 10px;
-      border-collapse: collapse;
-      font-size: 13px;
+    .swatch { display: inline-block; width: 18px; height: 8px; border-radius: 99px; }
+    .warning {
+      margin-top: 12px;
+      border-left: 4px solid var(--warn);
+      background: #fff7ed;
+      padding: 12px 14px;
     }
-    th, td {
-      border: 1px solid var(--line);
-      padding: 8px 9px;
-      text-align: left;
-      vertical-align: top;
-    }
-    th { background: #f8fafc; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-    .footer {
-      margin-top: 28px;
-      color: var(--muted);
-      font-size: 12px;
-    }
+    .footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
     @media print {
-      main { padding: 20mm 16mm; }
+      main { padding: 18mm 14mm; }
       a { color: inherit; text-decoration: none; }
-      .summary { break-inside: avoid; }
       .map-card { break-inside: avoid; }
     }
   </style>
@@ -121,136 +85,28 @@
   <h1>Tumptonics Spring Recharge - First Pass Mapping Note</h1>
   <p class="meta">Prepared for discussion and hydrogeologist review. Generated 13 August 2026.</p>
 
-  <div class="callout">
-    <strong>Short answer for the client:</strong>
-    There are ways of investigating whether a recharge feature elsewhere on the land could affect the spring.
-    This first pass uses LiDAR terrain and public groundwater/geology mapping sources to identify a candidate
-    recharge investigation area. It does not prove hydraulic connection.
-  </div>
-
-  <div class="summary">
-    <div class="box">
-      <strong>Spring</strong>
-      <span>51.664158, -2.855463</span>
-    </div>
-    <div class="box">
-      <strong>Potential pond</strong>
-      <span>51.666552, -2.853509</span>
-    </div>
-    <div class="box">
-      <strong>Current confidence</strong>
-      <span>Screening only</span>
-    </div>
-  </div>
-
-  <h2>What the mapping can tell us now</h2>
-  <p>
-    The LiDAR DTM can show slope, local hollows, drainage lines and likely surface-water movement.
-    Those features help choose where to inspect for wet ground, springs, seepage, drains, clay layers,
-    permeable bands or other evidence that water is moving toward the spring.
-  </p>
-  <p>
-    Groundwater recharge is more complex than surface flow. A recharge area may sit upslope of the spring,
-    but its shape depends on geology, superficial deposits, fractures, permeability, drainage, field drains
-    and local water levels. This map should therefore be treated as a fieldwork guide and hypothesis, not as
-    a final catchment boundary.
-  </p>
-
   <div class="map-card">
-    <div class="map-title">Conceptual first-pass map</div>
-    <svg viewBox="0 0 900 520" role="img" aria-label="Conceptual Tumptonics spring recharge map">
-      <defs>
-        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#0f766e"></path>
-        </marker>
-      </defs>
-      <rect x="0" y="0" width="900" height="520" fill="#f4f1e8"></rect>
-      <path d="M60 96 C180 72 305 94 430 76 C575 55 703 72 840 42" fill="none" stroke="#c8bda8" stroke-width="2"></path>
-      <path d="M45 154 C180 132 312 154 454 132 C608 109 710 132 858 96" fill="none" stroke="#c8bda8" stroke-width="2"></path>
-      <path d="M40 214 C174 190 325 219 476 192 C620 168 731 190 870 150" fill="none" stroke="#c8bda8" stroke-width="2"></path>
-      <path d="M40 278 C170 254 338 283 491 255 C633 229 746 251 862 216" fill="none" stroke="#b9ad98" stroke-width="2.5"></path>
-      <path d="M56 342 C178 318 338 348 502 318 C656 289 748 314 842 277" fill="none" stroke="#c8bda8" stroke-width="2"></path>
-      <path d="M72 405 C185 384 339 407 494 385 C636 365 730 382 824 351" fill="none" stroke="#c8bda8" stroke-width="2"></path>
-
-      <path d="M170 78 C242 98 310 132 374 174 C429 210 466 250 505 298 C542 345 587 386 642 428 L520 455 C466 411 421 367 382 312 C346 261 305 221 253 188 C200 154 147 137 94 128 Z"
-            fill="#bfdbfe" opacity="0.48" stroke="#2563eb" stroke-width="2" stroke-dasharray="8 5"></path>
-      <text x="132" y="118" fill="#1e3a8a" font-size="16" font-weight="700">Candidate recharge investigation area</text>
-      <text x="132" y="139" fill="#1e3a8a" font-size="12">To be checked against geology, aquifer mapping and field evidence</text>
-
-      <path d="M330 145 C378 199 420 245 462 297 C491 334 524 367 560 397" fill="none" stroke="#0f766e" stroke-width="4" marker-end="url(#arrow)"></path>
-      <path d="M460 185 C492 232 518 273 540 326" fill="none" stroke="#0f766e" stroke-width="3" opacity=".8" marker-end="url(#arrow)"></path>
-      <path d="M215 160 C286 197 346 250 400 326" fill="none" stroke="#0f766e" stroke-width="3" opacity=".8" marker-end="url(#arrow)"></path>
-
-      <circle cx="586" cy="408" r="10" fill="#0f766e"></circle>
-      <text x="603" y="412" fill="#064e3b" font-size="16" font-weight="700">Spring</text>
-      <circle cx="720" cy="196" r="10" fill="#7c2d12"></circle>
-      <text x="737" y="200" fill="#7c2d12" font-size="16" font-weight="700">Potential pond site</text>
-
-      <path d="M675 215 C630 269 611 326 594 391" fill="none" stroke="#7c2d12" stroke-width="3" stroke-dasharray="7 6"></path>
-      <text x="622" y="260" fill="#7c2d12" font-size="12">field inspection link</text>
-    </svg>
+    <div class="map-title">LiDAR contour map around the spring</div>
+    <img src="assets/tumptonics-groundwater-map.svg" alt="Tumptonics LiDAR contour map around the spring and potential pond site">
     <div class="legend">
-      <span><i class="swatch" style="background:#bfdbfe"></i>candidate recharge investigation area</span>
-      <span><i class="swatch" style="background:#0f766e"></i>inferred downslope / flow-check direction</span>
-      <span><i class="swatch" style="background:#c8bda8"></i>LiDAR contour context</span>
+      <span><i class="swatch" style="background:#bfdbfe"></i>desk-study recharge investigation area</span>
+      <span><i class="swatch" style="background:#0f766e"></i>spring / inferred topographic flow checks</span>
+      <span><i class="swatch" style="background:#7c2d12"></i>potential pond site</span>
+      <span><i class="swatch" style="background:#69513a"></i>LiDAR DTM contours</span>
     </div>
   </div>
 
-  <h2>Mapping layers to use next</h2>
-  <table>
-    <thead>
-      <tr><th>Layer</th><th>Use</th><th>Public source</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>LiDAR DTM contours</td>
-        <td>Read local slope, hollows and possible drainage pathways around the spring.</td>
-        <td>DataMapWales LiDAR DTM COG</td>
-      </tr>
-      <tr>
-        <td>Bedrock and superficial geology</td>
-        <td>Check whether permeable formations, faults or superficial deposits could route groundwater to the spring.</td>
-        <td>British Geological Survey WMS / GeoIndex</td>
-      </tr>
-      <tr>
-        <td>Aquifer designation</td>
-        <td>Screen whether the site sits on productive or low-productivity aquifer units.</td>
-        <td>EA / NRW / BGS aquifer designation dataset</td>
-      </tr>
-      <tr>
-        <td>Groundwater vulnerability</td>
-        <td>Screen whether recharge pathways are likely to be rapid or protected by low-permeability cover.</td>
-        <td>Natural Resources Wales groundwater vulnerability mapping</td>
-      </tr>
-      <tr>
-        <td>Source Protection Zones</td>
-        <td>Check whether there are known public drinking-water groundwater abstractions nearby.</td>
-        <td>Natural Resources Wales / DataMapWales SPZ layer</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2>Suggested field checks</h2>
-  <ul>
-    <li>Walk the candidate upslope area after rainfall and photograph wet flushes, drains, seepage lines and any iron staining.</li>
-    <li>Check whether water appears at the spring soon after rainfall, or whether the response is delayed.</li>
-    <li>Look for field drains, old ditches, pipe outlets, clay/sand boundaries and visible changes in vegetation.</li>
-    <li>If the question becomes material to design or liability, ask a hydrogeologist to review the geology and consider monitoring or tracer testing.</li>
-  </ul>
-
-  <h2>Careful wording for the client</h2>
-  <p>
-    A recharge feature may be able to influence the spring, but we should not claim that from desk study alone.
-    The sensible next step is to map the likely recharge investigation area using LiDAR, geology and groundwater
-    datasets, then use field observations to decide whether more formal hydrogeological work is justified.
-  </p>
-
+  <h2>Limitations</h2>
   <div class="warning">
-    <strong>Limitations:</strong>
     This first pass is based on public mapping and local terrain analysis. It is suitable for scoping,
     discussion and planning field observations. It is not a substitute for a hydrogeological assessment,
     groundwater monitoring, abstraction data review, or tracer testing.
   </div>
+  <p>
+    The recharge investigation area on the map is a topographic hypothesis only. It should be checked
+    against bedrock geology, superficial deposits, aquifer designation, groundwater vulnerability mapping
+    and field evidence before being described as a spring catchment.
+  </p>
 
   <h2>Source links</h2>
   <ul>
@@ -263,7 +119,8 @@
   </ul>
 
   <p class="footer">
-    Prepared as a first-pass screening note. Coordinates are WGS84 latitude/longitude. Map diagram is conceptual and should be checked against the live JobDone map and source datasets.
+    Coordinates: spring 51.664158, -2.855463; potential pond site 51.666552, -2.853509.
+    LiDAR source: DataMapWales public 1m DTM COG. Static map generated from the JobDone Tumptonics contour layer.
   </p>
 </main>
 </body>
