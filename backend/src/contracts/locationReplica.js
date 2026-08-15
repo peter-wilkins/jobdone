@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   buildLocationReplicaSchemas,
   createLocationReplicaParsers,
-} from '../../../shared/contracts/locationReplica.js';
+} from '../shared/contracts/locationReplica.js';
 
 export const locationReplicaSchemas = buildLocationReplicaSchemas(z);
 export const {

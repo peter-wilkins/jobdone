@@ -6,7 +6,7 @@ import {
   parseEntryRow,
   parseLocationRow,
 } from '../contracts/databaseRows.js';
-import { createUuidV7, isUuidV7 } from '../../../shared/contracts/clientId.js';
+import { createUuidV7, isUuidV7 } from '../shared/contracts/clientId.js';
 
 const LAB_SUPABASE_URL = 'https://dtwuflwgcwxygjgkvzfl.supabase.co';
 const LAB_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Pz0DTPNoldMvAf4aaQ8Fkw_UeH_Cq0Q';

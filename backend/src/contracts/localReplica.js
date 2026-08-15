@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { buildLocalReplicaSchemas, createLocalReplicaParsers } from '../../../shared/contracts/localReplica.js';
+import { buildLocalReplicaSchemas, createLocalReplicaParsers } from '../shared/contracts/localReplica.js';
 
 export const localReplicaSchemas = buildLocalReplicaSchemas(z);
 

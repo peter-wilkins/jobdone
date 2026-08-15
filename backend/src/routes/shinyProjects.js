@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createUuidV7 } from '../../../shared/contracts/clientId.js';
+import { createUuidV7 } from '../shared/contracts/clientId.js';
 import {
   DesignDirectionSchema,
   QuoteInputSchema,
@@ -12,7 +12,7 @@ import {
   requiredPaymentReceived,
   sellableShinyDesignOptions,
   shinyDesignOptions,
-} from '../../../shared/shiny-project/index.js';
+} from '../shared/shiny-project/index.js';
 import { createLocalReplicaStore } from '../services/localReplicaStore.js';
 import {
   generateShinyDesignPreview,

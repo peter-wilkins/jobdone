@@ -5,7 +5,7 @@ import {
   invalidLocalReplicaCases,
   localReplicaSeeds,
   validLocalReplicaCase,
-} from '../../../shared/contracts/localReplicaGenerators.js';
+} from '../shared/contracts/localReplicaGenerators.js';
 import {
   parsePullRequest,
   parsePullResponse,
