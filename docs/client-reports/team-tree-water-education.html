@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Leaves United - How Plants Help Water Score</title>
+  <title>Rooted FC - How Trees Help Rainwater Score</title>
   <style>
     :root {
       --ink: #1f2933;
@@ -28,7 +28,7 @@
       background: #fff;
     }
     h1, h2 { margin: 0; line-height: 1.12; }
-    h1 { font-size: 36px; color: #14532d; }
+    h1 { font-size: 34px; color: #14532d; }
     h2 { margin-top: 16px; font-size: 20px; color: #184e35; }
     p { margin: 7px 0 0; }
     .lede {
@@ -122,15 +122,42 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .bottom-grid .manager,
+    .bottom-grid .activity {
+      margin-top: 0;
+    }
     @media print {
+      @page { size: Letter; margin: 0; }
       body { background: #fff; }
-      main { padding: 6mm 10mm; }
-      h1 { font-size: 28px; }
+      body, main { width: 100%; }
+      main { height: 100vh; overflow: hidden; padding: 4mm 7mm; }
+      h1 { font-size: 24px; }
+      h2 { font-size: 15px; }
+      p { margin-top: 4px; }
+      .scoreboard { gap: 7px; margin-top: 7px; }
+      .score { padding: 7px 8px; font-size: 12px; }
+      .score strong { font-size: 11px; margin-bottom: 2px; }
+      .team { gap: 6px; margin-top: 6px; }
+      .card { padding: 7px 8px; border-radius: 7px; }
+      .card h3 { font-size: 13px; }
+      .card p { font-size: 10.8px; line-height: 1.3; }
+      .manager, .activity { padding: 7px 8px; border-radius: 7px; }
+      .manager p, .activity p, .activity li { font-size: 11px; line-height: 1.28; }
+      ul { margin-top: 4px; margin-left: 14px; }
+      li { margin: 1px 0; }
       .hero, .scoreboard, .team, .manager, .activity, .chant { break-inside: avoid; }
-      .hero img { max-height: 260px; object-fit: contain; }
-      h2 { margin-top: 12px; }
-      .card p { font-size: 12.5px; }
-      .footer { margin-top: 10px; }
+      .hero { margin-top: 7px; border-radius: 8px; }
+      .hero img { max-height: 185px; object-fit: contain; }
+      h2 { margin-top: 8px; }
+      .bottom-grid { gap: 7px; margin-top: 7px; }
+      .chant { margin-top: 7px; padding: 8px; font-size: 15px; border-radius: 8px; }
+      .footer { display: none; }
     }
     @media (max-width: 760px) {
       main { padding: 22px 18px 34px; }
@@ -141,7 +168,7 @@
 </head>
 <body>
 <main>
-  <h1>Leaves United</h1>
+  <h1>Rooted FC: How Trees Help Rainwater Score</h1>
 
   <div class="hero">
     <img src="assets/team-tree-football-water.png" alt="A tree on a football pitch helping rainwater footballs soak into soil while a manager watches">
@@ -186,24 +213,25 @@
     </div>
   </div>
 
-  <div class="manager">
-    <h2>Humans Are the Manager</h2>
-    <p>
-      The manager cannot kick every ball. Their job is to choose the team shape:
-      where to plant, where to protect young trees, where to keep animals off while roots grow,
-      and where to watch what happens after rain.
-    </p>
-  </div>
+  <div class="bottom-grid">
+    <div class="manager">
+      <h2>Humans Are the Manager</h2>
+      <p>
+        The manager chooses the team shape: where to plant, where to protect young trees,
+        where to keep animals off while roots grow, and where to watch what happens after rain.
+      </p>
+    </div>
 
-  <div class="activity">
-    <h2>Field Challenge</h2>
-    <p>Stand on a slope after rain and ask:</p>
-    <ul>
-      <li>Where is water running away fastest?</li>
-      <li>Where is the ground bare, hard or compacted?</li>
-      <li>Where are trees, roots or rough grass already slowing water down?</li>
-      <li>Where would you put your next defender?</li>
-    </ul>
+    <div class="activity">
+      <h2>Field Challenge</h2>
+      <p>Stand on a slope after rain and ask:</p>
+      <ul>
+        <li>Where is water running away fastest?</li>
+        <li>Where is the ground bare, hard or compacted?</li>
+        <li>Where are roots already slowing water down?</li>
+        <li>Where would you put your next defender?</li>
+      </ul>
+    </div>
   </div>
 
   <div class="chant">
