@@ -8,6 +8,12 @@ shelterbelt could increase water held or infiltrated on site.
 The MVP is a screening and discussion tool. It does not claim measured spring
 recharge or prove hydraulic connection to a spring.
 
+See also:
+
+- [Spring Catchment Spike](spring-catchment-spike.md) for the spring-first
+  workflow: research springs, find the spring, estimate the catchment, field
+  check it, then report regeneration potential.
+
 ## First Feature Type
 
 Model only one feature type first:
