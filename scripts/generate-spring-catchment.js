@@ -51,6 +51,13 @@ function bngToWgs84({ easting, northing }) {
   return { lat, lon };
 }
 
+function wgs84ToImagePoint({ lat, lon }, bounds, imageSize) {
+  const { easting, northing } = wgs84ToBng({ lat, lon });
+  const x = ((easting - bounds.minE) / (bounds.maxE - bounds.minE)) * imageSize.width;
+  const y = ((bounds.maxN - northing) / (bounds.maxN - bounds.minN)) * imageSize.height;
+  return { x, y };
+}
+
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
@@ -122,9 +129,104 @@ function pointFeature({ lat, lon }, properties) {
   };
 }
 
+function geometryToSvgPath(geometry, bounds, imageSize) {
+  if (geometry.type === 'Polygon') {
+    return geometry.coordinates
+      .map(ring => ring.map(([lon, lat], index) => {
+        const point = wgs84ToImagePoint({ lat, lon }, bounds, imageSize);
+        return `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      }).join(' ') + ' Z')
+      .join(' ');
+  }
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates
+      .flatMap(polygon => polygon.map(ring => ring.map(([lon, lat], index) => {
+        const point = wgs84ToImagePoint({ lat, lon }, bounds, imageSize);
+        return `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      }).join(' ') + ' Z'))
+      .join(' ');
+  }
+  return '';
+}
+
 async function writeJson(path, value) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function writePreviewHtml(path, {
+  bounds,
+  imageSize,
+  flowImageName,
+  boundaryGeoJson,
+  catchmentGeoJson,
+  spring,
+  snappedOutlet,
+  qa,
+}) {
+  const boundaryPaths = boundaryGeoJson.features
+    .map(feature => geometryToSvgPath(feature.geometry, bounds, imageSize))
+    .filter(Boolean);
+  const catchmentPaths = catchmentGeoJson.features
+    .map(feature => geometryToSvgPath(feature.geometry, bounds, imageSize))
+    .filter(Boolean);
+  const springPoint = wgs84ToImagePoint(spring, bounds, imageSize);
+  const snappedPoint = {
+    x: ((snappedOutlet.easting - bounds.minE) / (bounds.maxE - bounds.minE)) * imageSize.width,
+    y: ((bounds.maxN - snappedOutlet.northing) / (bounds.maxN - bounds.minN)) * imageSize.height,
+  };
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tumptonics Spring Catchment Preview</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f6f4ef; color: #17202a; }
+    main { max-width: 980px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    .map { position: relative; width: min(100%, ${imageSize.width}px); border: 1px solid #9ca3af; background: #fff; }
+    .map img, .map svg { display: block; width: 100%; height: auto; }
+    .map svg { position: absolute; inset: 0; }
+    .qa { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 14px; }
+    .qa div { background: #fff; border: 1px solid #ddd7cc; padding: 10px; border-radius: 6px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0 14px; font-size: 13px; }
+    .swatch { display: inline-block; width: 13px; height: 13px; margin-right: 5px; vertical-align: -2px; border-radius: 50%; }
+    code { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Tumptonics spring catchment preview</h1>
+    <div class="legend">
+      <span><i class="swatch" style="background:#2563eb"></i>mapped runoff concentration</span>
+      <span><i class="swatch" style="background:#16a34a"></i>workable boundary</span>
+      <span><i class="swatch" style="background:#facc15"></i>DEM catchment</span>
+      <span><i class="swatch" style="background:#dc2626"></i>spring</span>
+      <span><i class="swatch" style="background:#7c3aed"></i>snapped outlet</span>
+    </div>
+    <div class="map">
+      <img src="${flowImageName}" alt="Mapped runoff concentration from GRASS flow accumulation">
+      <svg viewBox="0 0 ${imageSize.width} ${imageSize.height}" role="img" aria-label="Boundary and spring overlays">
+        ${catchmentPaths.map(pathData => `<path d="${pathData}" fill="rgba(250,204,21,0.22)" stroke="#ca8a04" stroke-width="3" vector-effect="non-scaling-stroke"></path>`).join('\n        ')}
+        ${boundaryPaths.map(pathData => `<path d="${pathData}" fill="none" stroke="#16a34a" stroke-width="3" stroke-dasharray="8 5" vector-effect="non-scaling-stroke"></path>`).join('\n        ')}
+        <circle cx="${springPoint.x.toFixed(1)}" cy="${springPoint.y.toFixed(1)}" r="7" fill="#dc2626" stroke="#fff" stroke-width="2"></circle>
+        <circle cx="${snappedPoint.x.toFixed(1)}" cy="${snappedPoint.y.toFixed(1)}" r="6" fill="#7c3aed" stroke="#fff" stroke-width="2"></circle>
+        <line x1="${springPoint.x.toFixed(1)}" y1="${springPoint.y.toFixed(1)}" x2="${snappedPoint.x.toFixed(1)}" y2="${snappedPoint.y.toFixed(1)}" stroke="#7c3aed" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></line>
+      </svg>
+    </div>
+    <section class="qa">
+      <div><strong>DEM</strong><br>${qa.stats.dem.min}m to ${qa.stats.dem.max}m</div>
+      <div><strong>Catchment</strong><br>${qa.stats.catchment.sum} cells, ${((qa.stats.catchment.sum * qa.resolutionMetres * qa.resolutionMetres) / 10000).toFixed(2)} ha</div>
+      <div><strong>Snap</strong><br>${qa.snappedOutlet.snappedCell.distanceMetres.toFixed(1)}m from supplied spring</div>
+      <div><strong>Resolution</strong><br>${qa.resolutionMetres}m cells</div>
+    </section>
+    <p><code>${qa.outputs.flowAccumulationPng}</code></p>
+  </main>
+</body>
+</html>
+`;
+  await writeFile(path, html);
 }
 
 function cogWindowForBngBounds(image, bounds) {
@@ -301,6 +403,7 @@ async function main() {
   const snappedOutletMetaPath = resolve(outputDir, 'snapped-outlet.json');
   const snapHelperPath = resolve(outputDir, 'snap-outlet.py');
   const metaPath = resolve(outputDir, 'qa.json');
+  const previewPath = resolve(outputDir, 'preview.html');
 
   const demGrid = await readCogGrid({ cogUrl, bounds, resolutionMetres });
   await writeAsciiGrid(demPath, demGrid);
@@ -372,6 +475,7 @@ async function main() {
       kind: 'springOutlet',
     })],
   };
+  const catchmentGeoJson = await readJson(catchmentVectorPath);
   const qa = {
     siteId,
     engine,
@@ -398,6 +502,7 @@ async function main() {
       catchmentRawVector: catchmentRawVectorPath,
       flowAccumulationRaster: accumulationTifPath,
       flowAccumulationPng: accumulationPngPath,
+      previewHtml: previewPath,
     },
     stats: {
       dem: demStats,
@@ -408,6 +513,16 @@ async function main() {
   await writeJson(resolve(outputDir, 'dem-window.geojson'), demWindowFeatureCollection);
   await writeJson(resolve(outputDir, 'spring.geojson'), springFeatureCollection);
   await writeJson(metaPath, qa);
+  await writePreviewHtml(previewPath, {
+    bounds: demGrid.bounds,
+    imageSize: { width: demGrid.width, height: demGrid.height },
+    flowImageName: 'flow-accumulation.png',
+    boundaryGeoJson: boundary,
+    catchmentGeoJson,
+    spring,
+    snappedOutlet: snappedOutletMeta.snappedCell,
+    qa,
+  });
   console.log(JSON.stringify({
     siteId,
     engine,
@@ -419,6 +534,7 @@ async function main() {
     catchmentAreaHa: Number(((catchmentStats.sum || 0) * resolutionMetres * resolutionMetres / 10000).toFixed(4)),
     snappedOutlet: snappedOutletMeta.snappedCell,
     springBng: qa.springBng,
+    previewHtml: previewPath,
   }, null, 2));
 }
 

@@ -267,6 +267,7 @@ local/water-walk/tumptonics/spring-catchment-2m/dem-window.asc
 local/water-walk/tumptonics/spring-catchment-2m/dem-window.geojson
 local/water-walk/tumptonics/spring-catchment-2m/flow-accumulation.png
 local/water-walk/tumptonics/spring-catchment-2m/flow-accumulation.tif
+local/water-walk/tumptonics/spring-catchment-2m/preview.html
 local/water-walk/tumptonics/spring-catchment-2m/qa.json
 local/water-walk/tumptonics/spring-catchment-2m/snapped-outlet.json
 ```
@@ -300,6 +301,8 @@ First local GRASS proof on the guessed Tumptonics boundary:
 - flow accumulation max: 85,438 cells
 - snapped outlet: 39.1 m from supplied spring coordinate
 - topographic catchment to snapped outlet: 5,638 cells, about 2.26 ha
+- local preview:
+  `local/water-walk/tumptonics/spring-catchment-2m/preview.html`
 
 This proves the tooling loop, not the field truth. The snapped outlet distance is
 large enough that the spring position and local flow path should be checked in
@@ -318,6 +321,25 @@ The phone UI can stay simple:
 5. Tap **Field Test Plan**.
 6. Record observations and infiltration tests.
 7. Tap **Draft Report**.
+
+Marker entry should stay generic:
+
+1. User taps the map to add a marker.
+2. App opens a small picker for what the marker means.
+3. First marker types:
+   - spring / outlet point
+   - workable boundary corner
+   - boundary observation
+   - wet flush
+   - drain / pipe
+   - mapped flow path check
+   - infiltration-ring test site
+4. Each marker type can ask only the extra fields it needs.
+
+Later guided mode can use the mapped runoff concentration and relevant boundary
+to suggest likely test locations, for example: "test infiltration here", "walk
+this flow path", or "check whether this line is a drain, hollow or false DEM
+artefact".
 
 ## Map Display Rule
 
