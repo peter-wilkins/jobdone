@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team Tree - How Plants Help Water Score</title>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #52606d;
+      --grass: #1f7a4d;
+      --leaf: #eefaf2;
+      --line: #d9e2ec;
+      --soil: #fff8ed;
+      --water: #e8f3ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #f6fbf7;
+      font: 16px/1.48 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 28px 36px 44px;
+      background: #fff;
+    }
+    h1, h2 { margin: 0; line-height: 1.12; }
+    h1 { font-size: 38px; color: #14532d; }
+    h2 { margin-top: 22px; font-size: 22px; color: #184e35; }
+    p { margin: 9px 0 0; }
+    .lede {
+      margin-top: 12px;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .hero {
+      margin-top: 20px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--water);
+    }
+    .hero img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .score {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: var(--leaf);
+    }
+    .score.bad { background: #fff1f2; }
+    .score strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #0f5132;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .score.bad strong { color: #9f1239; }
+    .team {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 13px 14px;
+      background: #ffffff;
+    }
+    .card h3 {
+      margin: 0;
+      color: var(--grass);
+      font-size: 17px;
+    }
+    .card p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .manager {
+      margin-top: 18px;
+      border-left: 5px solid #2563eb;
+      background: #eff6ff;
+      padding: 14px 16px;
+    }
+    .activity {
+      margin-top: 18px;
+      border: 1px solid #fed7aa;
+      border-radius: 10px;
+      background: var(--soil);
+      padding: 14px 16px;
+    }
+    ul { margin: 8px 0 0 20px; padding: 0; }
+    li { margin: 5px 0; }
+    .chant {
+      margin-top: 20px;
+      border-radius: 12px;
+      background: #14532d;
+      color: #ecfdf5;
+      padding: 18px;
+      font-size: 24px;
+      font-weight: 750;
+      text-align: center;
+    }
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media print {
+      body { background: #fff; }
+      main { padding: 8mm 11mm; }
+      h1 { font-size: 30px; }
+      .lede { font-size: 16px; }
+      .hero, .scoreboard, .team, .manager, .activity, .chant { break-inside: avoid; }
+      .hero img { max-height: 285px; object-fit: contain; }
+      .card p { font-size: 13px; }
+    }
+    @media (max-width: 760px) {
+      main { padding: 22px 18px 34px; }
+      h1 { font-size: 32px; }
+      .scoreboard, .team { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Team Tree</h1>
+  <p class="lede">
+    A football story for understanding how plants help rainwater soak into the ground
+    instead of racing away downhill.
+  </p>
+
+  <div class="hero">
+    <img src="assets/team-tree-football-water.png" alt="A tree on a football pitch helping rainwater footballs soak into soil while a manager watches">
+  </div>
+
+  <div class="scoreboard">
+    <div class="score">
+      <strong>The aim</strong>
+      Get the rain into the ground, where it can feed soil, plants, streams and springs later.
+    </div>
+    <div class="score bad">
+      <strong>The danger</strong>
+      On bare compacted ground, rain runs off the pitch before it gets a chance to score.
+    </div>
+  </div>
+
+  <h2>The Team</h2>
+  <div class="team">
+    <div class="card">
+      <h3>Leaves defend</h3>
+      <p>Leaves and branches slow the rain, soften the impact, and stop soil being smashed by hard drops.</p>
+    </div>
+    <div class="card">
+      <h3>Stems control midfield</h3>
+      <p>Stems and trunks guide water down more calmly, turning a fast attack into controlled play.</p>
+    </div>
+    <div class="card">
+      <h3>Roots attack</h3>
+      <p>Roots make channels and spaces in the soil. They create the chances for water to score underground.</p>
+    </div>
+    <div class="card">
+      <h3>Soil life coaches</h3>
+      <p>Worms, fungi, insects and microbes build better soil structure. They help the whole team perform.</p>
+    </div>
+    <div class="card">
+      <h3>Healthy soil is the goal</h3>
+      <p>The goal is water soaking in, not running away. A good soil goal holds water and releases it slowly.</p>
+    </div>
+    <div class="card">
+      <h3>Bare ground loses possession</h3>
+      <p>Compacted bare ground has no defence. Water runs fast, takes soil with it, and leaves the field.</p>
+    </div>
+  </div>
+
+  <div class="manager">
+    <h2>Humans Are the Manager</h2>
+    <p>
+      The manager cannot kick every ball. Their job is to choose the team shape:
+      where to plant, where to protect young trees, where to keep animals off while roots grow,
+      and where to watch what happens after rain.
+    </p>
+  </div>
+
+  <div class="activity">
+    <h2>Field Challenge</h2>
+    <p>Stand on a slope after rain and ask:</p>
+    <ul>
+      <li>Where is water running away fastest?</li>
+      <li>Where is the ground bare, hard or compacted?</li>
+      <li>Where are trees, roots or rough grass already slowing water down?</li>
+      <li>Where would you put your next defender?</li>
+    </ul>
+  </div>
+
+  <div class="chant">
+    Rain is the ball. Leaves defend. Roots attack. Soil is the goal. Humans manage the team.
+  </div>
+
+  <p class="footer">
+    Prepared as a simple water-education handout for the Tump Farm spring recharge discussion.
+  </p>
+</main>
+</body>
+</html>
