@@ -87,6 +87,88 @@ interactive and small enough to use in a field.
 
 ## Tooling Options
 
+## Boundary Acquisition
+
+There does not appear to be a clean public API that returns "the farm boundary"
+from a farm name or spring coordinate.
+
+Practical options:
+
+1. **Rural Payments Wales shapefile export**
+   - Best likely source for the real farm/field parcels.
+   - Requires the landowner or authorised agent to log in to RPW Online.
+   - RPW's interactive map can export shapefiles for the holding/land parcels.
+   - Use this when the client can provide access or an export.
+
+2. **HM Land Registry INSPIRE Index Polygons**
+   - Public England/Wales freehold title polygons.
+   - Useful for an indicative land-title boundary near the coordinate.
+   - Not guaranteed to equal the working farm boundary.
+   - Split by local authority and served/downloaded as GML, with WMS available
+     for display.
+
+3. **Manual draw/import**
+   - Fastest MVP path.
+   - User draws the available-work area on the phone or imports a GeoJSON/KML.
+   - Later replace it with RPW or Land Registry-derived geometry when available.
+
+The calculation should accept `--boundary` as optional. Without it, report the
+full topographic catchment only and clearly say that the actionable on-farm area
+is unknown.
+
+## Service Architecture
+
+Use the same pattern as the Shiny Art Shop image service:
+
+- phone/browser UI stays simple JavaScript
+- a local analysis service runs heavyweight open-source tools on this Linux
+  laptop during the spike
+- the UI calls the service over HTTP and receives GeoJSON/PNG/SVG outputs
+- no deploy is needed for fast iteration while we are in the field/research loop
+- later, wrap the same service in Docker and run it in the cloud if useful
+
+The service contract should be boring:
+
+```http
+POST /spring-catchment
+Content-Type: application/json
+```
+
+```json
+{
+  "spring": { "lat": 51.664158, "lon": -2.855463 },
+  "radiusM": 750,
+  "boundaryGeoJson": null,
+  "demSource": "wales-lidar-cog"
+}
+```
+
+Response:
+
+```json
+{
+  "catchmentGeoJson": {},
+  "availableCatchmentGeoJson": null,
+  "springBufferGeoJson": {},
+  "previewSvgUrl": "/runs/abc123/catchment-preview.svg",
+  "qa": {
+    "catchmentAreaHa": 12.3,
+    "availableCatchmentAreaHa": null,
+    "outletElevationM": 185.4,
+    "demMinElevationM": 164.2,
+    "demMaxElevationM": 238.9,
+    "orientationCheck": "passed"
+  }
+}
+```
+
+Good first implementation:
+
+- Node/Express or small Python/FastAPI wrapper
+- GRASS GIS first, because `grass` is installed locally
+- local output folder under `local/water-walk/<site>/`
+- browser preview route for rapid visual checks
+
 ### Recommended Spike Path
 
 Use a proven DEM hydrology engine server-side or in a local CLI, then show the
@@ -129,6 +211,10 @@ misread or reverse.
   available.
 - BGS/NRW geology and groundwater vulnerability layers for interpreting whether
   the topographic catchment plausibly connects to the spring.
+- Rural Payments Wales shapefile export for real farm/field boundaries when the
+  landowner can provide it.
+- HM Land Registry INSPIRE polygons for indicative freehold title boundaries
+  where RPW data is not available.
 
 ## Tight Feedback Loop
 
@@ -207,6 +293,10 @@ The UI should make the confidence visible:
   https://www.gov.uk/guidance/groundwater-source-protection-zones-spzs
 - DataMapWales LiDAR:
   https://datamap.gov.wales/maps/lidar-data-download/
+- HM Land Registry INSPIRE polygons:
+  https://use-land-property-data.service.gov.uk/datasets/inspire
+- Rural Payments Wales shapefile export guide:
+  https://help.thelandapp.com/en/articles/9822520-obtaining-field-parcel-data-from-rural-payments-wales
 - GRASS `r.watershed`:
   https://grass.osgeo.org/grass-stable/manuals/r.watershed.html
 - GRASS `r.water.outlet`:
