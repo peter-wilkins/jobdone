@@ -26,8 +26,12 @@ hypothesis with field observations and infiltration tests.
 
 3. **Estimate the catchment**
    - Use the spring as the outlet/pour point.
+   - Add the farm boundary or available-work area as an explicit constraint.
    - Fetch or read a LiDAR/DEM window around it.
    - Run DEM hydrology to produce an upslope contributing-area hypothesis.
+   - Split the result into:
+     - the wider topographic contributing area
+     - the part inside land available for modification
    - Display contours and hillshade only as map reading aids; do not derive the
      catchment from contour-line drawing.
    - Show a 50 m spring protection buffer as a no-intervention/check-carefully
@@ -54,6 +58,9 @@ hypothesis with field observations and infiltration tests.
   contributing area. For this spike, the spring is the outlet point.
 - **Topographic catchment**: land that surface flow would reach from the DEM
   model. This is not automatically the same as the groundwater recharge area.
+- **Available-work area**: land where the practitioner or landowner can actually
+  inspect, test or modify ground. Usually the farm boundary. This bounds the
+  practical calculation even when the topographic catchment extends off site.
 - **Recharge hypothesis**: the current explanation of which land might affect
   the spring and why.
 - **Spring protection buffer**: a conservative 50 m buffer around/above the
@@ -86,14 +93,16 @@ Use a proven DEM hydrology engine server-side or in a local CLI, then show the
 result in the phone UI.
 
 1. Fetch a small DEM window around the spring.
-2. Verify the raster orientation by sampling known nearby points and checking
+2. Clip or intersect the analysis with the available-work area when provided.
+3. Verify the raster orientation by sampling known nearby points and checking
    that reported elevation increases uphill.
-3. Hydrologically condition the DEM by filling or breaching small sinks.
-4. Calculate flow direction and flow accumulation.
-5. Snap the spring/outlet point to a nearby high-flow cell if needed.
-6. Delineate the contributing area.
-7. Export:
+4. Hydrologically condition the DEM by filling or breaching small sinks.
+5. Calculate flow direction and flow accumulation.
+6. Snap the spring/outlet point to a nearby high-flow cell if needed.
+7. Delineate the contributing area.
+8. Export both the full mapped catchment and the available on-farm portion:
    - catchment polygon GeoJSON
+   - available catchment polygon GeoJSON
    - flow accumulation raster/vector preview
    - hillshade/contours for visual QA
    - spring buffer polygon
@@ -130,6 +139,7 @@ npm run water-walk:spring-catchment -- \
   --lat 51.664158 \
   --lon -2.855463 \
   --radius-m 750 \
+  --boundary local/water-walk/tumptonics/farm-boundary.geojson \
   --source wales-cog
 ```
 
@@ -137,6 +147,7 @@ Expected outputs:
 
 ```text
 local/water-walk/tumptonics/catchment.geojson
+local/water-walk/tumptonics/available-catchment.geojson
 local/water-walk/tumptonics/spring-buffer-50m.geojson
 local/water-walk/tumptonics/flow-accumulation.png
 local/water-walk/tumptonics/catchment-preview.svg
@@ -146,6 +157,7 @@ Fast QA checks:
 
 - sample elevations north/south/east/west of the spring and print them
 - print catchment area in hectares
+- print available-work catchment area in hectares when a boundary is supplied
 - print outlet elevation and highest/lowest DEM elevation in the window
 - draw flow arrows only after the sampled elevations confirm direction
 - keep all generated outputs local until reviewed
@@ -155,11 +167,12 @@ Fast QA checks:
 The phone UI can stay simple:
 
 1. Add or select spring.
-2. Tap **Estimate Catchment**.
-3. See catchment overlay, spring buffer and confidence label.
-4. Tap **Field Test Plan**.
-5. Record observations and infiltration tests.
-6. Tap **Draft Report**.
+2. Add or import farm boundary.
+3. Tap **Estimate Catchment**.
+4. See wider catchment, on-farm catchment, spring buffer and confidence label.
+5. Tap **Field Test Plan**.
+6. Record observations and infiltration tests.
+7. Tap **Draft Report**.
 
 The UI should make the confidence visible:
 
