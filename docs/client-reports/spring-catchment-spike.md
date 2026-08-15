@@ -247,24 +247,37 @@ First spike should be a script, not a polished app:
 
 ```bash
 npm run water-walk:spring-catchment -- \
+  --engine grass \
   --lat 51.664158 \
   --lon -2.855463 \
-  --radius-m 750 \
   --boundary local/water-walk/tumptonics/workable-boundary.geojson \
-  --source wales-cog
+  --buffer-metres 250 \
+  --resolution-metres 2 \
+  --snap-radius-metres 40 \
+  --output-dir local/water-walk/tumptonics/spring-catchment-2m
 ```
 
-Expected outputs:
+Current proof outputs:
 
 ```text
-local/water-walk/tumptonics/catchment.geojson
-local/water-walk/tumptonics/workable-catchment.geojson
-local/water-walk/tumptonics/relevant-boundary.geojson
-local/water-walk/tumptonics/outside-relevant-mask.geojson
-local/water-walk/tumptonics/spring-buffer-50m.geojson
-local/water-walk/tumptonics/flow-accumulation.png
-local/water-walk/tumptonics/catchment-preview.svg
+local/water-walk/tumptonics/spring-catchment-2m/catchment.geojson
+local/water-walk/tumptonics/spring-catchment-2m/catchment-raw-bng.geojson
+local/water-walk/tumptonics/spring-catchment-2m/catchment.tif
+local/water-walk/tumptonics/spring-catchment-2m/dem-window.asc
+local/water-walk/tumptonics/spring-catchment-2m/dem-window.geojson
+local/water-walk/tumptonics/spring-catchment-2m/flow-accumulation.png
+local/water-walk/tumptonics/spring-catchment-2m/flow-accumulation.tif
+local/water-walk/tumptonics/spring-catchment-2m/qa.json
+local/water-walk/tumptonics/spring-catchment-2m/snapped-outlet.json
 ```
+
+Planned next outputs:
+
+- `workable-catchment.geojson`
+- `relevant-boundary.geojson`
+- `outside-relevant-mask.geojson`
+- `spring-caution-zone-50m.geojson`
+- `catchment-preview.svg`
 
 Fast QA checks:
 
@@ -275,6 +288,23 @@ Fast QA checks:
 - print outlet elevation and highest/lowest DEM elevation in the window
 - draw flow arrows only after the sampled elevations confirm direction
 - keep all generated outputs local until reviewed
+
+First local GRASS proof on the guessed Tumptonics boundary:
+
+- command output folder: `local/water-walk/tumptonics/spring-catchment-2m`
+- DEM source: DataMapWales LiDAR DTM COG
+- DEM window: workable boundary bounding box plus 250 m buffer
+- resolution: 2 m
+- spring snap radius: 40 m
+- DEM min/max: 56 m / 220 m
+- flow accumulation max: 85,438 cells
+- snapped outlet: 39.1 m from supplied spring coordinate
+- topographic catchment to snapped outlet: 5,638 cells, about 2.26 ha
+
+This proves the tooling loop, not the field truth. The snapped outlet distance is
+large enough that the spring position and local flow path should be checked in
+the field or with a tighter hand-placed outlet before treating the catchment as
+more than a mapped hypothesis.
 
 ## Phone MVP
 
