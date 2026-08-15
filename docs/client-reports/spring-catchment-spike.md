@@ -164,6 +164,7 @@ Response:
   "catchmentGeoJson": {},
   "workableCatchmentGeoJson": null,
   "relevantBoundaryGeoJson": null,
+  "outsideRelevantMaskGeoJson": null,
   "springBufferGeoJson": {},
   "previewSvgUrl": "/runs/abc123/catchment-preview.svg",
   "qa": {
@@ -208,6 +209,7 @@ result in the phone UI.
    - catchment polygon GeoJSON
    - workable catchment polygon GeoJSON
    - relevant boundary GeoJSON
+   - outside-relevant mask GeoJSON for display
    - flow accumulation raster/vector preview
    - hillshade/contours for visual QA
    - spring buffer polygon
@@ -258,6 +260,7 @@ Expected outputs:
 local/water-walk/tumptonics/catchment.geojson
 local/water-walk/tumptonics/workable-catchment.geojson
 local/water-walk/tumptonics/relevant-boundary.geojson
+local/water-walk/tumptonics/outside-relevant-mask.geojson
 local/water-walk/tumptonics/spring-buffer-50m.geojson
 local/water-walk/tumptonics/flow-accumulation.png
 local/water-walk/tumptonics/catchment-preview.svg
@@ -285,6 +288,32 @@ The phone UI can stay simple:
 5. Tap **Field Test Plan**.
 6. Record observations and infiltration tests.
 7. Tap **Draft Report**.
+
+## Map Display Rule
+
+Keep the relevant area visually clean. Do not tint the land the user is meant to
+inspect.
+
+Recommended map stack:
+
+1. base map or hillshade
+2. flow accumulation blue layer
+3. workable boundary outline
+4. outside-relevant mask, red or grey, muting everything outside the current
+   focus area
+5. spring point
+6. spring caution zone
+7. suggested field-test points
+
+Use these display terms:
+
+- `relevantBoundary`: clean active area
+- `outsideRelevantMask`: muted excluded area outside the relevant boundary
+- `workableBoundary`: outline only
+- `springCautionZone`: separate ring or upslope caution patch
+
+The blue layer should be labelled as mapped runoff concentration, not guaranteed
+water flow.
 
 The UI should make the confidence visible:
 
