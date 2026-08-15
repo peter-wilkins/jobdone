@@ -57,6 +57,19 @@ const CONTOUR_LAYER_BY_SITE = {
   dewlish: '/water-walk/dewlish-contours-2m.geojson',
   tumptonics: '/water-walk/tumptonics-contours-1m.geojson',
 };
+const FLOW_ACCUMULATION_LAYER_BY_SITE = {
+  tumptonics: {
+    imageUrl: '/water-walk/tumptonics-flow-accumulation-2m.png',
+    label: 'Mapped runoff concentration',
+    opacity: 0.5,
+    bounds: {
+      south: 51.659539932,
+      west: -2.860103505,
+      north: 51.667742248,
+      east: -2.848691149,
+    },
+  },
+};
 const OS_MAPS_LAYER = ENV.VITE_OS_MAPS_LAYER || 'Outdoor_3857';
 const OS_MAPS_TILE_URL = ENV.VITE_OS_MAPS_API_KEY
   ? `https://api.os.uk/maps/raster/v1/zxy/${OS_MAPS_LAYER}/{z}/{x}/{y}.png?key=${ENV.VITE_OS_MAPS_API_KEY}`
@@ -109,20 +122,23 @@ const CANDIDATE_THEME = {
 };
 
 const WATER_WALK_LAYER_OPTIONS = [
-  { value: 'base', label: 'Base map', lidar: false, contours: false, surfaceWater: false },
-  { value: 'lidar', label: 'LiDAR hillshade', lidar: true, contours: false, surfaceWater: false },
-  { value: 'contours', label: 'Contours 2m', lidar: false, contours: true, surfaceWater: false },
-  { value: 'surface-water', label: 'Surface water', lidar: false, contours: false, surfaceWater: true },
-  { value: 'lidar-contours', label: 'LiDAR + contours', lidar: true, contours: true, surfaceWater: false },
-  { value: 'lidar-surface-water', label: 'LiDAR + surface water', lidar: true, contours: false, surfaceWater: true },
-  { value: 'all', label: 'All layers', lidar: true, contours: true, surfaceWater: true },
+  { value: 'base', label: 'Base map', lidar: false, contours: false, surfaceWater: false, flow: false },
+  { value: 'flow', label: 'Flow paths', lidar: false, contours: false, surfaceWater: false, flow: true },
+  { value: 'lidar', label: 'LiDAR hillshade', lidar: true, contours: false, surfaceWater: false, flow: false },
+  { value: 'contours', label: 'Contours 2m', lidar: false, contours: true, surfaceWater: false, flow: false },
+  { value: 'surface-water', label: 'Surface water', lidar: false, contours: false, surfaceWater: true, flow: false },
+  { value: 'flow-contours', label: 'Flow + contours', lidar: false, contours: true, surfaceWater: false, flow: true },
+  { value: 'lidar-contours', label: 'LiDAR + contours', lidar: true, contours: true, surfaceWater: false, flow: false },
+  { value: 'lidar-surface-water', label: 'LiDAR + surface water', lidar: true, contours: false, surfaceWater: true, flow: false },
+  { value: 'all', label: 'All layers', lidar: true, contours: true, surfaceWater: true, flow: true },
 ];
 
-function waterWalkLayerMode({ showLidarHillshade, showContours, showSurfaceWaterFloodRisk }) {
+function waterWalkLayerMode({ showLidarHillshade, showContours, showSurfaceWaterFloodRisk, showFlowAccumulation }) {
   const match = WATER_WALK_LAYER_OPTIONS.find(option => (
     option.lidar === showLidarHillshade
     && option.contours === showContours
     && option.surfaceWater === showSurfaceWaterFloodRisk
+    && option.flow === showFlowAccumulation
   ));
   return match?.value || 'base';
 }
@@ -609,6 +625,8 @@ function WaterWalkMap({
   showLidarHillshade,
   showContours,
   contourGeoJson,
+  showFlowAccumulation,
+  flowAccumulationLayer,
   showSurfaceWaterFloodRisk,
   selectedCandidate,
   selectedObservation,
@@ -622,6 +640,7 @@ function WaterWalkMap({
   const overlayLayerRef = useRef(null);
   const lidarLayerRef = useRef(null);
   const contourLayerRef = useRef(null);
+  const flowAccumulationLayerRef = useRef(null);
   const surfaceWaterFloodLayerRef = useRef(null);
   const fittedBoundsKeyRef = useRef('');
   const tileConfig = useMemo(() => waterWalkTileConfig(), []);
@@ -650,6 +669,7 @@ function WaterWalkMap({
       overlayLayerRef.current = null;
       lidarLayerRef.current = null;
       contourLayerRef.current = null;
+      flowAccumulationLayerRef.current = null;
       surfaceWaterFloodLayerRef.current = null;
     };
   }, [initialView.latitude, initialView.longitude, initialView.zoom, tileConfig]);
@@ -703,6 +723,31 @@ function WaterWalkMap({
     }).addTo(map);
     bringLayerGroupToFront(overlayLayerRef.current);
   }, [contourGeoJson, showContours]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (flowAccumulationLayerRef.current) {
+      map.removeLayer(flowAccumulationLayerRef.current);
+      flowAccumulationLayerRef.current = null;
+    }
+
+    if (!showFlowAccumulation || !flowAccumulationLayer) return;
+
+    const { bounds } = flowAccumulationLayer;
+    flowAccumulationLayerRef.current = L.imageOverlay(
+      flowAccumulationLayer.imageUrl,
+      [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+      {
+        opacity: flowAccumulationLayer.opacity || 0.6,
+        interactive: false,
+        attribution: `${flowAccumulationLayer.label || 'Mapped runoff concentration'} from DataMapWales LiDAR DTM`,
+      },
+    ).addTo(map);
+    if (typeof contourLayerRef.current?.bringToFront === 'function') contourLayerRef.current.bringToFront();
+    bringLayerGroupToFront(overlayLayerRef.current);
+  }, [flowAccumulationLayer, showFlowAccumulation]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -891,6 +936,7 @@ export function WaterWalkScreen({ routeHash, user }) {
   const [showContours, setShowContours] = useState(false);
   const [contourGeoJson, setContourGeoJson] = useState(null);
   const [contourStatus, setContourStatus] = useState('');
+  const [showFlowAccumulation, setShowFlowAccumulation] = useState(false);
   const [showSurfaceWaterFloodRisk, setShowSurfaceWaterFloodRisk] = useState(false);
 
   const saveDataset = useCallback(dataset => {
@@ -940,6 +986,7 @@ export function WaterWalkScreen({ routeHash, user }) {
       setShowContours(false);
       setContourGeoJson(null);
       setContourStatus('');
+      setShowFlowAccumulation(false);
       setShowSurfaceWaterFloodRisk(false);
       setCurrentLocation(null);
       setGpsStatus('');
@@ -1090,7 +1137,12 @@ export function WaterWalkScreen({ routeHash, user }) {
   const selectedRouteCandidates = candidates.filter(candidate => effectiveRouteSelection.has(candidate.id));
   const routeStart = currentLocation ? { latitude: currentLocation.latitude, longitude: currentLocation.longitude } : selectedRouteCandidates[0] || null;
   const route = routeNearestNext(selectedRouteCandidates, routeStart);
-  const layerMode = waterWalkLayerMode({ showLidarHillshade, showContours, showSurfaceWaterFloodRisk });
+  const layerMode = waterWalkLayerMode({
+    showLidarHillshade,
+    showContours,
+    showSurfaceWaterFloodRisk,
+    showFlowAccumulation,
+  });
 
   const selectCandidate = useCallback(candidateId => {
     setSelectedId(candidateId);
@@ -1268,6 +1320,7 @@ export function WaterWalkScreen({ routeHash, user }) {
     setShowLidarHillshade(option.lidar);
     setShowContours(option.contours);
     setShowSurfaceWaterFloodRisk(option.surfaceWater);
+    setShowFlowAccumulation(option.flow);
   };
 
   const exportObservations = async () => {
@@ -1303,7 +1356,9 @@ export function WaterWalkScreen({ routeHash, user }) {
   const budgetCalculation = useMemo(() => calculateGrantJobBudget(budgetForm), [budgetForm]);
   const selectedBudgetOption = grantJobOptionById(budgetForm.optionId);
   const lidarLayer = site.lidarLayer || DEFAULT_LIDAR_LAYER;
+  const flowAccumulationLayer = FLOW_ACCUMULATION_LAYER_BY_SITE[site.id] || null;
   const lidarOverlayUnavailable = showLidarHillshade && lidarLayer.kind !== 'england_wms';
+  const flowOverlayUnavailable = showFlowAccumulation && !flowAccumulationLayer;
 
   return (
     <div className="water-walk-screen min-h-screen w-full max-w-full overflow-x-hidden bg-stone-50 text-gray-900">
@@ -1347,6 +1402,11 @@ export function WaterWalkScreen({ routeHash, user }) {
                 {(contourStatus || (showContours && !CONTOUR_LAYER_BY_SITE[site.id])) && (
                   <span className="text-[11px] text-gray-500">
                     {contourStatus || 'No contour layer for this site yet.'}
+                  </span>
+                )}
+                {flowOverlayUnavailable && (
+                  <span className="text-[11px] text-gray-500">
+                    No flow-path layer for this site yet.
                   </span>
                 )}
                 {lidarOverlayUnavailable && (
@@ -1394,6 +1454,8 @@ export function WaterWalkScreen({ routeHash, user }) {
               showLidarHillshade={showLidarHillshade}
               showContours={showContours}
               contourGeoJson={contourGeoJson}
+              showFlowAccumulation={showFlowAccumulation}
+              flowAccumulationLayer={flowAccumulationLayer}
               showSurfaceWaterFloodRisk={showSurfaceWaterFloodRisk}
               selectedCandidate={selectedCandidate}
               selectedObservation={selectedObservation}
