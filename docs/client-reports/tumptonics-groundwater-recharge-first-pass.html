@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tumptonics Spring Recharge - First Pass Mapping Note</title>
+  <title>Tump Farm Spring Recharge - Pre-Visit Desk Study</title>
   <style>
     :root {
       --ink: #1f2933;
@@ -12,25 +12,26 @@
       --soft: #f8fafc;
       --good: #0f766e;
       --warn: #92400e;
+      --blue: #1d4ed8;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--ink);
       background: #ffffff;
-      font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 14px/1.48 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     main {
       max-width: 920px;
       margin: 0 auto;
-      padding: 32px 40px 46px;
+      padding: 30px 40px 46px;
     }
     h1, h2 { line-height: 1.18; margin: 0; }
     h1 { font-size: 28px; }
     h2 {
-      margin-top: 24px;
+      margin-top: 22px;
       border-top: 1px solid var(--line);
-      padding-top: 16px;
+      padding-top: 14px;
       font-size: 18px;
     }
     p { margin: 8px 0 0; }
@@ -89,11 +90,11 @@
       text-transform: uppercase;
     }
     .map-card {
-      margin-top: 22px;
+      margin-top: 20px;
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #f4f1e8;
+      background: #f4f7fb;
     }
     .map-title {
       padding: 10px 14px;
@@ -106,127 +107,209 @@
       width: 100%;
       height: auto;
     }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
+    .caption {
       padding: 10px 14px;
       border-top: 1px solid var(--line);
       background: #ffffff;
       color: var(--muted);
       font-size: 12px;
     }
-    .legend span { display: inline-flex; align-items: center; gap: 5px; }
-    .swatch { display: inline-block; width: 18px; height: 8px; border-radius: 99px; }
     .warning {
       margin-top: 12px;
       border-left: 4px solid var(--warn);
       background: #fff7ed;
       padding: 12px 14px;
     }
+    .note {
+      margin-top: 12px;
+      border-left: 4px solid var(--blue);
+      background: #eff6ff;
+      padding: 12px 14px;
+    }
     .footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
     @media print {
-      main { padding: 18mm 14mm; }
+      main { padding: 8mm 12mm; }
+      h1 { font-size: 24px; }
+      h2 { margin-top: 16px; padding-top: 12px; break-after: avoid-page; }
       a { color: inherit; text-decoration: none; }
-      .map-card { break-inside: avoid; }
-      .grid { break-inside: avoid; }
+      .map-card, .grid, table { break-inside: avoid; }
+      .map-card { margin-top: 12px; }
+      .map-card img { max-height: 510px; object-fit: contain; }
     }
   </style>
 </head>
 <body>
 <main>
-  <h1>Tumptonics Spring Recharge - First Pass Mapping Note</h1>
-  <p class="meta">Prepared for discussion and hydrogeologist review. Generated 13 August 2026.</p>
+  <h1>Tump Farm Spring Recharge - Pre-Visit Desk Study</h1>
+  <p class="meta">Prepared for discussion before the site visit. Generated 15 August 2026.</p>
 
   <p class="purpose">
-    Pre-visit desk study: use LiDAR mapping and a simple water-balance scenario to identify
-    where a contour shelterbelt or recharge strip could hold more water on site. The site visit
-    should replace the weakest guesstimates with field infiltration tests and observations.
+    This note uses LiDAR-derived surface mapping and a simple water-balance scenario to show
+    where there may be an opportunity to hold more rainfall and runoff on the land. The figures
+    below describe opportunity, not a guaranteed increase in spring flow.
   </p>
 
   <div class="map-card">
-    <div class="map-title">LiDAR contour map around the spring</div>
-    <img src="assets/tumptonics-groundwater-map.svg" alt="Tumptonics LiDAR contour map around the spring and upslope investigation area">
-    <div class="legend">
-      <span><i class="swatch" style="background:#bfdbfe"></i>desk-study upslope investigation area</span>
-      <span><i class="swatch" style="background:#0f766e"></i>spring / inferred topographic flow checks</span>
-      <span><i class="swatch" style="background:#69513a"></i>LiDAR DTM contours</span>
+    <div class="map-title">LiDAR contours and modelled surface-flow concentration</div>
+    <img src="assets/tumptonics-lidar-flow-screenshot.png" alt="LiDAR contour and flow accumulation map around Tump Farm">
+    <div class="caption">
+      Blue lines show modelled surface-flow concentration from public LiDAR terrain data.
+      They are useful field-check targets: places to look for wet flushes, compacted flow lines,
+      drains, or evidence that the model is missing something.
     </div>
   </div>
 
-  <h2>Worked Scenario</h2>
+  <h2>Worked Opportunity Scenario</h2>
   <div class="grid">
-    <div class="metric"><strong>Rainfall</strong><span>~900 mm/year</span></div>
-    <div class="metric"><strong>Feature area</strong><span>1 ha</span></div>
+    <div class="metric"><strong>Rainfall used</strong><span>900 mm/year</span></div>
+    <div class="metric"><strong>Recharge strip</strong><span>1 ha</span></div>
     <div class="metric"><strong>Upslope area</strong><span>3 ha</span></div>
-    <div class="metric"><strong>Scenario result</strong><span>7.57 ML/year</span></div>
+    <div class="metric"><strong>Opportunity</strong><span>7.57 ML/year</span></div>
   </div>
   <p>
-    The worked scenario estimates up to <strong>7.57 million litres/year</strong> of additional
-    water held or infiltrated on site if a 1 ha contour shelterbelt/recharge strip were placed to
-    intercept runoff from 3 ha of compacted upslope pasture. This is not an intervention proposal
-    before the site visit, and it is not claimed as measured spring recharge.
+    The scenario asks: if one hectare of strategically placed broadleaf shelterbelt or recharge
+    strip intercepted runoff from three hectares of compacted upslope pasture, how much extra
+    water might be retained or infiltrated on site?
   </p>
+  <p>
+    Using 900 mm annual rainfall, the arithmetic gives an indicative opportunity of
+    <strong>7.57 million litres per year</strong> compared with the same hectare remaining as
+    compacted pasture. This should be treated as a scoping number for discussion, not as a
+    measured aquifer recharge or spring-yield prediction.
+  </p>
+
   <table>
     <thead>
-      <tr><th>Input</th><th>Value used</th><th>Evidence level</th></tr>
+      <tr><th>Water movement</th><th>Pasture baseline</th><th>Recharge strip scenario</th><th>Opportunity shown</th></tr>
     </thead>
     <tbody>
-      <tr><td>Rainfall</td><td>Roughly 900 mm/year</td><td>Guesstimate</td></tr>
-      <tr><td>Upslope compacted pasture runoff</td><td>30% of annual rainfall</td><td>Guesstimate</td></tr>
-      <tr><td>Runoff captured by hypothetical feature</td><td>70% design-target scenario</td><td>Guesstimate</td></tr>
-      <tr><td>Feature runoff after intervention</td><td>2% of rainfall on feature</td><td>Guesstimate</td></tr>
-      <tr><td>Tree water use / interception tax</td><td>5.12 ML/year over 1 ha</td><td>Guesstimate</td></tr>
-      <tr><td>Slope and local terrain</td><td>LiDAR-derived contours</td><td>Mapped</td></tr>
+      <tr>
+        <td>Rain falling directly on 1 ha</td>
+        <td>9.00 ML/year</td>
+        <td>9.00 ML/year</td>
+        <td>Same rainfall input</td>
+      </tr>
+      <tr>
+        <td>Upslope runoff captured from 3 ha</td>
+        <td>0 ML/year</td>
+        <td>5.67 ML/year</td>
+        <td>Water that might otherwise leave quickly as surface runoff</td>
+      </tr>
+      <tr>
+        <td>Runoff from the 1 ha feature itself</td>
+        <td>-2.70 ML/year</td>
+        <td>-0.18 ML/year</td>
+        <td>2.52 ML/year retained on the feature area</td>
+      </tr>
+      <tr>
+        <td>Vegetation water use and interception</td>
+        <td>-4.50 ML/year grass evapotranspiration assumption</td>
+        <td>-5.12 ML/year broadleaf interception/transpiration assumption</td>
+        <td>-0.62 ML/year additional tree water cost</td>
+      </tr>
+      <tr>
+        <td><strong>Net retained / infiltrated opportunity</strong></td>
+        <td><strong>1.80 ML/year</strong></td>
+        <td><strong>9.37 ML/year</strong></td>
+        <td><strong>+7.57 ML/year</strong></td>
+      </tr>
     </tbody>
   </table>
 
-  <h2>Field Test Plan</h2>
+  <h2>Assumptions</h2>
+  <table>
+    <thead>
+      <tr><th>Assumption</th><th>Value used</th><th>Why it is reasonable for a first pass</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Annual rainfall</td>
+        <td>900 mm/year</td>
+        <td>Simple conservative round number. Met Office Usk long-term average is about 995 mm/year for 1981-2010.</td>
+      </tr>
+      <tr>
+        <td>Pasture runoff</td>
+        <td>30% of rainfall</td>
+        <td>Scenario value representing compacted pasture and rapid surface runoff. Needs field observation/infiltration testing.</td>
+      </tr>
+      <tr>
+        <td>Runoff after tree/recharge feature</td>
+        <td>2% of rainfall on the feature</td>
+        <td>Optimistic scenario inspired by Pontbren evidence that tree shelterbelts can greatly increase infiltration and reduce runoff.</td>
+      </tr>
+      <tr>
+        <td>Upslope capture efficiency</td>
+        <td>70% of runoff from 3 ha</td>
+        <td>Design-target scenario for a well-placed contour feature. Actual performance depends on layout, soil, slope and maintenance.</td>
+      </tr>
+      <tr>
+        <td>Broadleaf tree water cost</td>
+        <td>5.12 ML/year over 1 ha</td>
+        <td>Combines 18% rainfall interception and 350 mm/year transpiration. Forestry Research gives broadleaf interception and transpiration ranges consistent with this order of magnitude.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Evidence Base</h2>
   <ul>
-    <li>Use three bottomless tins/rings close together in each test zone.</li>
-    <li>Pre-wet each ring, then repeat in the same ring and use the second run as the measured value.</li>
-    <li>Measure water drop with a tape measure and record elapsed time.</li>
-    <li>Test existing pasture and any candidate contour line identified during the visit; optionally test a nearby young woodland/tree-line analogue.</li>
-    <li>If one ring is more than twice as fast as another in the same zone, treat the ground as patchy and add another cluster.</li>
+    <li>
+      <strong>Local rainfall:</strong> Met Office long-term averages for Usk give annual rainfall around
+      995 mm for 1981-2010. This note uses 900 mm to keep the worked example simple and slightly conservative.
+    </li>
+    <li>
+      <strong>LiDAR terrain:</strong> the map uses DataMapWales public LiDAR DTM data to show surface
+      contours and modelled surface-flow concentration.
+    </li>
+    <li>
+      <strong>Welsh shelterbelt evidence:</strong> Pontbren research found much higher infiltration under
+      tree shelterbelts than adjacent grazed pasture, with later summaries reporting infiltration around
+      60-67 times faster and runoff volumes reduced by about 78% under trees compared with grassland.
+    </li>
+    <li>
+      <strong>Tree water use:</strong> Forestry Research summarises that broadleaves generally intercept
+      around 10-25% of annual rainfall and transpire roughly 300-390 mm/year.
+    </li>
   </ul>
 
-  <h2>Why This Is Plausible</h2>
+  <h2>Interpretation</h2>
+  <p class="note">
+    The important conclusion is not that a particular intervention will add exactly 7.57 ML/year
+    to the spring. The useful conclusion is that the land may contain a sizeable water-retention
+    opportunity if surface runoff can be slowed and encouraged to infiltrate in the right places.
+  </p>
   <p>
-    Pontbren is the strongest story citation: a Welsh farmer-led shelterbelt project where researchers
-    measured substantially higher infiltration and reduced runoff under tree shelterbelts compared with
-    adjacent grazed pasture. It supports the shelterbelt/runoff logic, while site-specific spring connection
-    still needs review.
+    The LiDAR map also shows why a site visit matters. Surface-flow lines can help choose where
+    to walk and what to inspect, but spring flow may be controlled by deeper geology, fractures,
+    perched groundwater, drains, or old land management features.
   </p>
 
   <h2>Limitations</h2>
   <div class="warning">
-    This first pass is based on public mapping and local terrain analysis. It is suitable for scoping,
-    discussion and planning field observations. It is not a substitute for a hydrogeological assessment,
-    groundwater monitoring, abstraction data review, or tracer testing.
+    This is a pre-visit desk study. It is suitable for scoping, discussion and planning field
+    observations. It is not a hydrogeological assessment and should not be used as a guaranteed
+    prediction of spring yield.
   </div>
-  <p>
-    The upslope investigation area on the map is a topographic hypothesis only. It should be checked
-    against bedrock geology, superficial deposits, aquifer designation, groundwater vulnerability mapping
-    and field evidence before being described as a spring catchment.
-  </p>
-
-  <h2>Source links</h2>
   <ul>
-    <li><a href="https://datamap.gov.wales/maps/lidar-data-download/">DataMapWales LiDAR Data Download</a></li>
-    <li><a href="https://www.woodlandtrust.org.uk/media/4808/pontbren-project-sustainable-uplands-management.pdf">The Pontbren Project report</a></li>
+    <li>The blue flow paths are modelled from ground surface shape, not measured groundwater movement.</li>
+    <li>The spring's real recharge area may extend outside the visible surface catchment.</li>
+    <li>The calculation is sensitive to runoff percentage, capture efficiency and soil infiltration.</li>
+    <li>Field observations should check whether mapped flow lines match wet ground, drains or erosion evidence.</li>
+  </ul>
+
+  <h2>Source Links</h2>
+  <ul>
+    <li><a href="https://www.metoffice.gov.uk/research/climate/maps-and-data/location-specific-long-term-averages/gcjyjuwdv">Met Office: Usk location-specific long-term averages</a></li>
+    <li><a href="https://datamap.gov.wales/maps/lidar-data-download/">DataMapWales: LiDAR Data Download</a></li>
+    <li><a href="https://ui.adsabs.harvard.edu/abs/2004SUMan..20..357C/abstract">Carroll et al. 2004: Can tree shelterbelts on agricultural land reduce flood risk?</a></li>
     <li><a href="https://www.reforestingscotland.org/wp-content/uploads/2016/09/Pontbren-the-Welsh-study.pdf">Pontbren summary: tree planting and reduced runoff</a></li>
-    <li><a href="https://www.nrcs.usda.gov/sites/default/files/2022-11/Infiltration%20-%20Soil%20Health%20Guide_0.pdf">NRCS Soil Health Infiltration guide</a></li>
-    <li><a href="https://www.fao.org/4/s8684e/s8684e0a.htm">FAO ring infiltration method</a></li>
-    <li><a href="https://www.bgs.ac.uk/technologies/web-map-services-wms/">British Geological Survey WMS services</a></li>
-    <li><a href="https://www.bgs.ac.uk/datasets/aquifer-designation-data/">BGS aquifer designation data</a></li>
-    <li><a href="https://datamap.gov.wales/layers/inspire-nrw%3ANRW_Source_Protection_Zones">DataMapWales / NRW Source Protection Zones</a></li>
-    <li><a href="https://metadata.naturalresources.wales/geonetwork/srv/api/records/NRW_DS120494?language=eng">NRW groundwater vulnerability metadata</a></li>
-    <li><a href="https://jobdone-staging.vercel.app/#water-walk?site=tumptonics">JobDone Tumptonics Water Walk map</a></li>
+    <li><a href="https://www.woodlandtrust.org.uk/media/4808/pontbren-project-sustainable-uplands-management.pdf">The Pontbren Project report</a></li>
+    <li><a href="https://www.forestresearch.gov.uk/research/forestry-and-water-resources/">Forest Research: forestry and water resources</a></li>
+    <li><a href="https://cdn.forestresearch.gov.uk/2020/07/fcin065_water_use_by_trees.pdf">Forestry Commission Information Note: Water Use by Trees</a></li>
   </ul>
 
   <p class="footer">
-    Coordinates: spring 51.664158, -2.855463.
-    LiDAR source: DataMapWales public 1m DTM COG. Static map generated from the JobDone Tumptonics contour layer.
+    Spring coordinate used for mapping: 51.664158, -2.855463.
+    Static map screenshot prepared from the JobDone Tumptonics Water Walk map.
   </p>
 </main>
 </body>
