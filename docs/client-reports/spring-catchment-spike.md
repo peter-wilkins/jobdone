@@ -32,6 +32,7 @@ hypothesis with field observations and infiltration tests.
    - Split the result into:
      - the wider topographic contributing area
      - the part inside land available for modification or field testing
+     - the practical/relevant area to inspect first
    - Display contours and hillshade only as map reading aids; do not derive the
      catchment from contour-line drawing.
    - Show a 50 m spring protection buffer as a no-intervention/check-carefully
@@ -62,6 +63,10 @@ hypothesis with field observations and infiltration tests.
   inspect, test or modify ground. Usually the farm boundary, but it can come
   from HMLR, RPW, manual drawing or a client-supplied file. This bounds the
   practical calculation even when the topographic catchment extends off site.
+- **Relevant boundary**: the heuristic working area inside the workable boundary
+  that is practical and plausibly relevant to the spring. It is a field-planning
+  boundary, not a claim that groundwater definitely travels from every point in
+  it to the spring.
 - **Recharge hypothesis**: the current explanation of which land might affect
   the spring and why.
 - **Spring protection buffer**: a conservative 50 m buffer around/above the
@@ -158,11 +163,13 @@ Response:
 {
   "catchmentGeoJson": {},
   "workableCatchmentGeoJson": null,
+  "relevantBoundaryGeoJson": null,
   "springBufferGeoJson": {},
   "previewSvgUrl": "/runs/abc123/catchment-preview.svg",
   "qa": {
     "catchmentAreaHa": 12.3,
     "workableCatchmentAreaHa": null,
+    "relevantBoundaryAreaHa": null,
     "outletElevationM": 185.4,
     "demMinElevationM": 164.2,
     "demMaxElevationM": 238.9,
@@ -184,16 +191,23 @@ Use a proven DEM hydrology engine server-side or in a local CLI, then show the
 result in the phone UI.
 
 1. Fetch a small DEM window around the spring.
-2. Clip or intersect the analysis with the available-work area when provided.
+2. Clip or intersect the analysis with the workable boundary when provided.
 3. Verify the raster orientation by sampling known nearby points and checking
    that reported elevation increases uphill.
 4. Hydrologically condition the DEM by filling or breaching small sinks.
 5. Calculate flow direction and flow accumulation.
 6. Snap the spring/outlet point to a nearby high-flow cell if needed.
 7. Delineate the contributing area.
-8. Export both the full mapped catchment and the available on-farm portion:
+8. Build a relevant boundary as a heuristic overlay:
+   - start with `topographicCatchment` intersected with `workableBoundary`
+   - expand or reshape where geology, wet flushes, drains, spring lines or field
+     observations make connection plausible
+   - shrink where land is inaccessible, clearly disconnected or not practical to
+     modify
+9. Export the full mapped catchment, workable portion and relevant boundary:
    - catchment polygon GeoJSON
-   - available catchment polygon GeoJSON
+   - workable catchment polygon GeoJSON
+   - relevant boundary GeoJSON
    - flow accumulation raster/vector preview
    - hillshade/contours for visual QA
    - spring buffer polygon
@@ -243,6 +257,7 @@ Expected outputs:
 ```text
 local/water-walk/tumptonics/catchment.geojson
 local/water-walk/tumptonics/workable-catchment.geojson
+local/water-walk/tumptonics/relevant-boundary.geojson
 local/water-walk/tumptonics/spring-buffer-50m.geojson
 local/water-walk/tumptonics/flow-accumulation.png
 local/water-walk/tumptonics/catchment-preview.svg
@@ -253,6 +268,7 @@ Fast QA checks:
 - sample elevations north/south/east/west of the spring and print them
 - print catchment area in hectares
 - print workable catchment area in hectares when a boundary is supplied
+- print relevant boundary area in hectares
 - print outlet elevation and highest/lowest DEM elevation in the window
 - draw flow arrows only after the sampled elevations confirm direction
 - keep all generated outputs local until reviewed
@@ -264,7 +280,8 @@ The phone UI can stay simple:
 1. Add or select spring.
 2. Add or import workable boundary.
 3. Tap **Estimate Catchment**.
-4. See wider catchment, workable catchment, spring buffer and confidence label.
+4. See wider catchment, workable catchment, relevant boundary, spring buffer and
+   confidence label.
 5. Tap **Field Test Plan**.
 6. Record observations and infiltration tests.
 7. Tap **Draft Report**.
