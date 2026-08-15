@@ -234,7 +234,7 @@ npm run water-walk:spring-catchment -- \
   --lat 51.664158 \
   --lon -2.855463 \
   --radius-m 750 \
-  --boundary local/water-walk/tumptonics/farm-boundary.geojson \
+  --boundary local/water-walk/tumptonics/workable-boundary.geojson \
   --source wales-cog
 ```
 
