@@ -26,12 +26,12 @@ hypothesis with field observations and infiltration tests.
 
 3. **Estimate the catchment**
    - Use the spring as the outlet/pour point.
-   - Add the farm boundary or available-work area as an explicit constraint.
+   - Add the workable boundary as an explicit constraint.
    - Fetch or read a LiDAR/DEM window around it.
    - Run DEM hydrology to produce an upslope contributing-area hypothesis.
    - Split the result into:
      - the wider topographic contributing area
-     - the part inside land available for modification
+     - the part inside land available for modification or field testing
    - Display contours and hillshade only as map reading aids; do not derive the
      catchment from contour-line drawing.
    - Show a 50 m spring protection buffer as a no-intervention/check-carefully
@@ -58,8 +58,9 @@ hypothesis with field observations and infiltration tests.
   contributing area. For this spike, the spring is the outlet point.
 - **Topographic catchment**: land that surface flow would reach from the DEM
   model. This is not automatically the same as the groundwater recharge area.
-- **Available-work area**: land where the practitioner or landowner can actually
-  inspect, test or modify ground. Usually the farm boundary. This bounds the
+- **Workable boundary**: land where the practitioner or landowner can actually
+  inspect, test or modify ground. Usually the farm boundary, but it can come
+  from HMLR, RPW, manual drawing or a client-supplied file. This bounds the
   practical calculation even when the topographic catchment extends off site.
 - **Recharge hypothesis**: the current explanation of which land might affect
   the spring and why.
@@ -94,22 +95,28 @@ from a farm name or spring coordinate.
 
 Practical options:
 
-1. **Rural Payments Wales shapefile export**
-   - Best likely source for the real farm/field parcels.
-   - Requires the landowner or authorised agent to log in to RPW Online.
-   - RPW's interactive map can export shapefiles for the holding/land parcels.
-   - Use this when the client can provide access or an export.
-
-2. **HM Land Registry INSPIRE Index Polygons**
+1. **HM Land Registry INSPIRE Index Polygons**
+   - First source to try because it is public.
    - Public England/Wales freehold title polygons.
    - Useful for an indicative land-title boundary near the coordinate.
    - Not guaranteed to equal the working farm boundary.
    - Split by local authority and served/downloaded as GML, with WMS available
      for display.
+   - Tumptonics appears to fall in the `Sir_Fynwy_-_Monmouthshire` local
+     authority file.
+   - Shell access to the old direct zip URL currently returns 403 here, and the
+     newer download service appears to require browser/session handling. Treat
+     this as "try first", not yet a reliable automated dependency.
+
+2. **Rural Payments Wales shapefile export**
+   - Best likely source for the real farm/field parcels.
+   - Requires the landowner or authorised agent to log in to RPW Online.
+   - RPW's interactive map can export shapefiles for the holding/land parcels.
+   - Use this when the client can provide access or an export.
 
 3. **Manual draw/import**
    - Fastest MVP path.
-   - User draws the available-work area on the phone or imports a GeoJSON/KML.
+   - User draws the workable boundary on the phone or imports a GeoJSON/KML.
    - Later replace it with RPW or Land Registry-derived geometry when available.
 
 The calculation should accept `--boundary` as optional. Without it, report the
@@ -124,6 +131,8 @@ Use the same pattern as the Shiny Art Shop image service:
 - a local analysis service runs heavyweight open-source tools on this Linux
   laptop during the spike
 - the UI calls the service over HTTP and receives GeoJSON/PNG/SVG outputs
+- Tailscale can expose the laptop service to the phone in the field without a
+  public deploy
 - no deploy is needed for fast iteration while we are in the field/research loop
 - later, wrap the same service in Docker and run it in the cloud if useful
 
@@ -138,7 +147,7 @@ Content-Type: application/json
 {
   "spring": { "lat": 51.664158, "lon": -2.855463 },
   "radiusM": 750,
-  "boundaryGeoJson": null,
+  "workableBoundaryGeoJson": null,
   "demSource": "wales-lidar-cog"
 }
 ```
@@ -148,12 +157,12 @@ Response:
 ```json
 {
   "catchmentGeoJson": {},
-  "availableCatchmentGeoJson": null,
+  "workableCatchmentGeoJson": null,
   "springBufferGeoJson": {},
   "previewSvgUrl": "/runs/abc123/catchment-preview.svg",
   "qa": {
     "catchmentAreaHa": 12.3,
-    "availableCatchmentAreaHa": null,
+    "workableCatchmentAreaHa": null,
     "outletElevationM": 185.4,
     "demMinElevationM": 164.2,
     "demMaxElevationM": 238.9,
@@ -233,7 +242,7 @@ Expected outputs:
 
 ```text
 local/water-walk/tumptonics/catchment.geojson
-local/water-walk/tumptonics/available-catchment.geojson
+local/water-walk/tumptonics/workable-catchment.geojson
 local/water-walk/tumptonics/spring-buffer-50m.geojson
 local/water-walk/tumptonics/flow-accumulation.png
 local/water-walk/tumptonics/catchment-preview.svg
@@ -243,7 +252,7 @@ Fast QA checks:
 
 - sample elevations north/south/east/west of the spring and print them
 - print catchment area in hectares
-- print available-work catchment area in hectares when a boundary is supplied
+- print workable catchment area in hectares when a boundary is supplied
 - print outlet elevation and highest/lowest DEM elevation in the window
 - draw flow arrows only after the sampled elevations confirm direction
 - keep all generated outputs local until reviewed
@@ -253,9 +262,9 @@ Fast QA checks:
 The phone UI can stay simple:
 
 1. Add or select spring.
-2. Add or import farm boundary.
+2. Add or import workable boundary.
 3. Tap **Estimate Catchment**.
-4. See wider catchment, on-farm catchment, spring buffer and confidence label.
+4. See wider catchment, workable catchment, spring buffer and confidence label.
 5. Tap **Field Test Plan**.
 6. Record observations and infiltration tests.
 7. Tap **Draft Report**.
