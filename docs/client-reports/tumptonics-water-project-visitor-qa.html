@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tump Farm Water Project - Visitor Q&A</title>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #52606d;
+      --line: #d9e2ec;
+      --soft: #f6fbf7;
+      --blue: #eff6ff;
+      --green: #14532d;
+      --amber: #fff8ed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #ffffff;
+      font: 15px/1.48 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 30px 40px 44px;
+    }
+    h1, h2 { margin: 0; line-height: 1.15; }
+    h1 { color: var(--green); font-size: 32px; }
+    h2 {
+      margin-top: 20px;
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      color: #184e35;
+      font-size: 20px;
+    }
+    p { margin: 8px 0 0; }
+    a { color: #075985; }
+    .meta { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .intro {
+      margin-top: 16px;
+      border-left: 5px solid var(--green);
+      background: var(--soft);
+      padding: 13px 15px;
+    }
+    .map-card {
+      margin-top: 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f4f7fb;
+    }
+    .map-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .caption {
+      border-top: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--muted);
+      padding: 9px 12px;
+      font-size: 12px;
+    }
+    .qa {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      break-inside: avoid;
+    }
+    .question {
+      background: var(--blue);
+      padding: 10px 13px;
+      color: #123c69;
+      font-weight: 750;
+    }
+    .answer {
+      padding: 11px 13px 13px;
+    }
+    .answer p:first-child { margin-top: 0; }
+    .note {
+      margin-top: 14px;
+      border-left: 5px solid #2563eb;
+      background: var(--blue);
+      padding: 12px 14px;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    ul { margin: 7px 0 0 20px; padding: 0; }
+    li { margin: 4px 0; }
+    @media print {
+      main { padding: 8mm 11mm; }
+      h1 { font-size: 28px; }
+      h2 { margin-top: 16px; padding-top: 11px; break-after: avoid-page; }
+      .map-card, .qa, .note { break-inside: avoid; }
+      .map-card img { max-height: 430px; object-fit: contain; }
+      a { color: inherit; text-decoration: none; }
+    }
+    @media (max-width: 760px) {
+      main { padding: 22px 18px 34px; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Tump Farm Water Project</h1>
+  <p class="meta">Visitor Q&A draft. Prepared 16 August 2026.</p>
+
+  <div class="intro">
+    This is a simple explanation of the project: using spring water carefully, while also helping
+    the land hold more winter rain so water reaches streams and rivers more slowly through the year.
+  </div>
+
+  <div class="map-card">
+    <img src="assets/tumptonics-lidar-flow-screenshot.png" alt="LiDAR contour and flow accumulation map around Tump Farm">
+    <div class="caption">
+      LiDAR mapping helps us see slope, flow paths and possible places where water could be slowed
+      and encouraged to soak in.
+    </div>
+  </div>
+
+  <h2>Questions Visitors Might Ask</h2>
+
+  <section class="qa">
+    <div class="question">Is it okay to take water from the spring?</div>
+    <div class="answer">
+      <p>
+        Yes, if it is small, measured, agreed with the landowner, and kept within environmental
+        rules. Natural Resources Wales says abstractions of 20 cubic metres a day or less generally
+        do not need an abstraction licence; larger amounts may need one.
+      </p>
+      <p>
+        The spring appears to be a steady flow where more porous, leaky rock meets less porous
+        ground. Water moving through the leaky side is forced back to the surface where the ground
+        conditions change. That kind of boundary can explain why springs appear in places like this.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">So why work on the land as well?</div>
+    <div class="answer">
+      <p>
+        Any water taken from the spring is water that does not continue straight on to the River Usk
+        at that moment. The project should therefore aim to give something back: helping the farm
+        hold more rainfall, reduce fast runoff, and support steadier water movement through the land.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">Doesn’t all the water end up in the river anyway?</div>
+    <div class="answer">
+      <p>
+        Mostly, yes. The important question is timing.
+      </p>
+      <p>
+        If rain rushes off compacted ground in winter, it can add to high flows and flooding when
+        the river already has plenty of water. If more rain soaks into soil and moves slowly
+        underground, it can support streams, springs and the river later, when dry weather matters
+        more.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">Why do steadier water levels matter?</div>
+    <div class="answer">
+      <p>
+        Wildlife is better supported by steadier conditions than by sharp swings between winter
+        floods and summer lows. Slowing runoff can also reduce erosion, keep more soil on the land,
+        improve water quality, and reduce flood risk downstream.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">Why trees first?</div>
+    <div class="answer">
+      <p>
+        Trees are low-tech, low-impact and useful in many ways at once. Leaves slow raindrops.
+        Roots open soil channels. Tree belts can give shelter, habitat, shade, carbon storage and
+        better soil structure, while also helping water soak in rather than racing away.
+      </p>
+      <p>
+        Mechanical earthworks can be useful in some places, but on heavy or compacted ground they
+        may seal up, need maintenance, or create new risks. Trees are a safer first conversation.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">What are we trying to measure?</div>
+    <div class="answer">
+      <p>
+        The first aim is not to prove a perfect number. It is to build confidence step by step:
+        measure the spring flow, observe wet and dry weather, test how fast water soaks into
+        different soils, and record where runoff concentrates after rain.
+      </p>
+    </div>
+  </section>
+
+  <section class="qa">
+    <div class="question">What would success look like?</div>
+    <div class="answer">
+      <p>
+        Success would mean a small, respectful spring use alongside visible land improvements:
+        more water soaking in, less muddy runoff, healthier soils, more trees, better habitat, and
+        a project that visitors and young people can understand by walking the land.
+      </p>
+    </div>
+  </section>
+
+  <div class="note">
+    <strong>Simple story:</strong> take a little water carefully, then help the land hold more rain.
+    The goal is not just bottled water. The goal is a water story people can see, measure and improve.
+  </div>
+
+  <h2>Useful References</h2>
+  <ul class="small">
+    <li><a href="https://naturalresources.wales/permits-and-permissions/water-abstraction-and-impoundment/find-out-if-you-need-a-water-abstraction-or-impoundment-licence/?lang=en">Natural Resources Wales: abstraction and impoundment licensing</a></li>
+    <li><a href="https://datamap.gov.wales/maps/lidar-data-download/">DataMapWales: LiDAR Data Download</a></li>
+    <li><a href="https://www.reforestingscotland.org/wp-content/uploads/2016/09/Pontbren-the-Welsh-study.pdf">Pontbren summary: tree planting and reduced runoff</a></li>
+    <li><a href="https://www.forestresearch.gov.uk/research/forestry-and-water-resources/">Forest Research: forestry and water resources</a></li>
+  </ul>
+</main>
+</body>
+</html>
