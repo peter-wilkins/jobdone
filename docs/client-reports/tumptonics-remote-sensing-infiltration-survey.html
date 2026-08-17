@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tump Farm Remote-Sensing Infiltration Survey Plan</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: Arial, sans-serif; color: #17211b; line-height: 1.35; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 18px 0 6px; }
+    p, li { font-size: 11px; }
+    .lede { font-size: 12px; margin-bottom: 10px; }
+    img { width: 100%; border: 1px solid #ccd6cc; }
+    table { border-collapse: collapse; width: 100%; font-size: 10px; }
+    th, td { border: 1px solid #d6ded6; padding: 5px 6px; vertical-align: top; }
+    th { background: #eef4ee; text-align: left; }
+    .note { background: #f3f6ec; border-left: 4px solid #7a9d42; padding: 8px 10px; }
+  </style>
+</head>
+<body>
+  <h1>Tump Farm Remote-Sensing Infiltration Survey Plan</h1>
+  <p class="lede">Purpose: choose a small number of infiltration-test locations that compare different land-condition signals and different hydrological positions before the site visit.</p>
+
+  <img src="assets/tumptonics-remote-sensing-infiltration-map.png" alt="Remote-sensing infiltration survey map" />
+
+  <h2>Numbered Test Locations</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Coordinate</th><th>Satellite zone</th><th>Reason for testing</th></tr></thead>
+    <tbody>
+        <tr>
+          <td><strong>T01</strong></td>
+          <td>51.662760, -2.856217</td>
+          <td>weaker / drier vegetation</td>
+          <td>High predicted convergence with weaker/drier vegetation.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T02</strong></td>
+          <td>51.664671, -2.853073</td>
+          <td>vigorous / moist vegetation</td>
+          <td>High predicted convergence with vigorous/moist vegetation.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T03</strong></td>
+          <td>51.664586, -2.852493</td>
+          <td>weaker / drier vegetation</td>
+          <td>Low-flow hillslope with weaker/drier vegetation.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T04</strong></td>
+          <td>51.664666, -2.853795</td>
+          <td>vigorous / moist vegetation</td>
+          <td>Low-flow hillslope with vigorous/moist vegetation.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T05</strong></td>
+          <td>51.664309, -2.853499</td>
+          <td>vigorous / moist vegetation</td>
+          <td>Persistent moisture signal; investigate whether it is soil, vegetation or drainage.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T06</strong></td>
+          <td>51.665030, -2.853224</td>
+          <td>vigorous / moist vegetation</td>
+          <td>Seasonally variable vegetation; useful check on management or moisture sensitivity.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T07</strong></td>
+          <td>51.662506, -2.854044</td>
+          <td>mixed pasture condition</td>
+          <td>Paired comparison across an apparent land-condition boundary, side A; placed into the zone core where possible.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T08</strong></td>
+          <td>51.662512, -2.853321</td>
+          <td>weaker / drier vegetation</td>
+          <td>Paired comparison across an apparent land-condition boundary, side B; placed into the zone core where possible.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T09</strong></td>
+          <td>51.662318, -2.855197</td>
+          <td>mixed pasture condition</td>
+          <td>Highest local flow accumulation away from the spring exclusion zone.</td>
+        </tr>
+        
+
+        <tr>
+          <td><strong>T10</strong></td>
+          <td>51.663582, -2.854498</td>
+          <td>mixed pasture condition</td>
+          <td>Representative point for mixed pasture condition.</td>
+        </tr>
+        </tbody>
+  </table>
+
+  <h2>Method</h2>
+  <p>The terrain layer uses the existing 2&nbsp;m LiDAR-derived flow accumulation for the spring area. The vegetation layer uses Sentinel-2 Level-2A scenes from 2024-01-16 (7.4% cloud), 2024-06-02 (2.9% cloud), 2024-11-26 (0.1% cloud), 2025-04-02 (0.3% cloud). For each clear scene, NDVI and NDMI were calculated inside the assumed workable boundary. Pixels were clustered by median vegetation vigour, median moisture signal and seasonal variability.</p>
+  <p>The test points were then selected by simple stratified rules: high-flow versus low-flow topographic positions, stronger versus weaker vegetation condition, persistent moisture signals, seasonal variability, and paired points across the sharpest apparent land-condition boundary.</p>
+
+  <h2>Land-Condition Clusters</h2>
+  <table>
+    <thead><tr><th>Cluster</th><th>Interpretation</th><th>NDVI median</th><th>NDMI median</th><th>NDVI variability</th></tr></thead>
+    <tbody><tr><td>0</td><td>weaker / drier vegetation</td><td>0.602</td><td>0.102</td><td>0.211</td></tr>
+<tr><td>1</td><td>mixed pasture condition</td><td>0.686</td><td>0.178</td><td>0.232</td></tr>
+<tr><td>2</td><td>mixed pasture condition</td><td>0.677</td><td>0.241</td><td>0.196</td></tr>
+<tr><td>3</td><td>mixed pasture condition</td><td>0.749</td><td>0.291</td><td>0.225</td></tr>
+<tr><td>4</td><td>vigorous / moist vegetation</td><td>0.774</td><td>0.352</td><td>0.265</td></tr></tbody>
+  </table>
+
+  <h2>How To Use This In The Field</h2>
+  <p>At each numbered point, run the same infiltration-ring protocol, take a photo, record ground cover, visible compaction, grazing pressure, slope position, current moisture, drains/pipes/culverts, and farmer comments. For boundary-paired tests, avoid the fence line itself: place the ring comfortably inside the apparent zone, ideally 10-20&nbsp;m from the physical boundary if the field allows it.</p>
+  <p>The ring test is mainly measuring near-surface infiltration behaviour and saturated hydraulic conductivity at a small patch scale. That is useful for comparing trampling, grazing compaction, surface crusting and root/macropore effects, but it is not a direct spring-recharge measurement.</p>
+
+  <div class="note">
+    <strong>Limit:</strong> this map identifies contrasts worth checking. It does not prove why those contrasts exist, and it does not prove spring recharge. Sentinel-2 is 10&nbsp;m scale for the main vegetation bands, so narrow hedges and fence-line changes can be mixed across pixels. NDMI is also weather-sensitive, especially immediately after rain. A DEM routes surface runoff if runoff occurs; infiltration tests help estimate whether runoff is actually generated.
+  </div>
+</body>
+</html>
