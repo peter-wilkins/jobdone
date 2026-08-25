@@ -305,7 +305,7 @@ def osm_features(osm: dict[str, Any], rotator: Rotator) -> dict[str, list[Any]]:
 
 
 def setup_axes(fig: plt.Figure, title: str) -> plt.Axes:
-    ax = fig.add_axes([0.045, 0.075, 0.91, 0.84])
+    ax = fig.add_axes([0.035, 0.065, 0.93, 0.86])
     ax.set_title(title, loc="left", fontsize=16, fontweight="bold", pad=10)
     ax.set_aspect("equal")
     ax.axis("off")
@@ -332,13 +332,17 @@ def draw_furniture(
     ax.set_xlim(min_x, max_x)
     ax.set_ylim(min_y, max_y)
 
-    # 50 m scale bar.
+    # 50 metre scale bar.
     bar_x = min_x + 20
     bar_y = min_y + 16
     ax.plot([bar_x, bar_x + 50], [bar_y, bar_y], color="black", linewidth=2.4)
+    ax.plot([bar_x + 25, bar_x + 25], [bar_y - 2, bar_y + 2], color="black", linewidth=0.9)
     ax.plot([bar_x, bar_x], [bar_y - 3, bar_y + 3], color="black", linewidth=1)
     ax.plot([bar_x + 50, bar_x + 50], [bar_y - 3, bar_y + 3], color="black", linewidth=1)
-    ax.text(bar_x + 25, bar_y + 6, "50 m", ha="center", va="bottom", fontsize=8)
+    ax.text(bar_x, bar_y - 6, "0", ha="center", va="top", fontsize=7)
+    ax.text(bar_x + 25, bar_y - 6, "25", ha="center", va="top", fontsize=7)
+    ax.text(bar_x + 50, bar_y - 6, "50 m", ha="center", va="top", fontsize=7)
+    ax.text(bar_x + 25, bar_y + 6, "metres", ha="center", va="bottom", fontsize=8)
 
     # North arrow in rotated page coordinates.
     north_vec = rotator.vector_xy(np.array([0.0, 1.0]))
@@ -411,6 +415,11 @@ def draw_tow(ax: plt.Axes, patches: list[MplPolygon], dense: bool = False, clip_
 def draw_boundary_and_spring(ax: plt.Axes, boundary_xy: np.ndarray, spring_xy: np.ndarray) -> None:
     closed = np.vstack([boundary_xy, boundary_xy[0]])
     ax.plot(closed[:, 0], closed[:, 1], color="black", linewidth=2.4, zorder=10)
+    ax.scatter([spring_xy[0]], [spring_xy[1]], marker="*", s=70, facecolor="white", edgecolor="black", linewidth=1.0, zorder=11)
+    ax.text(spring_xy[0] + 5, spring_xy[1] + 4, "spring", fontsize=7, ha="left", va="bottom")
+
+
+def draw_spring(ax: plt.Axes, spring_xy: np.ndarray) -> None:
     ax.scatter([spring_xy[0]], [spring_xy[1]], marker="*", s=70, facecolor="white", edgecolor="black", linewidth=1.0, zorder=11)
     ax.text(spring_xy[0] + 5, spring_xy[1] + 4, "spring", fontsize=7, ha="left", va="bottom")
 
@@ -497,11 +506,10 @@ def render_maps() -> None:
 
     fig = plt.figure(figsize=(16.54, 11.69), dpi=180)
     ax = setup_axes(fig, "Tump Farm — Field Observation Map")
-    clip_patch = MplPolygon(boundary_xy, closed=True, transform=ax.transData)
-    draw_contours(ax, dem, xs, ys, rotator, interval=2, color="#c9c9c9", linewidth=0.32, clip_patch=clip_patch)
-    draw_tow(ax, tow_poly, dense=False, clip_patch=clip_patch)
-    draw_osm(ax, osm, clip_patch=clip_patch)
-    draw_boundary_and_spring(ax, boundary_xy, spring_xy)
+    draw_contours(ax, dem, xs, ys, rotator, interval=2, color="#c9c9c9", linewidth=0.32)
+    draw_tow(ax, tow_poly, dense=False)
+    draw_osm(ax, osm)
+    draw_spring(ax, spring_xy)
     draw_furniture(ax, rotator, map_extent, boundary_bng, source_note)
     fig.savefig(FIELD_PDF)
     fig.savefig(FIELD_PNG)
@@ -509,12 +517,11 @@ def render_maps() -> None:
 
     fig = plt.figure(figsize=(16.54, 11.69), dpi=180)
     ax = setup_axes(fig, "Tump Farm — Terrain Observation Map")
-    clip_patch = MplPolygon(boundary_xy, closed=True, transform=ax.transData)
-    draw_contours(ax, dem, xs, ys, rotator, interval=2, color="#8a8a8a", linewidth=0.38, clip_patch=clip_patch)
-    draw_flow(ax, flow, xs, ys, rotator, clip_patch=clip_patch)
-    draw_tow(ax, tow_poly, dense=True, clip_patch=clip_patch)
-    draw_osm(ax, osm, clip_patch=clip_patch)
-    draw_boundary_and_spring(ax, boundary_xy, spring_xy)
+    draw_contours(ax, dem, xs, ys, rotator, interval=2, color="#8a8a8a", linewidth=0.38)
+    draw_flow(ax, flow, xs, ys, rotator)
+    draw_tow(ax, tow_poly, dense=True)
+    draw_osm(ax, osm)
+    draw_spring(ax, spring_xy)
     draw_furniture(ax, rotator, map_extent, boundary_bng, source_note)
     fig.savefig(TERRAIN_PDF)
     fig.savefig(TERRAIN_PNG)
