@@ -3,7 +3,7 @@
   "engine": "grass",
   "source": "DataMapWales/Welsh Government LiDAR DTM 32-bit COG",
   "sourceUrl": "https://dmwproductionblob.blob.core.windows.net/cogs/lidar/wales_dtm_32bit_cog.tif",
-  "generatedAt": "2026-09-01T09:16:51Z",
+  "generatedAt": "2026-09-01T09:23:01Z",
   "boundaryLatLon": [
     [
       51.664102010494766,
@@ -22,59 +22,129 @@
       -2.8470582873533776
     ]
   ],
-  "boundaryAreaM2": 71185.50967407227,
-  "boundaryAreaHa": 7.118550967407226,
+  "outletLatLon": [
+    51.66523997968142,
+    -2.850045309084064
+  ],
+  "outletBng": {
+    "easting": 341305.10705811344,
+    "northing": 196615.79471422627
+  },
+  "snappedOutlet": {
+    "target": {
+      "easting": 341305.10705811344,
+      "northing": 196615.79471422627
+    },
+    "snapRadiusMetres": 40.0,
+    "nearestCell": {
+      "easting": 341305.5,
+      "northing": 196615.5,
+      "row": 279,
+      "col": 45,
+      "distanceMetres": 0.4911820450496706,
+      "accumulation": 1.0
+    },
+    "snappedCell": {
+      "easting": 341291.5,
+      "northing": 196578.5,
+      "row": 316,
+      "col": 31,
+      "distanceMetres": 39.69946775111449,
+      "accumulation": 8979.0
+    }
+  },
+  "originalBoundaryAreaM2": 71185.50967407227,
+  "originalBoundaryAreaHa": 7.118550967407226,
+  "extendedBoundaryLatLon": [
+    [
+      51.66523997519208,
+      -2.8500452979535584
+    ],
+    [
+      51.66410200600447,
+      -2.8488040199788647
+    ],
+    [
+      51.66322610127003,
+      -2.8470582762219525
+    ],
+    [
+      51.66733156501718,
+      -2.845192672275519
+    ],
+    [
+      51.66735884937343,
+      -2.84816744073924
+    ]
+  ],
+  "extendedBoundaryAreaM2": 89521.87677001953,
+  "extendedBoundaryAreaHa": 8.952187677001954,
   "boundsBng": {
-    "minE": 341344,
+    "minE": 341260,
     "minN": 196344,
     "maxE": 341689,
     "maxN": 196895
   },
   "boundsLatLon": {
-    "south": 51.66280054990834,
-    "west": -2.8495299902306033,
+    "south": 51.66279175855217,
+    "west": -2.8507444374037307,
     "north": 51.66779014269312,
     "east": -2.8444499446939036
   },
   "outputs": {
     "dem": "/home/peter/jobdone/local/water-walk/tumptonics/west-grass-flow-paths/dem-window.tif",
     "flowAccumulationRaster": "/home/peter/jobdone/local/water-walk/tumptonics/west-grass-flow-paths/flow-accumulation.tif",
+    "catchmentRaster": "/home/peter/jobdone/local/water-walk/tumptonics/west-grass-flow-paths/outlet-catchment.tif",
     "pdf": "/home/peter/jobdone/docs/client-reports/out/tump-farm-west-grass-flow-paths.pdf",
     "png": "/home/peter/jobdone/docs/client-reports/assets/tump-farm-west-grass-flow-paths.png",
     "transparentPng": "/home/peter/jobdone/docs/client-reports/assets/tump-farm-west-grass-flow-paths-transparent.png"
   },
   "stats": {
     "dem": {
-      "n": 190095.0,
+      "n": 236379.0,
       "null_cells": 0.0,
-      "cells": 190095.0,
-      "min": 172.190002441406,
+      "cells": 236379.0,
+      "min": 144.639999389648,
       "max": 227.830001831055,
-      "range": 55.6399993896484,
-      "mean": 211.352292790244,
-      "mean_of_abs": 211.352292790244,
-      "stddev": 11.6566221722862,
-      "variance": 135.876840467435,
-      "coeff_var": 5.51525702342619,
-      "sum": 40177014.0979614
+      "range": 83.1900024414062,
+      "mean": 203.560361296019,
+      "mean_of_abs": 203.560361296019,
+      "stddev": 19.8737457125565,
+      "variance": 394.965768647357,
+      "coeff_var": 9.76307252847517,
+      "sum": 48117394.6427917
     },
     "accumulation": {
-      "n": 190095.0,
+      "n": 236379.0,
       "null_cells": 0.0,
-      "cells": 190095.0,
+      "cells": 236379.0,
       "min": 1.0,
       "max": 46607.0,
       "range": 46606.0,
-      "mean": 140.777753228649,
-      "mean_of_abs": 140.777753228649,
-      "stddev": 1136.48578972579,
-      "variance": 1291599.95024866,
-      "coeff_var": 807.290756999035,
-      "sum": 26761147.0
+      "mean": 165.80597261178,
+      "mean_of_abs": 165.80597261178,
+      "stddev": 1140.03461710625,
+      "variance": 1299678.92820059,
+      "coeff_var": 687.571502490768,
+      "sum": 39193050.0
+    },
+    "catchment": {
+      "n": 8979.0,
+      "null_cells": 227400.0,
+      "cells": 236379.0,
+      "min": 1.0,
+      "max": 1.0,
+      "range": 0.0,
+      "mean": 1.0,
+      "mean_of_abs": 1.0,
+      "stddev": 0.0,
+      "variance": 0.0,
+      "coeff_var": 0.0,
+      "sum": 8979.0
     }
   },
   "notes": [
-    "This is GRASS r.watershed flow accumulation for the bounded area.",
-    "No outlet catchment was calculated because this polygon request did not define an outlet point."
+    "This is GRASS r.watershed flow accumulation plus r.water.outlet for the supplied spring/outlet point.",
+    "The dashed boundary is the minimal convex extension needed to include the outlet point."
   ]
 }

@@ -48,6 +48,7 @@ BOUNDARY_LAT_LON = [
     (51.66733156950478, -2.8451926834100747),
     (51.663226105761055, -2.8470582873533776),
 ]
+OUTLET_LAT_LON = (51.66523997968142, -2.850045309084064)
 
 
 def ensure_dirs() -> None:
@@ -83,6 +84,29 @@ def polygon_area_m2(points_bng: np.ndarray) -> float:
     x = points_bng[:, 0]
     y = points_bng[:, 1]
     return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) / 2.0)
+
+
+def convex_hull(points: np.ndarray) -> np.ndarray:
+    ordered = sorted((float(x), float(y)) for x, y in points)
+    if len(ordered) <= 1:
+        return np.array(ordered, dtype=float)
+
+    def cross(o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> float:
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower: list[tuple[float, float]] = []
+    for point in ordered:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+
+    upper: list[tuple[float, float]] = []
+    for point in reversed(ordered):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+
+    return np.array(lower[:-1] + upper[:-1], dtype=float)
 
 
 def run(command: list[str], cwd: Path | None = None) -> str:
@@ -128,8 +152,73 @@ def write_dem(bounds: tuple[float, float, float, float], resolution_m: int = 1) 
     return dem_path
 
 
-def run_grass(dem_path: Path) -> dict[str, Any]:
+def write_snap_helper() -> Path:
+    helper_path = RUN_DIR / "snap-outlet.py"
+    helper_path.write_text(
+        """#!/usr/bin/env python3
+import json
+import math
+import sys
+from osgeo import gdal
+
+tif_path, east_s, north_s, radius_s, meta_path = sys.argv[1:6]
+target_e = float(east_s)
+target_n = float(north_s)
+radius = float(radius_s)
+dataset = gdal.Open(tif_path)
+band = dataset.GetRasterBand(1)
+array = band.ReadAsArray()
+no_data = band.GetNoDataValue()
+gt = dataset.GetGeoTransform()
+
+best = None
+nearest = None
+for row in range(dataset.RasterYSize):
+    for col in range(dataset.RasterXSize):
+        value = float(array[row][col])
+        if (no_data is not None and value == no_data) or math.isnan(value):
+            continue
+        east = gt[0] + (col + 0.5) * gt[1] + (row + 0.5) * gt[2]
+        north = gt[3] + (col + 0.5) * gt[4] + (row + 0.5) * gt[5]
+        distance = math.hypot(east - target_e, north - target_n)
+        candidate = {
+            "easting": east,
+            "northing": north,
+            "row": row,
+            "col": col,
+            "distanceMetres": distance,
+            "accumulation": value,
+        }
+        if nearest is None or distance < nearest["distanceMetres"]:
+            nearest = candidate
+        if distance <= radius and (best is None or value > best["accumulation"]):
+            best = candidate
+
+if best is None:
+    best = nearest
+
+with open(meta_path, "w", encoding="utf-8") as handle:
+    json.dump({
+        "target": {"easting": target_e, "northing": target_n},
+        "snapRadiusMetres": radius,
+        "nearestCell": nearest,
+        "snappedCell": best,
+    }, handle, indent=2)
+    handle.write("\\n")
+
+print(f'{best["easting"]},{best["northing"]}')
+"""
+    )
+    helper_path.chmod(0o755)
+    return helper_path
+
+
+def run_grass(dem_path: Path, outlet_bng: np.ndarray, snap_radius_m: int = 40) -> dict[str, Any]:
     accumulation_tif = RUN_DIR / "flow-accumulation.tif"
+    catchment_tif = RUN_DIR / "outlet-catchment.tif"
+    snapped_outlet_txt = RUN_DIR / "snapped-outlet.txt"
+    snapped_outlet_json = RUN_DIR / "snapped-outlet.json"
+    snap_helper = write_snap_helper()
     script = "\n".join(
         [
             "set -euo pipefail",
@@ -137,15 +226,24 @@ def run_grass(dem_path: Path) -> dict[str, Any]:
             "g.region raster=dem",
             "r.watershed -as elevation=dem accumulation=accumulation drainage=drainage basin=basin threshold=10 memory=600 --overwrite --quiet",
             f'r.out.gdal -f input=accumulation output="{accumulation_tif}" format=GTiff type=Float32 createopt="COMPRESS=DEFLATE" --overwrite --quiet',
+            f'python3 "{snap_helper}" "{accumulation_tif}" "{outlet_bng[0]}" "{outlet_bng[1]}" "{snap_radius_m}" "{snapped_outlet_json}" > "{snapped_outlet_txt}"',
+            f'SNAPPED_OUTLET="$(cat "{snapped_outlet_txt}")"',
+            'echo "Snapped outlet: ${SNAPPED_OUTLET}"',
+            f'r.water.outlet input=drainage output=outlet_catchment coordinates="$SNAPPED_OUTLET" --overwrite --quiet',
+            f'r.out.gdal input=outlet_catchment output="{catchment_tif}" format=GTiff type=Byte createopt="COMPRESS=DEFLATE" --overwrite --quiet',
             'echo "__DEM__"',
             "r.univar -g map=dem",
             'echo "__ACCUMULATION__"',
             "r.univar -g map=accumulation",
+            'echo "__CATCHMENT__"',
+            "r.univar -g map=outlet_catchment",
         ]
     )
     output = run(["grass", "--tmp-project", BNG, "--exec", "bash", "-lc", script])
     return {
         "accumulationTif": str(accumulation_tif),
+        "catchmentTif": str(catchment_tif),
+        "snappedOutlet": json.loads(snapped_outlet_json.read_text()),
         "stats": parse_marked_grass_stats(output),
     }
 
@@ -226,16 +324,21 @@ def draw_flow_paths(
 def draw_pdf_and_png(
     dem_path: Path,
     accumulation_tif: Path,
-    boundary_bng: np.ndarray,
+    catchment_tif: Path,
+    original_boundary_bng: np.ndarray,
+    extended_boundary_bng: np.ndarray,
+    outlet_bng: np.ndarray,
+    snapped_outlet: dict[str, Any],
     bounds: tuple[float, float, float, float],
 ) -> None:
     dem, xs, ys = read_raster(dem_path)
     flow, flow_xs, flow_ys = read_raster(accumulation_tif)
-    mask = area_mask(flow_xs, flow_ys, boundary_bng)
+    catchment, catchment_xs, catchment_ys = read_raster(catchment_tif)
+    mask = area_mask(flow_xs, flow_ys, extended_boundary_bng)
 
     fig = plt.figure(figsize=(16.54, 11.69), dpi=180)
     ax = fig.add_axes([0.04, 0.065, 0.92, 0.86])
-    ax.set_title("Tump Farm west area — GRASS LiDAR flow paths", loc="left", fontsize=16, fontweight="bold", pad=10)
+    ax.set_title("Tump Farm west area — GRASS LiDAR outlet catchment", loc="left", fontsize=16, fontweight="bold", pad=10)
     ax.set_aspect("equal")
     ax.axis("off")
     ax.set_xlim(bounds[0], bounds[2])
@@ -259,9 +362,24 @@ def draw_pdf_and_png(
         xx, yy = np.meshgrid(xs, ys)
         ax.contour(xx, yy, dem, levels=np.arange(low, high + 2, 2), colors="#8a8a8a", linewidths=0.35, alpha=0.68, zorder=1)
 
+    catchment_mask = np.where(np.isfinite(catchment) & (catchment > 0), 1.0, np.nan)
+    ax.imshow(
+        catchment_mask,
+        extent=[catchment_xs.min(), catchment_xs.max(), catchment_ys.min(), catchment_ys.max()],
+        origin="upper",
+        cmap="Wistia",
+        alpha=0.22,
+        interpolation="nearest",
+        zorder=4,
+    )
     draw_flow_paths(ax, flow, flow_xs, flow_ys, mask)
-    closed = np.vstack([boundary_bng, boundary_bng[0]])
-    ax.plot(closed[:, 0], closed[:, 1], color="#111111", linewidth=1.9, zorder=9)
+    original_closed = np.vstack([original_boundary_bng, original_boundary_bng[0]])
+    extended_closed = np.vstack([extended_boundary_bng, extended_boundary_bng[0]])
+    ax.plot(extended_closed[:, 0], extended_closed[:, 1], color="#111111", linewidth=1.3, linestyle="--", zorder=8)
+    ax.plot(original_closed[:, 0], original_closed[:, 1], color="#111111", linewidth=1.9, zorder=9)
+    ax.scatter([outlet_bng[0]], [outlet_bng[1]], marker="*", s=75, facecolor="#dc2626", edgecolor="white", linewidth=1.0, zorder=10)
+    snapped = snapped_outlet["snappedCell"]
+    ax.scatter([snapped["easting"]], [snapped["northing"]], marker="o", s=35, facecolor="#7c3aed", edgecolor="white", linewidth=0.9, zorder=10)
 
     bar_x = bounds[0] + 18
     bar_y = bounds[1] + 18
@@ -273,7 +391,7 @@ def draw_pdf_and_png(
     ax.text(
         bounds[0],
         bounds[1] - 8,
-        "DataMapWales/Welsh Government 1 m LiDAR DTM 32-bit COG; GRASS r.watershed flow accumulation. Blue paths show modelled surface-flow concentration, not proven spring recharge.",
+        "DataMapWales/Welsh Government 1 m LiDAR DTM 32-bit COG; GRASS r.watershed + r.water.outlet. Yellow shows DEM outlet catchment; blue shows modelled surface-flow concentration.",
         fontsize=7,
         ha="left",
         va="top",
@@ -297,8 +415,11 @@ def draw_pdf_and_png(
 def write_qa(
     dem_path: Path,
     accumulation_tif: Path,
+    catchment_tif: Path,
     bounds: tuple[float, float, float, float],
-    boundary_bng: np.ndarray,
+    original_boundary_bng: np.ndarray,
+    extended_boundary_bng: np.ndarray,
+    outlet_bng: np.ndarray,
     grass: dict[str, Any],
 ) -> None:
     corners = [
@@ -314,8 +435,19 @@ def write_qa(
         "sourceUrl": DTM_COG,
         "generatedAt": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "boundaryLatLon": BOUNDARY_LAT_LON,
-        "boundaryAreaM2": polygon_area_m2(boundary_bng),
-        "boundaryAreaHa": polygon_area_m2(boundary_bng) / 10000,
+        "outletLatLon": OUTLET_LAT_LON,
+        "outletBng": {
+            "easting": float(outlet_bng[0]),
+            "northing": float(outlet_bng[1]),
+        },
+        "snappedOutlet": grass["snappedOutlet"],
+        "originalBoundaryAreaM2": polygon_area_m2(original_boundary_bng),
+        "originalBoundaryAreaHa": polygon_area_m2(original_boundary_bng) / 10000,
+        "extendedBoundaryLatLon": [
+            list(bng_to_lat_lon(float(point[0]), float(point[1]))) for point in extended_boundary_bng
+        ],
+        "extendedBoundaryAreaM2": polygon_area_m2(extended_boundary_bng),
+        "extendedBoundaryAreaHa": polygon_area_m2(extended_boundary_bng) / 10000,
         "boundsBng": {
             "minE": bounds[0],
             "minN": bounds[1],
@@ -331,14 +463,15 @@ def write_qa(
         "outputs": {
             "dem": str(dem_path),
             "flowAccumulationRaster": str(accumulation_tif),
+            "catchmentRaster": str(catchment_tif),
             "pdf": str(PDF_PATH),
             "png": str(PNG_PATH),
             "transparentPng": str(TRANSPARENT_PNG_PATH),
         },
         "stats": grass["stats"],
         "notes": [
-            "This is GRASS r.watershed flow accumulation for the bounded area.",
-            "No outlet catchment was calculated because this polygon request did not define an outlet point.",
+            "This is GRASS r.watershed flow accumulation plus r.water.outlet for the supplied spring/outlet point.",
+            "The dashed boundary is the minimal convex extension needed to include the outlet point.",
         ],
     }
     text = json.dumps(qa, indent=2) + "\n"
@@ -348,13 +481,34 @@ def write_qa(
 
 def main() -> None:
     ensure_dirs()
-    boundary_bng = transform_lat_lon(BOUNDARY_LAT_LON)
-    bounds = padded_bounds(boundary_bng, pad_m=45)
+    original_boundary_bng = transform_lat_lon(BOUNDARY_LAT_LON)
+    outlet_bng = transform_lat_lon([OUTLET_LAT_LON])[0]
+    extended_boundary_bng = convex_hull(np.vstack([original_boundary_bng, outlet_bng]))
+    bounds = padded_bounds(extended_boundary_bng, pad_m=45)
     dem_path = write_dem(bounds, resolution_m=1)
-    grass = run_grass(dem_path)
+    grass = run_grass(dem_path, outlet_bng)
     accumulation_tif = Path(grass["accumulationTif"])
-    draw_pdf_and_png(dem_path, accumulation_tif, boundary_bng, bounds)
-    write_qa(dem_path, accumulation_tif, bounds, boundary_bng, grass)
+    catchment_tif = Path(grass["catchmentTif"])
+    draw_pdf_and_png(
+        dem_path,
+        accumulation_tif,
+        catchment_tif,
+        original_boundary_bng,
+        extended_boundary_bng,
+        outlet_bng,
+        grass["snappedOutlet"],
+        bounds,
+    )
+    write_qa(
+        dem_path,
+        accumulation_tif,
+        catchment_tif,
+        bounds,
+        original_boundary_bng,
+        extended_boundary_bng,
+        outlet_bng,
+        grass,
+    )
     print(json.dumps({
         "pdf": str(PDF_PATH),
         "png": str(PNG_PATH),
