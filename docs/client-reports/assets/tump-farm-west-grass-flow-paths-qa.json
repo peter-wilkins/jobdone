@@ -1,0 +1,80 @@
+{
+  "siteId": "tumptonics-west",
+  "engine": "grass",
+  "source": "DataMapWales/Welsh Government LiDAR DTM 32-bit COG",
+  "sourceUrl": "https://dmwproductionblob.blob.core.windows.net/cogs/lidar/wales_dtm_32bit_cog.tif",
+  "generatedAt": "2026-09-01T09:16:51Z",
+  "boundaryLatLon": [
+    [
+      51.664102010494766,
+      -2.848804031109609
+    ],
+    [
+      51.667358853861025,
+      -2.848167451871935
+    ],
+    [
+      51.66733156950478,
+      -2.8451926834100747
+    ],
+    [
+      51.663226105761055,
+      -2.8470582873533776
+    ]
+  ],
+  "boundaryAreaM2": 71185.50967407227,
+  "boundaryAreaHa": 7.118550967407226,
+  "boundsBng": {
+    "minE": 341344,
+    "minN": 196344,
+    "maxE": 341689,
+    "maxN": 196895
+  },
+  "boundsLatLon": {
+    "south": 51.66280054990834,
+    "west": -2.8495299902306033,
+    "north": 51.66779014269312,
+    "east": -2.8444499446939036
+  },
+  "outputs": {
+    "dem": "/home/peter/jobdone/local/water-walk/tumptonics/west-grass-flow-paths/dem-window.tif",
+    "flowAccumulationRaster": "/home/peter/jobdone/local/water-walk/tumptonics/west-grass-flow-paths/flow-accumulation.tif",
+    "pdf": "/home/peter/jobdone/docs/client-reports/out/tump-farm-west-grass-flow-paths.pdf",
+    "png": "/home/peter/jobdone/docs/client-reports/assets/tump-farm-west-grass-flow-paths.png",
+    "transparentPng": "/home/peter/jobdone/docs/client-reports/assets/tump-farm-west-grass-flow-paths-transparent.png"
+  },
+  "stats": {
+    "dem": {
+      "n": 190095.0,
+      "null_cells": 0.0,
+      "cells": 190095.0,
+      "min": 172.190002441406,
+      "max": 227.830001831055,
+      "range": 55.6399993896484,
+      "mean": 211.352292790244,
+      "mean_of_abs": 211.352292790244,
+      "stddev": 11.6566221722862,
+      "variance": 135.876840467435,
+      "coeff_var": 5.51525702342619,
+      "sum": 40177014.0979614
+    },
+    "accumulation": {
+      "n": 190095.0,
+      "null_cells": 0.0,
+      "cells": 190095.0,
+      "min": 1.0,
+      "max": 46607.0,
+      "range": 46606.0,
+      "mean": 140.777753228649,
+      "mean_of_abs": 140.777753228649,
+      "stddev": 1136.48578972579,
+      "variance": 1291599.95024866,
+      "coeff_var": 807.290756999035,
+      "sum": 26761147.0
+    }
+  },
+  "notes": [
+    "This is GRASS r.watershed flow accumulation for the bounded area.",
+    "No outlet catchment was calculated because this polygon request did not define an outlet point."
+  ]
+}
